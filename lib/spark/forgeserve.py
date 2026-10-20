@@ -63,6 +63,9 @@ LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 MAX_CONNECTIONS = 64            # connections handled at once; one more is a 503 and closed at once,
                                 # so a flood of idle sockets cannot spawn a thread each without end
 EVENTS_PER_USER = 4             # /api/events streams one requester holds open; one more is 429
+GENERATION_WAITERS = 4          # a small wait budget, like the four live event streams
+GENERATIONS_PER_USER = 2        # one active turn plus one waiting turn, across all clients
+GENERATION_TIMEOUT = 30         # seconds to wait, like the HTTP socket timeout
 SESSIONS_PER_NAME = 20          # logins kept per name (the admin's one name too); the oldest drops past it
 NO_STORE = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}   # every API answer's headers
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
@@ -410,6 +413,56 @@ class Upstream:
         return self.brain().url
 
 
+class GenerationQueue:
+    """One active generation, a short FIFO, and account-wide admission.
+    The condition protects admission and handoff, never inference or writes.
+    A ticket owns its slot until its handler's finally releases it."""
+
+    def __init__(self):
+        self.changed = threading.Condition()
+        self.waiting, self.active = [], None
+
+    def reserve(self, owner):
+        with self.changed:
+            outstanding = self.waiting + ([self.active] if self.active else [])
+            if (sum(t[1] == owner for t in outstanding) >= GENERATIONS_PER_USER
+                    or len(self.waiting) >= GENERATION_WAITERS):
+                return None
+            ticket = (object(), owner, time.monotonic() + GENERATION_TIMEOUT)
+            self.waiting.append(ticket)
+            return ticket
+
+    def wait(self, ticket, connected, queued=None):
+        notice = time.monotonic() + QUEUE_WAIT
+        while True:
+            with self.changed:
+                # Check even on the uncontended path and at the final handoff:
+                # a disconnect or deadline must win over an available model.
+                if not connected():
+                    raise ConnectionAbortedError()
+                left = ticket[2] - time.monotonic()
+                if left <= 0:
+                    raise TimeoutError()
+                if self.active is None and self.waiting[0] is ticket:
+                    self.waiting.pop(0)
+                    self.active = ticket
+                    return
+                send_notice = queued is not None and time.monotonic() >= notice
+                if not send_notice:
+                    self.changed.wait(min(QUEUE_WAIT, left))
+            if send_notice:
+                queued()
+                queued = None
+
+    def release(self, ticket):
+        with self.changed:
+            if self.active is ticket:
+                self.active = None
+            elif ticket in self.waiting:
+                self.waiting.remove(ticket)
+            self.changed.notify_all()
+
+
 # ----------------------------------------------------------------- server
 class ForgeServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -420,7 +473,7 @@ class ForgeServer(ThreadingHTTPServer):
         self._cfg, self._cfg_t, self.url = cfg, self._config_stamp(), url
         self.host, self.port = addr
         self.upstream = Upstream(cfg, url)
-        self.chat_lock = threading.Lock()      # one generation at a time: the model is one
+        self.generations = GenerationQueue()   # one generation at a time: the model is one
         self.run_lock = threading.Lock()       # one verb at a time
         self._admin, self._admin_t = "", None
         self._user_keys = {}                    # sha256(token) -> (name, dk), unlocked once
@@ -1061,7 +1114,10 @@ class Handler(BaseHTTPRequestHandler):
         except wire.BrainError as e:
             return self._error(502, e.kind, e.hint)
         timeout = max(cfg.timeout, 60.0)
-        with self.server.chat_lock:
+        ticket = self._generating()
+        if ticket is None:
+            return None
+        try:
             try:
                 r = wire._post(cfg, up, body, timeout, stream=stream)
             except wire.BrainError as e:
@@ -1083,6 +1139,8 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(chunk)
                     self.wfile.flush()
+        finally:
+            self.server.generations.release(ticket)
         return None
 
     # ---- the monitor ----
@@ -1417,25 +1475,40 @@ class Handler(BaseHTTPRequestHandler):
             return None, None
         return text.strip(), cwd
 
-    def _generating(self):
-        """Take the chat lock; the SSE headers are out already, so a wait
-        longer than QUEUE_WAIT tells the client it is queued. While
-        queued, the socket is peeked between tries: a client that hung
-        up must not pay a prefill and land a junk partial thread --
-        None then, and the caller logs 499 and lands nothing (HTTP/1.0,
-        one request per connection: nothing else ever arrives here)."""
-        lock = self.server.chat_lock
-        if lock.acquire(timeout=QUEUE_WAIT):
-            return lock
-        self._emit("queued", {})
-        while not lock.acquire(timeout=1.0):
-            try:
-                r, _w, _x = select.select([self.connection], [], [], 0)
-                if r and not self.connection.recv(1, socket.MSG_PEEK):
-                    return None
-            except OSError:
-                return None
-        return lock
+    def _connected(self):
+        """HTTP/1.0 has no next request here; peek without consuming bytes."""
+        try:
+            ready, _w, _x = select.select([self.connection], [], [], 0)
+            return not ready or bool(self.connection.recv(1, socket.MSG_PEEK))
+        except OSError:
+            return False
+
+    def _generating(self, sse=False):
+        queue = self.server.generations
+        ticket = queue.reserve((self.role, self.user))
+        if ticket is None:
+            self._error(429, "busy", "too many generation requests; try again", {"Retry-After": "1"})
+            return None
+        acquired = False
+        try:
+            if sse:
+                self._sse()
+            queue.wait(ticket, self._connected,
+                       (lambda: self._emit("queued", {})) if sse else None)
+            acquired = True
+            return ticket
+        except ConnectionAbortedError:
+            self._status = 499
+        except TimeoutError:
+            hint = "waited too long for the model; try again"
+            if sse:
+                self._emit("error", {"kind": "timeout", "hint": hint, "retry_after": 1})
+            else:
+                self._error(504, "timeout", hint, {"Retry-After": "1"})
+        finally:
+            if not acquired:
+                queue.release(ticket)
+        return None
 
     def api_chat(self, body):
         """One turn of the FORGE in this process, streamed as SSE. The
@@ -1456,11 +1529,8 @@ class Handler(BaseHTTPRequestHandler):
         thread, ok = self._thread_of(body)
         if not ok:
             return None
-        self._sse()
-        lock = self._generating()
-        if lock is None:
-            self._status = 499
-            log("%s chat 499 while queued" % self._ip())
+        ticket = self._generating(sse=True)
+        if ticket is None:
             return None
         try:
             try:
@@ -1480,7 +1550,7 @@ class Handler(BaseHTTPRequestHandler):
             except forge.RefError as e:
                 return self._emit("error", {"kind": "ref", "hint": e.hint})
         finally:
-            lock.release()
+            self.server.generations.release(ticket)
         rm = self.server.role_models(self.server.upstream.resolve()[0])
         used = rm.get("ember") or (sorted(rm.values())[0] if rm else "")
         self._emit("done", {"thread": thread, "ms": ms, "model": config.model_name(used)})
@@ -1588,17 +1658,23 @@ class Handler(BaseHTTPRequestHandler):
             size = len(text.encode("utf-8", "replace"))
             if size > do.DO_GOAL_MAX:
                 return self._error(400, "bad", do.GOAL_TOO_LONG % (do.DO_GOAL_MAX >> 10, (size + 1023) >> 10))
-            thread = forge.new_thread(cfg)
         else:
             m = do.FEEDBACK_HEAD.match(text)
             text, held, _names = do.hold(text, m.group(1) if m else "")
-        with self.server.chat_lock:
+        ticket = self._generating()
+        if ticket is None:
+            return None
+        try:
+            if thread is None:
+                thread = forge.new_thread(cfg)
             try:
                 reply, ms, s = do.propose(cfg, thread, text, _shell(), cwd, brain=self.server.upstream.brain)
             except wire.BrainError as e:
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
                 return self._error(502, e.kind, e.hint)
+        finally:
+            self.server.generations.release(ticket)
         s.record(kind="danger" if reply["danger"] else reply["kind"], thread=thread, ms=ms,
                  **({"held": held} if held else {}))
         rm = self.server.role_models(self.server.upstream.resolve()[0])

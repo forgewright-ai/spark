@@ -1663,6 +1663,27 @@ and may change freely.
    `forgeserve.MAX_CONNECTIONS` (64) connections, one more is 503. A
    user holds `EVENTS_PER_USER` (4) event streams, one more is 429. A
    name keeps `SESSIONS_PER_NAME` (20) sessions, the oldest dropped.
+   Generation admission is shared by `/api/chat`, `/api/do/propose` and
+   `/v1/chat/completions`, streaming or not. One generation runs at a
+   time. At most four requests wait (`GENERATION_WAITERS`), and an
+   account holds at most two outstanding requests
+   (`GENERATIONS_PER_USER`), counting its running request. Cookies and
+   bearers share the account's allowance; the admin is one account too.
+   A full allowance or queue answers HTTP 429 `busy`, with `Retry-After:
+   1`, before SSE headers. Admitted requests take the model in arrival
+   order, without priority for a route or account. Admission when full
+   is not guaranteed. Waiting ends after 30 monotonic seconds
+   (`GENERATION_TIMEOUT`). A JSON or v1 request gets HTTP 504 `timeout`,
+   with `Retry-After: 1`. A chat whose SSE headers are out gets `error
+   {kind: timeout, hint, retry_after: 1}`. No inference or new thread
+   starts for either. Waiting sockets are checked every 0.2 seconds and
+   again at handoff; cancellation, expiry and completion free their
+   slots. This deadline bounds waiting only; the running generation
+   keeps its existing limits. The two-request allowance keeps one active
+   turn plus one queued turn. Four waiters use the existing small
+   event-stream budget as a starting point, leaving most of the 64
+   connections for other routes. Thirty seconds matches the HTTP socket
+   timeout. No model parallelism changes.
    Every JSON and SSE answer carries `X-Content-Type-Options:
    nosniff`. `POST /api/soul` writes an audit record too. Every admin
    action is one sealed record in the box account's `audit`

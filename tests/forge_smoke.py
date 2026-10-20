@@ -145,6 +145,190 @@ def sse(raw):
     return out
 
 
+def generation_admission(ok):
+    """Synthetic slow engines on all three routes; real peer sockets."""
+    from contextlib import ExitStack
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from spark import do, forge, forgeserve as fs, session, wire
+
+    def until(check):
+        end = time.monotonic() + 3
+        while not check() and time.monotonic() < end:
+            time.sleep(0.005)
+        assert check(), 'fixture did not reach its barrier'
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(fs, 'GENERATION_TIMEOUT', 3))
+        stack.enter_context(patch.object(fs, 'QUEUE_WAIT', 0.02))
+        stack.enter_context(patch.object(session, 'prune'))
+        stack.enter_context(patch.object(forge, 'prune_stores'))
+        mint = stack.enter_context(patch.object(forge, 'new_thread', return_value='fixture'))
+        stack.enter_context(patch.object(do, 'conclusion_check', return_value=[]))
+        server = SimpleNamespace(
+            generations=fs.GenerationQueue(), cfg=SimpleNamespace(timeout=1),
+            upstream=SimpleNamespace(require=lambda: 'fixture', brain=lambda: None,
+                                     resolve=lambda **kw: ('fixture', '', 'ok')),
+            role_models=lambda url: {}, _auth_lock=threading.Lock(), _user_keys={}, sessions={})
+        entered, release = threading.Event(), threading.Event()
+        calls, failures, threads = [], [], []
+
+        def engine(name):
+            calls.append(name)
+            if name == 'slow':
+                entered.set()
+                assert release.wait(3), 'fixture engine stayed blocked'
+            if name == 'fail':
+                raise wire.BrainError('timeout', 'fixture timeout')
+
+        def reply(cfg, thread, text, **kw):
+            engine(text)
+            kw['on_delta']('fixture')
+            return 'fixture', '', {}
+
+        def post(cfg, up, body, timeout, stream):
+            engine(body['messages'][0]['content'])
+            response = io.BytesIO(b'{}')
+            response.headers = {}
+            return response
+
+        def propose(cfg, thread, text, *args, **kw):
+            engine(text)
+            return {'danger': False, 'kind': 'done'}, {}, SimpleNamespace(record=lambda **kw: None)
+
+        stack.enter_context(patch.object(forge, 'reply', side_effect=reply))
+        stack.enter_context(patch.object(wire, '_post', side_effect=post))
+        stack.enter_context(patch.object(do, 'propose', side_effect=propose))
+
+        def request(route, name, owner='admin', stream=False, broken=False):
+            sock, peer = socket.socketpair()
+            stack.callback(sock.close)
+            stack.callback(peer.close)
+            h = object.__new__(fs.Handler)
+            h.connection, h.server = sock, server
+            h.role, h.user = ('admin', '') if owner == 'admin' else ('user', owner)
+            h.events, h.answers, h.started, h._status = [], [], [], 0
+            h._sse = lambda: h.started.append('sse')
+            h._emit = lambda event, data: h.events.append((event, data))
+            if broken:
+                h._emit = lambda *args: (_ for _ in ()).throw(BrokenPipeError())
+            h._error = lambda code, kind, hint, headers=None: h.answers.append((code, kind, headers))
+            h._json = lambda code, data: h.answers.append((code, data))
+            h._start = lambda *args: h.started.append(args)
+            h.wfile = io.BytesIO()
+            h._thread_of = lambda body: (None, True)
+            h._ustore = h._mstore = lambda: None
+            h._ip = lambda: '192.0.2.1'
+            h._v1_role = lambda model: model
+            h._do_cwd = lambda cwd: '/tmp'
+            body = {'text': name, 'messages': [{'role': 'user', 'content': name}],
+                    'identity': False, 'stream': stream}
+
+            def run():
+                try:
+                    getattr(h, route)(body)
+                except BrokenPipeError:
+                    if not broken:
+                        failures.append('unexpected broken pipe')
+                except Exception as e:
+                    failures.append(repr(e))
+            t = threading.Thread(target=run)
+            threads.append(t)
+            t.start()
+            return h, peer, t
+
+        def queued(n):
+            until(lambda: len(server.generations.waiting) == n)
+
+        # One slow generation, then mixed browser/API callers in admission order.
+        a, _, ta = request('api_chat', 'slow')
+        assert entered.wait(2)
+        b, _, tb = request('api_do_propose', 'second')
+        queued(1)
+        busy, _, tx = request('v1_chat', 'over-user')
+        tx.join(2)
+        ok(busy.answers == [(429, 'busy', {'Retry-After': '1'})],
+           'browser and API share the two-outstanding account limit', busy.answers)
+        c, _, tc = request('api_chat', 'third', 'peer-a')
+        queued(2)
+        d, _, td = request('v1_chat', 'fourth', 'peer-b', stream=True)
+        queued(3)
+        e, _, te = request('v1_chat', 'fifth', 'peer-c')
+        queued(4)
+        full, _, tf = request('api_chat', 'over-global', 'peer-d')
+        tf.join(2)
+        ok(full.answers == [(429, 'busy', {'Retry-After': '1'})] and not full.started,
+           'four waiting requests fill the queue; excess chat gets HTTP 429 before SSE')
+        release.set()
+        for t in (ta, tb, tc, td, te):
+            t.join(2)
+        ok(calls == ['slow', 'second', 'third', 'fourth', 'fifth'],
+           'chat, proposals, JSON and streaming API requests run serially in FIFO order', calls)
+
+        mint.reset_mock()
+        stack.enter_context(patch.object(fs, 'GENERATION_TIMEOUT', 0.6))
+        # Every waiting route expires, recovers its account slot and never calls the engine.
+        for route in ('api_chat', 'v1_chat', 'api_do_propose'):
+            entered.clear()
+            release.clear()
+            _, _, slow = request('api_chat', 'slow', 'holder')
+            assert entered.wait(2)
+            timed, _, waiter = request(route, 'expired')
+            waiter.join(2)
+            ok(not waiter.is_alive() and 'expired' not in calls and
+               ((timed.events[-1][0] == 'error' and timed.events[-1][1]['kind'] == 'timeout')
+                if route == 'api_chat' else timed.answers == [(504, 'timeout', {'Retry-After': '1'})]),
+               route + ': queue deadline ends waiting without inference')
+            queued(0)
+            # A disconnected queued request is removed while the holder is still running.
+            gone, peer, waiter = request(route, 'disconnected')
+            queued(1)
+            peer.close()
+            waiter.join(0.4)
+            ok(not waiter.is_alive() and gone._status == 499 and 'disconnected' not in calls,
+               route + ': disconnect promptly frees the waiting slot')
+            ok(not mint.called, route + ': a refused proposal creates no thread')
+            release.set()
+            slow.join(2)
+
+        # Deterministic handoff boundaries: a free slot cannot revive stale work.
+        h = object.__new__(fs.Handler)
+        sock, peer = socket.socketpair()
+        stack.callback(sock.close)
+        h.connection = sock
+        peer.close()
+        for reason in ('disconnect', 'deadline'):
+            q = fs.GenerationQueue()
+            ticket = q.reserve(('user', 'peer'))
+            try:
+                with patch.object(fs.time, 'monotonic', return_value=ticket[2] + 1):
+                    q.wait(ticket, h._connected if reason == 'disconnect' else lambda: True)
+            except (ConnectionAbortedError, TimeoutError) as exc:
+                ok(type(exc) is (ConnectionAbortedError if reason == 'disconnect' else TimeoutError),
+                   reason + ': stale request cannot claim an already free model')
+            else:
+                ok(False, reason + ': stale request started')
+            finally:
+                q.release(ticket)
+            ok(q.active is None and not q.waiting, reason + ': cancelled ticket is released')
+
+        # Engine errors and a failed SSE write both release serialization.
+        for route in ('api_chat', 'v1_chat', 'api_do_propose'):
+            _, _, t = request(route, 'fail')
+            t.join(2)
+            _, _, t = request(route, 'recovered')
+            t.join(2)
+            ok(calls[-2:] == ['fail', 'recovered'], route + ': engine timeout releases the slot')
+        _, _, t = request('api_chat', 'write-failed', broken=True)
+        t.join(2)
+        _, _, t = request('api_do_propose', 'after-write')
+        t.join(2)
+        ok(calls[-2:] == ['write-failed', 'after-write'] and not server.generations.waiting
+           and server.generations.active is None, 'failed output releases the slot')
+        ok(not failures and not any(t.is_alive() for t in threads),
+           'generation fixtures leave no request threads or unexpected errors', failures)
+
+
 def reply_interruptions(ok):
     """Real SSE parsing, sessions and sealed history; no model or clock waits."""
     from contextlib import ExitStack
@@ -377,6 +561,7 @@ def main():
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + str(extra)[:300]) if extra and not cond else ""))
         fails += not cond
 
+    generation_admission(ok)
     reply_interruptions(ok)
     verb_runner(ok)
 
