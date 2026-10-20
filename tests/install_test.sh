@@ -6,6 +6,14 @@
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
+T=$(cd "$T" && pwd -P)
+# Native-manager fixtures must not inherit unrelated installed runit files.
+# Individual runit cases supply their own explicit seam below.
+case $(uname -s) in
+    Darwin) unset SPARK_ETC_RUNIT ;;
+    *) export SPARK_ETC_RUNIT="$T/no-runit" ;;
+esac
+export SPARK_VAR_SERVICE="$T/no-service"
 trap 'rm -rf "$T"' EXIT
 # the hand-back's files, pinned: the machine underneath is never read (a
 # runner's own /etc, a developer's Terminal.app preferences). 9c pins its
@@ -15,6 +23,7 @@ for k in CONSOLE_UNIT RC_LOCAL CONSOLE_SETUP VCONSOLE RCCONF MOTD ISSUE UNAME_MO
 done
 export SPARK_TERMINAL_DOMAIN="$T/no-terminal.plist"
 export HOME="$T/home" XDG_CONFIG_HOME="$T/home/.config"
+export XDG_STATE_HOME="$T/home/.local/state" XDG_DATA_HOME="$T/home/.local/share"
 mkdir -p "$HOME/.config/spark"
 # a site.env with nothing chosen: every default applies
 : > "$HOME/.config/spark/site.env"

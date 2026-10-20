@@ -15,6 +15,12 @@
   deadline, its group is killed when it ends, times out or the page
   hangs up, and a service it starts in a session of its own keeps
   running (#39)
+
+- S3: platform fixtures inherited host init markers, repository layout
+  and terminal assumptions. They now isolate HOME/XDG state. Repository
+  and ownership cases keep conservative refusals; unavailable real host
+  capabilities are named separately from failed assertions (#45)
+
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match

@@ -418,6 +418,8 @@ def main():
                     "SITE_NAME": "fixture", "SHELL": "/bin/bash", "TERM": "xterm-256color",
                     "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
 
+        env.update(smoke.init_env(tmp))
+
         def spark(*args, extra=None, stdin="", timeout=60):
             e = dict(env)
             e.update(extra or {})

@@ -14,6 +14,13 @@
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
+T=$(cd "$T" && pwd -P)
+# The native-manager stub must not inherit installed runit markers.
+case $(uname -s) in
+    Darwin) unset SPARK_ETC_RUNIT ;;
+    *) export SPARK_ETC_RUNIT="$T/no-runit" ;;
+esac
+export SPARK_VAR_SERVICE="$T/no-service"
 trap 'rm -rf "$T"' EXIT
 export HOME="$T/home" XDG_CONFIG_HOME="$T/home/.config" XDG_STATE_HOME="$T/home/.local/state" XDG_DATA_HOME="$T/home/.local/share"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
