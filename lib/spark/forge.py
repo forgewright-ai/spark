@@ -697,7 +697,7 @@ def _peer_req(cfg, method, path, body=None):
         headers.update({"Content-Type": "application/json", "X-Spark": "1"})
     try:
         req = urllib.request.Request(url, data=data, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with wire.urlopen(req, timeout=5) as r:
             return r.status, json.load(r)
     except Exception:
         return 0, None

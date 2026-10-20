@@ -499,10 +499,11 @@ def _box_user(url, token):
     '' when it refuses, is down, or is no page server at all."""
     import json
     import urllib.request
+    from . import wire
     req = urllib.request.Request(url.rstrip("/") + "/api/me",
                                  headers={"Authorization": "Bearer " + token})
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with wire.urlopen(req, timeout=10) as r:
             me = json.loads(r.read().decode("utf-8"))
     except (OSError, ValueError):
         return ""

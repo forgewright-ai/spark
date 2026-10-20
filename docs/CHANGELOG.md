@@ -15,6 +15,9 @@
 - S2: a reply that timed out after words arrived was lost from
   history; it stays once as an incomplete answer, and the next message
   continues its thread (#30)
+- S2: a bearer token could follow a redirect to another origin; a
+  credentialed request now stays on its scheme, host and port, and a
+  redirect spark did not follow says so (#29)
 
 ## v1.90
 

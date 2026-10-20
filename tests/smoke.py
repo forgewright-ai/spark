@@ -1796,6 +1796,105 @@ def line_knowledge_cases(t, spark, home):
          repr((lines, lines2)))
 
 
+def redirect_cases(t):
+    """Synthetic credentials never leave the origin, even during a stream."""
+    import urllib.error
+    import urllib.request
+    from types import SimpleNamespace
+    from spark import wire
+
+    handler = wire._OriginRedirect()
+    for original, target, allowed in (
+            ("https://EXAMPLE.com/a", "https://example.com:443/b?x=1#part", True),
+            ("http://example.com/a", "http://example.com:80/b", True),
+            ("https://[::1]/a", "https://[::1]:443/b", True),
+            ("https://example.com/a", "http://example.com/b", False),
+            ("http://example.com/a", "https://example.com/b", False),
+            ("https://example.com/a", "https://example.com:444/b", False),
+            ("https://example.com/a", "https://other.example/b", False),
+            ("https://example.com/a", "https://example.com.evil.example/b", False),
+            ("https://example.com/a", "https://you@example.com/b", False),
+            ("https://example.com/a", "https://example.com:bad/b", False)):
+        for status in (301, 302, 303, 307, 308):
+            req = urllib.request.Request(original, headers={"Authorization": "Bearer synthetic"})
+            try:
+                redirected = handler.redirect_request(req, None, status, "redirect", {}, target)
+                accepted = redirected.get_header("Authorization") == "Bearer synthetic"
+            except urllib.error.URLError:
+                accepted = False
+            t.ok(accepted == allowed, "redirect: origin semantics for HTTP %d: %s -> %s" % (status, original, target))
+    req = urllib.request.Request("http://example.com/a")
+    t.ok(handler.redirect_request(req, None, 302, "redirect", {}, "http://other.example/b").full_url
+         == "http://other.example/b", "redirect: uncredentialed requests retain urllib behavior")
+
+    seen = []
+    class Endpoint(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            seen.append((self.server.server_port, self.path,
+                         self.headers.get("Authorization")))
+            if self.path == "/loop":
+                target = "/loop"
+            elif self.path.endswith("/v1/chat/completions"):
+                target = self.server.target
+            else:
+                target = ""
+            if target:
+                self.send_response(302)
+                self.send_header("Location", target)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'
+                             if self.server.stream else b'{"ok":true}')
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            self.do_GET()
+
+    servers = [HTTPServer(("127.0.0.1", 0), Endpoint) for _ in range(2)]
+    for server in servers:
+        server.stream = False
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    source, dest = servers
+    base = "http://127.0.0.1:%d" % source.server_port
+    cfg = SimpleNamespace(token_file=os.path.join(_ISOLATED, "redirect-token"))
+    with open(cfg.token_file, "w") as f:
+        f.write("synthetic-redirect-token")
+    try:
+        for stream in (False, True):
+            source.stream = stream
+            for target, allowed in (("/reply", True),
+                                    (base + "/reply?query=1", True),
+                                    ("http://127.0.0.1:%d/reply" % dest.server_port, False),
+                                    ("http://localhost:%d/reply" % source.server_port, False),
+                                    ("/loop", False)):
+                seen.clear()
+                source.target = target
+                error = ""
+                try:
+                    with wire._send(cfg, base, b'{}', 2) as reply:
+                        body = reply.read()
+                except wire.BrainError as e:
+                    error = e.hint
+                if allowed:
+                    t.ok(not error and len(seen) == 2 and
+                         all(row[2] == "Bearer synthetic-redirect-token" for row in seen) and
+                         (b"[DONE]" in body if stream else json.loads(body) == {"ok": True}),
+                         "redirect: same origin preserves bearer and reply (stream=%s)" % stream)
+                else:
+                    t.ok(bool(error) and all(row[0] == source.server_port for row in seen) and
+                         (len(seen) == 1 if target != "/loop" else len(seen) < 12),
+                         "redirect: rejects changed origin or bounded loop (stream=%s, target=%s)" % (stream, target))
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+
+
 def engine_wire_cases(t, spark, home, url):
     """v1.56: a request shaped by a schema never thinks (the ember is a
     thinking model); one that thought its whole cap away says so; spark
@@ -6674,6 +6773,7 @@ def main():
         t.ok(rc == 0 and lines[0] == "cmd\tfrobnicate -h" and lines[1].startswith("frobnicate: not on this machine -- "),
              "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
         line_knowledge_cases(t, spark, home)
+        redirect_cases(t)
         engine_wire_cases(t, spark, home, url)
         empty_answer_cases(t, spark, home, url, env)
 

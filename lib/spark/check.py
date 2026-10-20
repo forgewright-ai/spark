@@ -791,12 +791,12 @@ def _peer_status(cfg, path):
     login (0 when it does not answer): 200 accepted, 401 rejected."""
     import urllib.error
     import urllib.request
-    from . import users
+    from . import users, wire
     token = users.account()[1]
     try:
         req = urllib.request.Request(cfg.peer_ai_url.rstrip("/") + path,
                                      headers={"Authorization": "Bearer " + token})
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with wire.urlopen(req, timeout=5) as r:
             return r.status
     except urllib.error.HTTPError as e:
         return e.code
