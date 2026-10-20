@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.90.2
+
+- S3: the page checked Host on API writes alone, and compared an
+  Origin by its host alone. Every known route now needs one valid Host
+  this machine answers to; an API write's Origin, when sent, must match
+  the request's scheme, host and port; a second or malformed Host or
+  Origin is refused (#48)
+
 ## v1.90.1
 
 - S3: the first kept line of a read could take longer than its recorded

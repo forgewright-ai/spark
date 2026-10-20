@@ -1573,10 +1573,14 @@ and may change freely.
    token, returned once, never stored. `DELETE /api/threads` clears the
    requester's own regular threads and answers `{cleared, kept}`: the
    kept threads stay, and `kept` says how many. `GET /api/threads` rows
-   are `{id, ts, title, turns, kept}`. Every `POST` and `DELETE` under
-   `/api/`, `/api/login` included, also needs `X-Spark: 1`, a `Host`
-   this machine answers to and, when sent, an `Origin` matching it (400
-   or 403). A `POST` there needs a JSON object body sent as
+   are `{id, ts, title, turns, kept}`. Every known route needs one
+   `Host` this machine answers to (400). Every `POST` and `DELETE`
+   under `/api/`, `/api/login` included, also needs `X-Spark: 1` and,
+   when sent, one `Origin` whose scheme, host and port are the
+   request's own (403). An API client may omit the `Origin`. A second
+   `Host` or `Origin`, or one that does not parse, is refused, and a
+   forwarded header changes neither check. A `POST` there needs a JSON
+   object body sent as
    `Content-Type: application/json` besides (415 otherwise). A `DELETE`
    carries no body. `POST /v1/chat/completions` takes the bearer only. A
    cookie does not open it (401), so a browser's login cannot be ridden

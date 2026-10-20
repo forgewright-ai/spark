@@ -105,6 +105,13 @@ def main():
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + str(extra)[:300]) if extra and not cond else ""))
         fails += not cond
 
+    ok(forgeserve.http_origin("http://LOCALHOST") == forgeserve.http_origin("http://localhost:80")
+       == ("http", "localhost", 80), "origin comparison uses the default HTTP port and ignores hostname case")
+    ok(forgeserve.http_origin("https://localhost") == ("https", "localhost", 443),
+       "HTTPS is a distinct origin with its own default port")
+    for origin in ("http://localhost:", "http://localhost\t", "http://local\nhost", "http://localhost\\path"):
+        ok(forgeserve.http_origin(origin) is None, "origin parser rejects empty ports and controls", repr(origin))
+
     stub = HTTPServer(("127.0.0.1", 0), smoke.Stub)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
     stub_url = "http://127.0.0.1:%d" % stub.server_address[1]
@@ -226,6 +233,65 @@ def main():
                        for s in sts),
                    "%s %s is off the table: 404 to all three%s" % (method, path, ", no body" if method == "HEAD" else ""),
                    sts)
+
+            # Send header pairs verbatim: a dict cannot exercise duplicate
+            # Host/Origin fields, and http.client normally adds Host itself.
+            def header_request(method, path, pairs, data=None):
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                try:
+                    c.putrequest(method, path, skip_host=True)
+                    for k, v in pairs:
+                        c.putheader(k, v)
+                    if data is not None:
+                        c.putheader("Content-Type", "application/json")
+                        c.putheader("Content-Length", str(len(data)))
+                    c.endheaders(data)
+                    r = c.getresponse()
+                    return r.status, dict(r.getheaders()), r.read()
+                finally:
+                    c.close()
+
+            authority = "127.0.0.1:%d" % port
+            for hosts in ([], ["evil.example"], [authority, authority],
+                          [authority, "evil.example"], [authority + "/"],
+                          ["name@" + authority], [authority + ",evil.example"]):
+                for method, path in (("GET", "/"), ("GET", "/api/health"),
+                                     ("GET", "/api/me"), ("POST", "/v1/chat/completions")):
+                    pairs = [("Host", h) for h in hosts] + [("Authorization", "Bearer " + admin)]
+                    st, _, _ = header_request(method, path, pairs)
+                    ok(st == 400, "%s %s rejects invalid or duplicate Host %r" % (method, path, hosts), st)
+
+            body = json.dumps({"token": admin}).encode()
+            base = [("Host", authority), ("X-Spark", "1")]
+            bad_origins = ["https://" + authority, "ftp://" + authority,
+                           "//" + authority, url + "/", url + "/path",
+                           url + "?", url + "#", "http://name@" + authority,
+                           "http://127.0.0.1:0", "http://127.0.0.1:65536",
+                           "null", "", url + " " + url, "http://[broken"]
+            for origin in bad_origins:
+                st, hd, _ = header_request("POST", "/api/login", base + [("Origin", origin)], body)
+                ok(st == 403 and "Set-Cookie" not in hd,
+                   "login rejects malformed or different Origin %r without a session" % origin, st)
+            for origins in ([url, url], [url, "https://" + authority]):
+                st, hd, _ = header_request("POST", "/api/login", base + [("Origin", o) for o in origins], body)
+                ok(st == 403 and "Set-Cookie" not in hd, "login rejects duplicate Origin", st)
+            forwarded = [("Forwarded", 'proto=https;host="evil.example"'),
+                         ("X-Forwarded-Proto", "https"), ("X-Forwarded-Host", "evil.example")]
+            for origin, expected in ((url, 200), ("https://" + authority, 403)):
+                st, _, _ = header_request("POST", "/api/login", base + forwarded + [("Origin", origin)], body)
+                ok(st == expected, "forwarding headers cannot change the HTTP origin", st)
+            st, _, _ = header_request("POST", "/api/login", base, body)
+            ok(st == 200, "originless login remains supported", st)
+            local = "localhost:%d" % port
+            st, hd, _ = header_request("POST", "/api/login",
+                                      [("Host", local.upper()), ("X-Spark", "1"),
+                                       ("Origin", "http://" + local)], body)
+            ok(st == 200, "same-origin login accepts a case-insensitive local hostname", st)
+            cookie = hd.get("Set-Cookie", "").split(";")[0]
+            for credential in (("Authorization", "Bearer " + admin), ("Cookie", cookie)):
+                st, _, _ = header_request("DELETE", "/api/memory/1",
+                                          base + [credential, ("Origin", "https://" + authority)])
+                ok(st == 403, "API writes reject the wrong scheme with bearer or cookie", st)
 
             # no login, no 500: a lone surrogate in the token is a wrong
             # token (the 1 s cost, counted), and a body nested past the

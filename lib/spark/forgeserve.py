@@ -201,6 +201,26 @@ def set_cookie(sid):
     return "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, sid, COOKIE_AGE)
 
 
+def http_origin(value):
+    """A serialized HTTP(S) origin as (scheme, host, effective port).
+    urlsplit alone accepts paths, credentials and stripped controls that
+    are not valid Origin values. None means malformed, not absent."""
+    if not value or any(ord(c) <= 32 or ord(c) >= 127 for c in value):
+        return None
+    if any(c in value for c in "\\@?#"):
+        return None
+    try:
+        u = urllib.parse.urlsplit(value)
+        if u.scheme not in ("http", "https") or not u.hostname or u.path or u.netloc.endswith(":"):
+            return None
+        port = u.port if u.port is not None else (443 if u.scheme == "https" else 80)
+        if not 0 < port < 65536:
+            return None
+        return u.scheme, u.hostname.lower(), port
+    except ValueError:
+        return None
+
+
 def cap_tokens(body):
     """The forwarded request asks the model for at most V1_MAX_TOKENS:
     max_tokens is set when absent, not a positive int (-1 is 'no limit'
@@ -412,7 +432,7 @@ class ForgeServer(ThreadingHTTPServer):
         self._refused_t = 0.0                   # the last "too many connections" log line
         self._streams = {}                      # (role, user) -> /api/events streams open
         names = {self.host, "127.0.0.1", "localhost"} | own_hostnames() | {lan_ip()}
-        self.hosts = {n for n in names if n} | {"%s:%d" % (n, self.port) for n in names if n}
+        self.hosts = {n.lower() for n in names if n} | {"%s:%d" % (n.lower(), self.port) for n in names if n}
 
     def process_request(self, request, client_address):
         """A thread per connection, at most MAX_CONNECTIONS at once: one
@@ -742,26 +762,25 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _host_ok(self):
-        host = (self.headers.get("Host") or "").strip().lower()
-        return host in self.server.hosts
+        hosts = self.headers.get_all("Host", [])
+        if len(hosts) != 1:
+            return False
+        host = hosts[0].lower()
+        return http_origin("http://" + host) is not None and host in self.server.hosts
 
     def _post_ok(self):
-        """The P rules: X-Spark, a same-host Origin when there is one, a
-        Host this machine answers to. False = a response was sent."""
-        if not self._host_ok():
-            self._error(400, "bad", "Host is not this machine")
-            return False
+        """The P rules: X-Spark and a same-origin request when Origin is
+        sent. The route already checked Host. False = a response was sent."""
         if self.headers.get("X-Spark") != "1":
             self._error(403, "forbidden", "POST needs the header X-Spark: 1")
             return False
-        origin = (self.headers.get("Origin") or "").strip()
-        if origin:
-            try:
-                oh = urllib.parse.urlsplit(origin).netloc.lower()
-            except ValueError:
-                oh = ""
-            if not oh or oh != (self.headers.get("Host") or "").strip().lower():
-                self._error(403, "forbidden", "Origin does not match Host")
+        origins = self.headers.get_all("Origin", [])
+        if origins:
+            # This listener is plain HTTP. Forwarded and X-Forwarded-*
+            # are not evidence of TLS and never change this boundary.
+            expected = http_origin("http://" + self.headers["Host"])
+            if len(origins) != 1 or http_origin(origins[0]) != expected:
+                self._error(403, "forbidden", "Origin does not match this HTTP request")
                 return False
         return True
 
@@ -818,6 +837,8 @@ class Handler(BaseHTTPRequestHandler):
         role = route_role(method, path)       # the table decides who may; nothing else does
         if role is None:
             return self._error(404, "missing", "no such route" if path.startswith(("/api/", "/v1/")) else "no such page")
+        if not self._host_ok():
+            return self._error(400, "bad", "Host is not this machine")
         if role == "none":
             if path == "/api/health":
                 return self.api_health()
