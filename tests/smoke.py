@@ -805,6 +805,78 @@ class T:
         print("  skip %s   (%s)" % (what, why))
 
 
+def config_parity_cases(t):
+    """The same bytes and inherited values go to both config readers."""
+    with open(os.path.join(REPO, "tests", "config", "cases.json"), encoding="utf-8") as f:
+        cases = json.load(f)
+    # Every forbidden character is refused, even inside quotes or after #.
+    for char in ';`$()|&<>':
+        for value in (char, '"' + char + '"', "text # " + char):
+            cases.append({"name": "forbidden value " + repr(value),
+                          "site": "PROBE_VALUE=before\nPROBE_VALUE=" + value + "\n",
+                          "error": {"file": "site.env", "line": 2}})
+    python_reader = (
+        "import json, sys\n"
+        "from spark.config import Config\n"
+        "c = Config()\n"
+        "print(json.dumps({k: c.get(k, v) for k, v in json.loads(sys.argv[1]).items()}))\n"
+    )
+    shell_reader = (
+        '. "$1/lib/env.sh"\n'
+        'status=0\n'
+        'site_load || status=$?\n'
+        '"$2" -c \'import json, os, sys; '
+        'print(json.dumps({k: os.environ.get(k) or v for k, v in '
+        'json.loads(sys.argv[1]).items()}))\' "$3"\n'
+        'exit "$status"\n'
+    )
+    shells = [("sh", ["sh"])]
+    # Linux sh is often dash; macOS sh is bash. Exercise bash POSIX mode
+    # locally too, without making it a dependency of the config reader.
+    if shutil.which("bash"):
+        shells.append(("bash", ["bash", "--posix"]))
+    for case in cases:
+        with tempfile.TemporaryDirectory(prefix="spark-config-") as home:
+            directory = os.path.join(home, ".config", "spark")
+            os.makedirs(directory)
+            for name in ("site", "spark"):
+                if name in case:
+                    with open(os.path.join(directory, name + ".env"), "wb") as f:
+                        f.write(case[name].encode("utf-8"))
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": home,
+                   "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.state",
+                   "XDG_DATA_HOME": home + "/.data", "XDG_CACHE_HOME": home + "/.cache",
+                   "PYTHONPATH": os.path.join(REPO, "lib"), "LC_ALL": "C"}
+            env.update(case.get("env", {}))
+            want = {k: v.replace("{home}", home) for k, v in case.get("want", {}).items()}
+            defaults = {k: "auto" if k == "SITE_AI_MODEL" else "fallback" for k in want}
+            # On refusal, the shell must not keep an earlier line from the
+            # rejected file. Python returns no Config at all.
+            if "error" in case:
+                defaults = {"PROBE_VALUE": "fallback"}
+            query = json.dumps(defaults)
+            readers = [("python", [sys.executable, "-c", python_reader, query])]
+            readers += [(name, command + ["-c", shell_reader, "config-parity",
+                                         REPO, sys.executable, query]) for name, command in shells]
+            for name, command in readers:
+                p = subprocess.run(command, env=env, capture_output=True, text=True, timeout=10)
+                label = "config: %s: %s" % (case["name"], name)
+                if "error" in case:
+                    error = case["error"]
+                    t.ok(p.returncode != 0 and error["file"] in p.stderr
+                         and re.search(r"(?:^|\n|:)%d:" % error["line"], p.stderr) is not None,
+                         label + " refuses with file and line", p.stderr)
+                    if name != "python":
+                        # A higher-precedence file or inherited value survives.
+                        actual = json.loads(p.stdout) if p.stdout else None
+                        t.ok(actual == {"PROBE_VALUE": case.get("kept", "fallback")},
+                             label + " applies no part of the refused file", p.stdout)
+                else:
+                    actual = json.loads(p.stdout) if p.returncode == 0 else None
+                    t.ok(p.returncode == 0 and actual == want and not p.stderr,
+                         label, repr((p.returncode, actual, p.stderr)))
+
+
 def read_timing_cases(t):
     """A fake clock separates setup, discarded chunks and kept output."""
     import io
@@ -6291,6 +6363,7 @@ def own_imports_cases(t):
 def main():
     srv, url = start_stub()
     t = T()
+    config_parity_cases(t)
     with tempfile.TemporaryDirectory(prefix="spark-smoke-") as home:
         # GIT_* stripped too: a caller's GIT_DIR/GIT_INDEX_FILE (a pre-commit
         # hook, say) must never leak into a spawned `spark`, or its own git

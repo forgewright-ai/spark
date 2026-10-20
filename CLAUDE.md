@@ -720,8 +720,18 @@ and may change freely.
    `<path>.bak`, never overwritten. A stale symlink into the repository
    is replaced. The rc file is contract 1's.
 3. Config files are `KEY=value` lines. Every reader refuses any other
-   non-blank, non-comment line (``^[A-Z_0-9]+=[^;`$()|&<>]*$``). The
-   keys:
+   non-blank, non-comment line (``^[A-Z_][A-Z_0-9]*=[^;`$()|&<>]*$``).
+   Keys start with an uppercase letter or underscore; digits may
+   follow. Unknown well-formed keys still load. Lines end with `LF` or
+   `CRLF`; the last line needs no ending. Blank lines and comments may
+   start with ASCII whitespace. Only a whole-line `#` starts a comment.
+   One pair of surrounding double quotes is removed. Other quotes,
+   backslashes, spaces and inline `#` are literal. A leading `~` or
+   `~/` then expands to the home directory. Empty values are absent.
+   Within each file, the first non-empty value of a key wins.
+   Every line is checked, even a duplicate or a shadowed value; a bad
+   line refuses the file before any of its values are applied.
+   The keys:
    - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
      SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
      SITE_AI_BUILD SITE_HEADLESS SITE_SHARE`. A key an older spark
@@ -815,7 +825,10 @@ and may change freely.
      `MCP_SERVER_<NAME>="<absolute path> [words]"`, `NAME` matching
      `[A-Z][A-Z0-9_]{0,31}`, and `MCP_SERVER_<NAME>_TRUST`, `yes` or
      `no`. A key that ends `_TRUST` is no server.
-   Precedence: environment, then file, then default.
+   Precedence: non-empty environment, then `spark.env`, then `site.env`,
+   then default. Empty values do not hide a lower-precedence value.
+   `tests/config/cases.json`, run by `tests/smoke.py`, holds the shared
+   shell and Python fixtures.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
    `answer` or `error`. Line 2 is the hint, the answer or the reason:
@@ -1699,8 +1712,12 @@ and may change freely.
    lands the turn. The user line and any partial answer (`partial:
    true`) go on the thread, and the log line says 499. A client that
    leaves while queued pays no prefill and lands nothing, 499 likewise.
-   `/api/run` emits `line {s}` then `done {rc}`. `/api/events` emits
-   `check`, `bar` and `serve` on change, `log` too for an admin, and a
+   `/api/run` emits `line {s}` then `done {rc}`. A verb runs in a
+   session of its own (`forgeserve.run_verb`), `RUN_CAP` seconds at most
+   (rc 124). When it ends, times out or the page hangs up, its process
+   group is killed and it is reaped. A service it starts in a session of
+   its own stays. `/api/events` emits `check`, `bar` and `serve` on
+   change, `log` too for an admin, and a
    `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
    `/v1/models` are OpenAI-shaped and proxied to the llama-server with
    the api-token. The request's `model` field routes, and a missing

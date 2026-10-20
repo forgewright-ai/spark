@@ -7,6 +7,16 @@
   share a small queue, an account limit and a deadline; busy callers get
   a retry hint, and expired or disconnected waiters start no work (#42)
 
+- S3: shell and Python disagreed on repeated config keys and CRLF.
+  Both now keep the first non-empty value in each file and read CRLF.
+  Python previously kept the last duplicate. Keys starting with a digit
+  are refused by both readers before any value is applied (#41)
+- S3: a verb the page ran could leave a child holding its output, and
+  so hold the runner and every later verb; its cap killed the verb
+  alone. A verb now runs in a session of its own on a monotonic
+  deadline, its group is killed when it ends, times out or the page
+  hangs up, and a service it starts in a session of its own keeps
+  running (#39)
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match

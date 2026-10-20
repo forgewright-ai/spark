@@ -82,6 +82,7 @@ EVENTS_KEEPALIVE = 15
 TMUX_SEQ = re.compile(r"#\[[^\]]*\]")
 QUEUE_WAIT = 0.2                # a chat that waits longer than this for the model says `queued`
 RUN_CAP = 1800                  # seconds a verb may run through /api/run
+LEASH_GRACE = 0.5               # seconds a verb's pipe is still read once it ended or its cap killed it
 RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
@@ -1747,28 +1748,78 @@ class Handler(BaseHTTPRequestHandler):
         env = dict(os.environ, TERM="dumb", SPARK_ASCII="1")
         env.pop("TMUX", None)
         self._sse()
+        argv = [sys.executable, os.path.join(REPO, "bin", "spark"), verb] + args
         with self.server.run_lock:
-            try:
-                p = subprocess.Popen([sys.executable, os.path.join(REPO, "bin", "spark"), verb] + args, env=env,
-                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            except OSError as e:
-                self._emit("line", {"s": "! cannot run: %s" % (e.strerror or e)})
-                self._audit("run", verb=verb, rc=127)
-                return self._emit("done", {"rc": 127})
-            timer = threading.Timer(RUN_CAP, p.kill)
-            timer.daemon = True
-            timer.start()
-            try:
-                with p.stdout:
-                    for raw in p.stdout:
-                        self._emit("line", {"s": raw.decode("utf-8", errors="replace").rstrip("\n")})
-                rc = p.wait()
-            finally:
-                timer.cancel()
-                if p.poll() is None:
-                    p.kill()
+            rc = run_verb(argv, env, lambda s: self._emit("line", {"s": s}))
         self._audit("run", verb=verb, rc=rc)
         return self._emit("done", {"rc": rc})
+
+
+
+def _killpg(p):
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def _exited(p):
+    """True once p has exited, without reaping it: its pid, and so the
+    id of its group, stays ours until p.wait()."""
+    try:
+        return os.waitid(os.P_PID, p.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+    except ChildProcessError:
+        return True
+    except AttributeError:
+        return p.poll() is not None
+
+
+def run_verb(argv, env, emit, cap=RUN_CAP):
+    """Run one verb for /api/run in a session of its own, each line of
+    its output to emit(text), stderr folded in. The rc, 124 past `cap`
+    seconds (a monotonic deadline), 127 when it cannot start. When the
+    verb ends, or its cap fires, its whole group is killed, and its pipe
+    is read LEASH_GRACE more and no longer: a quiet child, or one that
+    left the group holding the pipe, cannot hold the runner. A service
+    the verb starts is handed off in a session of its own (engine.start)
+    and keeps running. An emit that raises (the page hung up) kills the
+    group too, and the verb is reaped either way."""
+    try:
+        p = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, start_new_session=True)
+    except OSError as e:
+        emit("! cannot run: %s" % (e.strerror or e))
+        return 127
+    deadline, grace, fired, ended = time.monotonic() + cap, None, False, False
+    fd, buf = p.stdout.fileno(), b""
+    try:
+        while True:
+            now = time.monotonic()
+            if not fired and not ended and now > deadline:
+                fired = True
+                _killpg(p)
+            if not fired and not ended and _exited(p):
+                ended = True
+                _killpg(p)            # what it left in its group goes with it
+            if fired or ended:
+                grace = grace or now + LEASH_GRACE
+                if now > grace:
+                    break
+            if not select.select([fd], [], [], 0.1)[0]:
+                continue
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            *lines, buf = (buf + chunk).split(b"\n")
+            for raw in lines:
+                emit(raw.decode("utf-8", errors="replace"))
+        if buf:
+            emit(buf.decode("utf-8", errors="replace"))
+    finally:
+        _killpg(p)
+        p.wait()
+        p.stdout.close()
+    return 124 if fired else p.returncode
 
 
 def _shell():
