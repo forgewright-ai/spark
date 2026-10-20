@@ -17,9 +17,225 @@ import sys
 import tempfile
 import time
 import urllib.request
+import unittest
+from unittest.mock import patch
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPARK = os.path.join(REPO, "bin", "spark")
+sys.path.insert(0, os.path.join(REPO, "lib"))
+from spark import engine
+
+
+class ShutdownTests(unittest.TestCase):
+    """Short waits, real children, and no service manager or model."""
+
+    def child(self, code):
+        p = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, text=True)
+
+        def cleanup():
+            if p.poll() is None:
+                p.kill()
+            p.wait(timeout=5)
+            p.stdin.close()
+            p.stdout.close()
+
+        self.addCleanup(cleanup)
+        return p
+
+    def live_child(self):
+        p = self.child("import sys; print('ready', flush=True); sys.stdin.read()")
+        self.assertEqual(p.stdout.readline().strip(), "ready")
+        return p
+
+    def wait_zombie(self, pid):
+        # Observe exit without reaping. A fixed sleep can race the
+        # child's exit on a busy CI runner, on Linux or macOS.
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=1)
+            if out.stdout.strip().startswith("Z"):
+                return
+            time.sleep(0.01)
+        self.fail("fixture did not become a zombie")
+
+    def test_live_and_zero_timeout(self):
+        p = self.live_child()
+        for timeout in (0, -1, 0.02):
+            start = time.monotonic()
+            self.assertEqual(engine.wait_gone([p.pid], timeout), [p.pid])
+            self.assertLess(time.monotonic() - start, 0.2)
+        self.assertIsNone(p.poll())
+        self.assertEqual(engine.wait_gone([], 0), [])
+
+    def test_owned_zombie_is_reaped(self):
+        p = self.child("pass")
+        self.wait_zombie(p.pid)
+        os.kill(p.pid, 0)    # succeeds for a zombie; cannot prove liveness
+        self.assertEqual(engine.wait_gone([p.pid], 0.02), [])
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(p.pid, os.WNOHANG)
+
+    def test_exited_and_missing(self):
+        p = self.child("pass")
+        p.wait(timeout=5)
+        self.assertEqual(engine.wait_gone([p.pid], 0.02), [])
+
+    def test_live_child_exits_during_wait(self):
+        p = self.live_child()
+        p.stdin.close()
+        self.assertEqual(engine.wait_gone([p.pid], 1), [])
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(p.pid, os.WNOHANG)
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and hasattr(os, "waitid"),
+                         "a held non-child zombie fixture needs Linux waitid")
+    def test_nonchild_zombie(self):
+        # Its parent owns/reaps it. WNOWAIT guarantees a zombie before
+        # publishing the PID, and stdin holds it there.
+        parent = self.child(
+            "import os, sys\n"
+            "pid = os.fork()\n"
+            "if pid == 0: os._exit(0)\n"
+            "os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT)\n"
+            "print(pid, flush=True)\n"
+            "sys.stdin.readline()\n"
+            "os.waitpid(pid, 0)\n"
+            "print('reaped', flush=True)\n")
+        pid = int(parent.stdout.readline())
+        try:
+            with patch.object(engine.os, "kill", wraps=os.kill) as kill:
+                self.assertEqual(engine.wait_gone([pid], 0.02), [])
+                self.assertTrue(all(call.args[1] == 0 for call in kill.call_args_list))
+            os.kill(pid, 0)    # wait_gone did not reap another's child
+        finally:
+            parent.stdin.write("\n")
+            parent.stdin.flush()
+            self.assertEqual(parent.stdout.readline().strip(), "reaped")
+            parent.wait(timeout=5)
+
+    def test_uninspectable_remains_pending(self):
+        p = self.live_child()
+        for mac in (False, True):
+            for denied in (False, True):
+                with self.subTest(mac=mac, denied=denied), patch.object(engine, "IS_MAC", mac), \
+                        patch("builtins.open", side_effect=PermissionError), \
+                        patch.object(engine, "run", return_value=(-1, "")), \
+                        patch.object(engine.os, "waitpid", side_effect=ChildProcessError), \
+                        patch.object(engine.os, "kill", side_effect=PermissionError if denied else None):
+                    self.assertEqual(engine.wait_gone([p.pid], 0.02), [p.pid])
+        self.assertIsNone(p.poll())
+
+    def test_unrelated_child_is_not_reaped(self):
+        exited = self.child("pass")
+        self.wait_zombie(exited.pid)
+        live = self.live_child()
+        self.assertEqual(engine.wait_gone([live.pid], 0.02), [live.pid])
+        self.assertEqual(os.waitpid(exited.pid, os.WNOHANG)[0], exited.pid)
+
+    def test_failed_child_wait_stays_pending(self):
+        p = self.live_child()
+        with patch.object(engine.os, "waitpid", side_effect=OSError), \
+                patch.object(engine.os, "kill", side_effect=AssertionError("unknown child state")):
+            self.assertEqual(engine.wait_gone([p.pid], 0.02), [p.pid])
+        self.assertIsNone(p.poll())
+
+    def test_pid_identity_still_required(self):
+        p = self.live_child()
+        with tempfile.TemporaryDirectory(prefix="spark-pid-") as tmp:
+            path = os.path.join(tmp, "serve.pid")
+            with open(path, "w") as f:
+                f.write(str(p.pid))
+            with patch.object(engine.os, "kill", wraps=os.kill) as kill:
+                self.assertEqual(engine.pid_of(path, engine.SERVER_MARKS), 0)
+                with patch.object(engine, "pid_cmdline", return_value=""):
+                    self.assertEqual(engine.pid_of(path, engine.SERVER_MARKS), 0)
+                self.assertTrue(all(call.args[1] == 0 for call in kill.call_args_list))
+        self.assertIsNone(p.poll())
+
+    def test_monotonic_deadline_and_sleep_budget(self):
+        p = self.live_child()
+        now = [10.0]
+        sleeps = []
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+
+        with patch.object(engine.time, "time", side_effect=AssertionError("wall clock")), \
+                patch.object(engine.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(engine.time, "sleep", side_effect=sleep), \
+                patch.object(engine, "IS_MAC", False):
+            self.assertEqual(engine.wait_gone([p.pid], 0.35), [p.pid])
+        self.assertEqual(len(sleeps), 2)
+        self.assertAlmostEqual(sum(sleeps), 0.35)
+        self.assertLessEqual(max(sleeps), 0.3)
+
+    def test_gone_pid_is_not_checked_again(self):
+        # A recycled number must not re-enter the result after absence
+        # was observed and become eligible for escalation.
+        live = self.live_child()
+        exited = self.child("pass")
+        exited.wait(timeout=5)
+        real_kill = os.kill
+        seen = []
+
+        def kill(pid, sig):
+            if pid == exited.pid:
+                seen.append(pid)
+                if len(seen) == 1:
+                    raise ProcessLookupError
+                return None
+            return real_kill(pid, sig)
+
+        with patch.object(engine.os, "kill", side_effect=kill):
+            self.assertEqual(engine.wait_gone([exited.pid, live.pid], 0.02), [live.pid])
+        self.assertEqual(seen, [exited.pid])
+
+    def test_macos_without_proc(self):
+        p = self.live_child()
+        for stat, pending in (("Z", False), ("Z+", False), ("S", True), ("", True)):
+            with self.subTest(stat=stat), patch.object(engine, "IS_MAC", True), \
+                    patch.object(engine.os, "waitpid", side_effect=ChildProcessError), \
+                    patch("builtins.open", side_effect=AssertionError("no proc on macOS")), \
+                    patch.object(engine, "run", return_value=(0, stat)) as run:
+                self.assertEqual(engine.wait_gone([p.pid], 0.02), [p.pid] if pending else [])
+                self.assertTrue(run.called)
+                for call in run.call_args_list:
+                    self.assertEqual(call.args[0], ["ps", "-o", "stat=", "-p", str(p.pid)])
+                    self.assertGreater(call.kwargs["timeout"], 0)
+                    self.assertLessEqual(call.kwargs["timeout"], 0.02)
+
+    def test_macos_probes_share_one_deadline(self):
+        pids = [self.live_child().pid, self.live_child().pid]
+        now = [10.0]
+
+        def run(cmd, timeout):
+            now[0] += timeout
+            return -1, ""
+
+        with patch.object(engine, "IS_MAC", True), \
+                patch.object(engine.os, "waitpid", side_effect=ChildProcessError), \
+                patch.object(engine.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(engine.time, "sleep", side_effect=AssertionError("past deadline")), \
+                patch.object(engine, "run", side_effect=run) as probe:
+            self.assertEqual(engine.wait_gone(pids, 0.02), pids)
+            self.assertEqual(probe.call_count, 1)
+
+    def test_nonpositive_pid_never_probes_a_group(self):
+        with patch.object(engine.os, "waitpid", side_effect=AssertionError("process group")), \
+                patch.object(engine.os, "kill", side_effect=AssertionError("process group")):
+            self.assertEqual(engine.wait_gone([0, -1], 0), [0, -1])
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux proc state reader")
+    def test_linux_stat_comm_can_contain_parentheses(self):
+        p = self.live_child()
+        from unittest.mock import mock_open
+        with patch.object(engine, "IS_MAC", False), \
+                patch.object(engine.os, "waitpid", side_effect=ChildProcessError), \
+                patch("builtins.open", mock_open(read_data="%d (a ) Z (b) S 1 2\n" % p.pid)):
+            self.assertEqual(engine.wait_gone([p.pid], 0.02), [p.pid])
 
 STUB_SERVER = '''#!%s
 # a stand-in llama-server: records its argv, honours --api-key-file, answers
@@ -100,7 +316,8 @@ def get(url, timeout=2):
 
 
 def main():
-    fails = 0
+    result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(ShutdownTests))
+    fails = len(result.failures) + len(result.errors)
 
     def ok(cond, what, extra=""):
         nonlocal fails
@@ -392,7 +609,10 @@ def main():
         os.makedirs(os.path.join(tmp, "runit"))
         with open(os.path.join(svbins, "sv"), "w") as f:
             f.write('#!/bin/sh\necho "sv $*" >> "$SV_LOG"\n[ "$1" != -w ] || shift 2\nd=$2; pf="$d/stub.pid"\n'
-                    'alive() { [ -f "$pf" ] && kill -0 "$(cat "$pf")" 2>/dev/null; }\n'
+                    # A container's init may leave the orphan unreaped.
+                    # The fake manager must report that zombie as down.
+                    'alive() { [ -f "$pf" ] && kill -0 "$(cat "$pf")" 2>/dev/null || return 1;\n'
+                    '    case "$(ps -o stat= -p "$(cat "$pf")" 2>/dev/null)" in ""|*Z*) return 1;; esac; }\n'
                     'fg() { "$SPARK_PY" "$SPARK_BIN" serve --foreground >> "$d/fg.log" 2>&1 & echo $! > "$pf"; }\n'
                     'case $1 in\n'
                     '    status) [ -d "$d/supervise" ] || { echo "fail: $d: runsv not running"; exit 1; }\n'
@@ -414,11 +634,16 @@ def main():
                 return 0
 
         def wait_down(pid, secs=10):
-            end = time.time() + secs
-            while time.time() < end:
+            # Observe the outcome independently of engine.wait_gone.
+            end = time.monotonic() + secs
+            while time.monotonic() < end:
                 try:
                     os.kill(pid, 0)
                 except OSError:
+                    return True
+                p = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                                   capture_output=True, text=True, timeout=1)
+                if p.stdout.strip().startswith("Z"):
                     return True
                 time.sleep(0.2)
             return False
