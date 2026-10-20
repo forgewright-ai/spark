@@ -55,14 +55,6 @@ ARG_WORD = re.compile(r"^[a-z][a-z0-9_]{0,31}$")          # an argument's name a
 ENUM_WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")   # a choice a brief may name; any other enum reads TEXT
 TRUST_SUFFIX = "_TRUST"
 
-# Former automatic-trust names, used only to explain migration.
-# A name or repository match never grants trust.
-TRUSTED_CHAIN = (
-    "spark",          # spark itself
-    "spark-shell",    # the seat: the desktop's providers, one server a part
-    "spark-acp",      # the task verb's client
-)
-
 # The environment a server gets, a named line each; nothing else is passed.
 ENV_KEEP = (
     "HOME",                       # where its config and state live
@@ -254,53 +246,6 @@ def program_problem(prog):
     return _owned_safe(real) or _ancestors_safe(real)
 
 
-CHAIN_ORIGIN = re.compile(r"^\s*url\s*=\s*(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
-                          r"forgewright-ai/([a-z-]+?)(?:\.git)?/?\s*$", re.M)
-
-
-def _origin(path):
-    """The forgewright-ai repository name the git clone holding `path`
-    was cloned from (its config's remote url), or ''."""
-    d = os.path.dirname(path)
-    while True:
-        dot = os.path.join(d, ".git")
-        cfg = ""
-        if os.path.isdir(dot):
-            cfg = os.path.join(dot, "config")
-        elif os.path.isfile(dot):
-            try:
-                with open(dot, encoding="utf-8") as f:
-                    gitdir = f.read(4096).strip().split("gitdir:", 1)[-1].strip()
-                gitdir = os.path.join(d, gitdir)
-                common = gitdir
-                if os.path.isfile(os.path.join(gitdir, "commondir")):
-                    with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as f:
-                        common = os.path.join(gitdir, f.read(4096).strip())
-                cfg = os.path.join(common, "config")
-            except OSError:
-                return ""
-        if cfg:
-            try:
-                with open(cfg, encoding="utf-8") as f:
-                    m = CHAIN_ORIGIN.search(f.read(65536))
-            except OSError:
-                return ""
-            return m.group(1) if m else ""
-        up = os.path.dirname(d)
-        if up == d:
-            return ""
-        d = up
-
-
-def chain_member(prog):
-    """The former automatic-trust name, for migration messages only."""
-    if not os.path.isabs(prog):
-        return ""
-    real = os.path.realpath(prog)
-    base = os.path.basename(real)
-    return base if base in TRUSTED_CHAIN and _origin(real) == base else ""
-
-
 def read_list(path=None):
     """{KEY: value} of the list, the file's order; {} when there is none.
     A line of another shape refuses the file (contract 3)."""
@@ -330,9 +275,7 @@ def specs(path=None):
         elif trust == "no":
             trusted, why = False, "not trusted (spark mcp trust)"
         else:
-            trusted = False
-            why = "automatic trust ended" if argv and chain_member(argv[0]) else "not trusted"
-            why += " -- spark mcp trust %s on to trust it" % name
+            trusted, why = False, "not trusted -- spark mcp trust %s on to trust it" % name
         out.append(Spec(name, argv, trusted, why, problem))
     return out
 

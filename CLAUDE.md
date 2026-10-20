@@ -2061,9 +2061,10 @@ and may change freely.
     tool's annotations are believed only with a local grant:
     `MCP_SERVER_<NAME>_TRUST=yes` (`spark mcp trust NAME on`). `off`
     writes `no`. Existing explicit decisions stay; missing or other
-    values grant no trust. Name and repository matches only explain
-    why former automatic trust ended (`mcp.chain_member`). Trust never
-    bypasses path checks. The spec's defaults hold: no
+    values grant no trust. Names, repository metadata and tool hints
+    never grant trust. Former automatic trust ends; the list names the
+    command to grant it. Trust never bypasses path checks. The spec's
+    defaults hold: no
     readOnlyHint is false, and no destructiveHint is true. From a
     trusted server a tool that may destroy takes the typed `yes`. From
     any other server every tool does (`Tool.needs_yes`). The gate comes

@@ -11925,8 +11925,6 @@ site.cmd_headless([])
     # palette any renderer may write), the three SPARK_*_SGR variables,
     # `spark bar line`. A hit names file:line.
     _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
-    # Historical provider names may appear only in the migration list.
-    _CHAIN_FILE, _CHAIN_LINE = os.path.join(REPO, "lib", "spark", "mcp.py"), '"spark-shell",'
     _hits = []
     for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
         _p = os.path.join(REPO, _r)
@@ -11943,8 +11941,6 @@ site.cmd_headless([])
             if b"\0" in _raw:
                 continue                    # an image, a font
             for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
-                if _f == _CHAIN_FILE and _l.lstrip().startswith(_CHAIN_LINE):
-                    continue                # migration metadata, never a trust grant
                 if _guard.search(_l):
                     _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
     t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",

@@ -2,6 +2,9 @@
 
 ## v1.90.2
 
+- S1: MCP trust could follow a program's name and repository metadata.
+  Trust now needs an explicit local grant. Existing yes and no grants
+  stay, and cached tools follow the current choice immediately (#44)
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match
@@ -9,10 +12,6 @@
   Origin is refused (#48)
 
 ## v1.90.1
-
-- S1: MCP trust could follow a program's name and repository metadata.
-  Trust now needs an explicit local grant. Existing yes and no grants
-  stay, and cached tools follow the current choice immediately (#44)
 
 - S3: the first kept line of a read could take longer than its recorded
   total. Both times now include answer setup and the final output (#35)
