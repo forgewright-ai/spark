@@ -6414,11 +6414,8 @@ def tls_cases(t):
     serves and reloads, the trust a client types (a CA file, a saved
     root, a pinned leaf) and the own root. A scratch pair from the
     openssl binary; skipped with a notice where there is none."""
-    import hashlib
-    import shutil
     import socket
     import ssl
-    import threading
     import types
     import urllib.request
     from spark import tls
@@ -6573,9 +6570,15 @@ def tls_cases(t):
         finally:
             os.environ.pop("SPARK_CA_FILE", None)
             handler.refresh()
-        # down is unknown, never trusted
+        # down is unknown, never trusted: a port nothing holds (on Linux a
+        # listener closed from another thread keeps accepting until its
+        # accept returns, so the closed one is no proof)
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        empty = probe.getsockname()[1]
+        probe.close()
+        t.ok(tls.verify_error("https://127.0.0.1:%d" % empty, timeout=2) is None, "verify_error: nothing answers reads as None")
         ls.close()
-        t.ok(tls.verify_error("https://127.0.0.1:%d" % port, timeout=2) is None, "verify_error: nothing answers reads as None")
         # the own root: minted, constrained, renewed when due
         rt = tls.mint_root(["lab.local", "lab"], "fixture")
         lf = tls.mint_leaf(["lab.local", "lab"], ["192.0.2.10", "127.0.0.1"], "fixture")
@@ -10657,9 +10660,11 @@ def main():
             " spark serve --login          the page's address and login, QR for a phone",
             " spark serve --login --new    a new admin token; old logins end",
             " spark serve --audit [N]      what the admin did",
+            " spark serve https [own|off]  the page over https: your pair, or its own (-h)",
             " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
             " spark client [URL|off]       use another machine's model; off: your own again",
+            " spark client URL --pin FP    trust that page's certificate (or --ca FILE)",
             " spark user [add NAME]        page logins (not system users); add shows a token"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         # v1.87: the help's rows are what the prompt line knows of spark

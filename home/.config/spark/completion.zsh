@@ -60,7 +60,7 @@ _spark() {
             bar)     comp=(line) ;;
             check)   comp=(--all --history --watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
-            serve)   comp=(on off boot share https status --login --audit) ;;
+            serve)   comp=(on off boot share https own status --login --audit) ;;
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;

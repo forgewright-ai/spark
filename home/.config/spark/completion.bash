@@ -64,7 +64,7 @@ _spark_complete() {
         keys)    words="ask recall height listen stop off on reset status" ;;
         check)   words="--all --history --watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
-        serve)   words="on off boot share https status --login --audit" ;;
+        serve)   words="on off boot share https own status --login --audit" ;;
         chat)    words="--thread" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
