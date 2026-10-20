@@ -571,14 +571,14 @@ def local_store(provision=False, cfg=None):
         if not name:
             if not provision:
                 return _NullStore()
-            name = _provision()
-        dk = users.account_key()
+            _provision()
+            name, token = users.account()
+        dk = users.account_key((name, token))
         if dk is None:
-            _, token = users.account()
             if not token:
                 return _NullStore()
             dk = users.unlock(name, token)
-            users.write_login(name, token, dk)
+            users.cache_key(name, token, dk)
         return store_for(name, dk)
     except Exception:
         log_exc("local store")
@@ -1022,10 +1022,10 @@ def _chat_history_lines():
     until the first sealed write removes it."""
     from . import CHAT_HISTORY_FILE, users
     try:
-        name, _ = users.account()
+        name, token = users.account()
         if name and users.exists(name):
             path = os.path.join(users.user_dir(name), "chat-history")
-            dk = users.account_key()
+            dk = users.account_key((name, token))
             if dk and os.path.isfile(path):
                 recs = vault.read_sealed(path, dk, "chathist", name)
                 return recs[0].decode("utf-8", "replace").splitlines() if recs else []

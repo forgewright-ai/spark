@@ -631,9 +631,12 @@ State is `~/.local/state/spark/`, 0700:
   store holds `audit` too, the admin actions.
 - `account` 0600, this machine's login (name and token), and
   `account-key` 0600, the unwrapped data key, so the hot paths never pay
-  the KDF. The key is a cache of the login (`users.write_login`): it
-  goes before `account` changes and comes back after, so a crash never
-  leaves a key cached for another login.
+  the KDF. The cache holds its name and token hash beside the key in
+  one atomic replace (`users.cache_key`). Readers pass the same captured
+  name and token to `users.account_key`: an interleaved login or a token
+  rotation leaves a matching key or a cache miss. A miss is recovered
+  with that token, without changing the login. Older unbound caches
+  are recovered through the token too; their bytes are never trusted.
 
 Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
 once the voice was turned on. Tools are linked into `~/.local/bin`.

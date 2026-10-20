@@ -44,9 +44,12 @@ def _store():
     """(sealed path, dk, name) of this machine's own account, or None --
     no account, or its key not held here (a client machine)."""
     from . import users
-    name, _ = users.account()
+    name, token = users.account()
     if name and users.exists(name):
-        dk = users.account_key()
+        try:
+            dk = users.local_key((name, token))
+        except vault.SealError:
+            raise Refused("closed", NO_OPEN)
         if dk:
             return store_of(name, dk)
     return None

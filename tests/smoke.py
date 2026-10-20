@@ -55,7 +55,7 @@ def read_thread(home, path):
     """The messages of a sealed thread, via the throwaway HOME's login."""
     import base64
     with open(home + "/.local/state/spark/account-key") as f:
-        dk = base64.b64decode(f.read().strip())
+        dk = base64.b64decode(f.read().split()[-1])
     return [json.loads(r.decode("utf-8")) for r in vault.read_sealed(path, dk)]
 TOKEN = "stub-token"
 TIMINGS = {"prompt_n": 40, "prompt_per_second": 96.5, "predicted_n": 12, "predicted_per_second": 12.3, "cache_n": 30}
@@ -7560,7 +7560,7 @@ def main():
         rc3, out3, _ = spark("edit", "--ledger", "--name", "s.md", extra=_xdg2)
         from spark import vault as _vault
         _wrapped = _vault.unwrap_key(_sd2 + "/users/ana/key", "tok-ana", "ana")
-        _cached = _b64.b64decode(open(_sd2 + "/account-key").read().strip())
+        _cached = _b64.b64decode(open(_sd2 + "/account-key").read().split()[-1])
         t.ok(rc == 0 and rc3 == 0 and "the first note" in out3 and _wrapped == _cached,
              "local_store: the cached account-key IS the minted wrapped key -- a login by token reads it all",
              repr(out3) + (" (keys differ)" if _wrapped != _cached else ""))

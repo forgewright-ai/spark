@@ -977,7 +977,7 @@ def main():
             import base64 as _b64
             import hashlib as _hl
             from spark import vault as _vault
-            adk = _b64.b64decode(open(state + "/account-key").read().strip())
+            adk = _b64.b64decode(open(state + "/account-key").read().split()[-1])
 
             def audit_recs():
                 return [json.loads(r) for r in _vault.read_sealed(state + "/users/owner/audit", adk, "audit", "owner")]

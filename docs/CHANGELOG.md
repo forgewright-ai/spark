@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.90.1
+
+- S1: concurrent logins could pair an account with another account's cached key; readers now validate the identity and recover old caches through the token (#28)
+
 ## v1.90
 
 spark is an MCP host. The servers on its list offer their tools to the
