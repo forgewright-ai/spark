@@ -209,6 +209,9 @@ check("M6: the server's environment is ENV_KEEP and nothing else",
 
 # Migration: descriptive repository metadata is not a local trust grant.
 CLONE = os.path.join(TMP, "clone")
+# An aliased directory exercises the resolved program path on every OS.
+os.mkdir(CLONE + "-target")
+os.symlink(CLONE + "-target", CLONE)
 os.makedirs(os.path.join(CLONE, ".git"))
 os.chmod(CLONE, 0o755)
 with open(os.path.join(CLONE, ".git", "config"), "w") as f:
@@ -280,10 +283,10 @@ for decision in ("yes", "no"):
                   log_lines() == before and bool(mcp.spec("seat").problem))
         finally:
             os.chmod(target, original)
-    real_stat = os.stat
+    real_stat, real_chain = os.stat, os.path.realpath(CHAIN)
     def foreign_owner(path, *args, **kwargs):
         st = real_stat(path, *args, **kwargs)
-        if path == CHAIN:
+        if path == real_chain:
             values = list(st)
             values[4] = os.getuid() + 10001
             return os.stat_result(values)
