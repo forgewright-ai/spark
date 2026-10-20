@@ -11,7 +11,7 @@ import subprocess
 from . import (CONFIG_DIR, ENGINE_DIR, FORGE_TOKEN_FILE, HOME, IS_MAC, MODELS_DIR, REPO, SITE_ENV,
                SPARK_ENV, TOKEN_FILE, die)
 
-LINE = re.compile(r"^[A-Z_0-9]+=[^;`$()|&<>]*$")
+LINE = re.compile(r"^[A-Z_][A-Z_0-9]*=[^;`$()|&<>]*$")
 PLACEHOLDERS = {}
 
 # Contract 3: every key a config file may carry, in the documented order.
@@ -34,18 +34,23 @@ KEYS = SITE_KEYS + SPARK_KEYS
 def parse_env(path):
     """dict of KEY -> value from a KEY=value file. Blank and # lines are
     skipped. Any other line that is not KEY=value refuses the file: config
-    is data, never code. Empty values are absent. A leading ~ is expanded;
-    surrounding double quotes are stripped."""
+    is data, never code. Empty values are absent; the first non-empty value
+    of a key wins. A leading ~ is expanded after stripping surrounding
+    double quotes. Other quotes, backslashes and inline # are literal."""
     out = {}
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
+        with open(path, encoding="utf-8", newline="") as f:
+            lines = f.read().split("\n")
     except OSError:
         return out
     for n, line in enumerate(lines, 1):
-        if not line.strip() or line.lstrip().startswith("#"):
+        # Like POSIX read: LF separates lines, one trailing CR allows CRLF.
+        # str.splitlines() would also split literal value characters.
+        if line.endswith("\r"):
+            line = line[:-1]
+        if not line.strip(" \t\r\v\f") or line.lstrip(" \t\r\v\f").startswith("#"):
             continue
-        if not LINE.match(line):
+        if not LINE.fullmatch(line):
             die("%s:%d: not KEY=value: %s" % (path, n, line.strip()), 2)
         key, val = line.split("=", 1)
         if len(val) >= 2 and val[0] == '"' and val[-1] == '"':
@@ -53,7 +58,7 @@ def parse_env(path):
         if val == "~" or val.startswith("~/"):
             val = HOME + val[1:]
         if val != "":
-            out[key] = val
+            out.setdefault(key, val)
     return out
 
 

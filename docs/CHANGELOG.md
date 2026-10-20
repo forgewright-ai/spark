@@ -2,6 +2,10 @@
 
 ## v1.90.2
 
+- S3: shell and Python disagreed on repeated config keys and CRLF.
+  Both now keep the first non-empty value in each file and read CRLF.
+  Python previously kept the last duplicate. Keys starting with a digit
+  are refused by both readers before any value is applied (#41)
 - S3: a verb the page ran could leave a child holding its output, and
   so hold the runner and every later verb; its cap killed the verb
   alone. A verb now runs in a session of its own on a monotonic

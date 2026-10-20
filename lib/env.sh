@@ -4,7 +4,7 @@
 # install.sh. POSIX sh. lib/spark/config.py is the same reader in python;
 # the two must agree on what a valid line is (contract 3 in CLAUDE.md).
 #
-# load_env FILE      set every KEY the environment does not already set
+# load_env FILE      keep the first non-empty value, environment first
 # site_load          load ~/.config/spark/site.env, then apply defaults
 
 SPARK_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/spark
@@ -29,13 +29,17 @@ short_host() {
 # value. Anything else refuses the whole file -- config is data, never code.
 load_env() {
     [ -f "$1" ] || return 0
-    bad=$(grep -nEv '^[[:space:]]*(#|$)|^[A-Z_0-9]+=[^;`$()|&<>]*$' "$1" || true)
+    bad=$(LC_ALL=C grep -nEv '^[[:space:]]*(#|$)|^[A-Z_][A-Z_0-9]*=[^;`$()|&<>]*$' "$1" || true)
     if [ -n "$bad" ]; then
         printf '! %s: refused, these lines are not KEY=value:\n%s\n' "$1" "$bad" >&2
         return 1
     fi
+    cr=$(printf '\r')
     while IFS= read -r line || [ -n "$line" ]; do
-        case $line in ''|'#'*|' '*|'	'*) continue ;; esac
+        # LF or CRLF, including a final line without LF. Validation above
+        # leaves only assignments, blank lines and whole-line comments.
+        line=${line%"$cr"}
+        case $line in [A-Z_]*=*) ;; *) continue ;; esac
         key=${line%%=*}
         val=${line#*=}
         # optional surrounding double quotes, and a leading ~

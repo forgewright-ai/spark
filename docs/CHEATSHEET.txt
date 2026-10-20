@@ -146,6 +146,8 @@ THE MACHINE
   spark bar [line]                the status in one line, for a bar
   ~/.config/spark/site.env        name, user, model, the other machine
   ~/.config/spark/spark.env       ports, engine, history, memory
+  config values                  environment, spark.env, site.env, default
+                                 first non-empty value per key in each file
 
 VOICE AND LOOK
   spark voice                     the voice settings
