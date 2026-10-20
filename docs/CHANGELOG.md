@@ -2,6 +2,8 @@
 
 ## v1.90.1
 
+- S3: the first kept line of a read could take longer than its recorded
+  total. Both times now include answer setup and the final output (#35)
 - S1: a failed sandbox apply could discard the copy; it now stops,
   keeps the copy and reports how much completed. A staging failure
   applies nothing. A retry checks the changes still pending. A

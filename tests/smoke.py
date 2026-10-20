@@ -805,6 +805,67 @@ class T:
         print("  skip %s   (%s)" % (what, why))
 
 
+def read_timing_cases(t):
+    """A fake clock separates setup, discarded chunks and kept output."""
+    import io
+    from unittest.mock import patch
+    from spark import read as reader, session
+
+    for label, chunks, expected_first, kept, dropped in (
+            ("kept after discarded chunks", ['No quote here.\n',
+                                             'It opens "at nine".\n', "    "], 625, 1, 1),
+            ("kept at close", ['It opens "at nine".'], 500, 1, 0),
+            ("empty reply", [], None, 0, 0),
+            ("all lines dropped", ['No quote here.\n'], None, 0, 1)):
+        clock, records = [0.0], []
+
+        def reading(*args):
+            clock[0] += 2  # its own turn, outside the answer's interval
+            return "", ""
+
+        def brain(*args):
+            clock[0] += 0.25  # session construction is visible to the reader
+            return "http://127.0.0.1:1", "stub", False
+
+        def reply(cfg, url, messages, on_delta, **kw):
+            kw["sent"]({"out_bytes": 11, "dest": "local"})
+            kw["sent"]({"out_bytes": 13, "dest": "local"})
+            for chunk in chunks:
+                clock[0] += 0.125
+                on_delta(chunk)
+            clock[0] += 0.125
+            return "".join(chunks), {"predicted_n": 7, "cache_n": 3}
+
+        def ledger_keep(*args):
+            clock[0] += 5  # bookkeeping is outside both output times
+
+        output = io.StringIO()
+        with patch.object(reader.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(reader.time, "time", side_effect=lambda: -clock[0]), \
+                patch.object(reader.ledger, "keep", side_effect=ledger_keep), \
+                patch.object(session, "reading", side_effect=reading), \
+                patch.object(session, "_resolve", side_effect=brain), \
+                patch.object(session.Session, "_messages", return_value=[]), \
+                patch.object(session.Session, "answered_model", return_value="stub"), \
+                patch.object(session.wire, "chat_stream", side_effect=reply), \
+                patch.object(session, "record", side_effect=lambda cfg, **kw: records.append(kw)):
+            refused = False
+            try:
+                reader.answer({}, "It opens at nine.", "when?", output, name="source")
+            except reader.Refused:
+                refused = True
+        row = records[-1]
+        t.ok(row.get("first_ms") == expected_first
+             and row["ms"] == 375 + 125 * len(chunks)
+             and (expected_first is None or 0 <= row["first_ms"] <= row["ms"]),
+             "read timing: " + label, repr(row))
+        t.ok(row["kept"] == kept and row["dropped"] == dropped
+             and refused == (not kept) and bool(output.getvalue()) == bool(kept)
+             and row["out_bytes"] == 24 and row["dest"] == "local"
+             and row["predicted_n"] == 7 and row["cache_n"] == 3,
+             "read timing preserves output and accounting: " + label, repr(row))
+
+
 def handback_cases(t):
     """v1.63: the hand-back takes back only what spark itself made.
     spark-shell paints the same things under its own names: a profile
@@ -7848,6 +7909,8 @@ def main():
              and msgs[-1]["content"] == "and now",
              "ask --thread: the reading runs once, the first pair rides, the same text sends the words alone",
              json.dumps(msgs)[:200])
+
+        read_timing_cases(t)
 
         # spark read: the reader's protocol (contract 11)
         rc, out, _ = spark("read", "-h")

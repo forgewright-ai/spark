@@ -1833,17 +1833,20 @@ and may change freely.
     the character count, `ms`, `part`, `parts`, `kept`, `dropped`,
     `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
     line. That is the number the prompt cache moves, and `spark stats`
-    shows it beside each mode's cache hit rate. The reading pass is
-    greedy (temperature 0). Its words are restated above the source in
-    the request that follows, so a word sampled differently on the same
-    source would break the served prompt's cached prefix. The source is
-    always held back first (`text.hold_secrets`, contract 10's
-    `--source` rule). Every span that looks like a secret becomes
-    `[held]` before the parts are cut, one stderr line names the count
-    and the shapes, and the turn records `held`. `/read @FILE
-    [question]` in `spark chat` is a client inside the chat: the file is
-    the source, the same law holds, and the exchange lands on the chat's
-    thread.
+    shows it beside each mode's cache hit rate. Both times start before
+    answer session setup, after the separate reading pass. `ms` ends
+    after the output gate closes; `first_ms` is absent when no line
+    survives. Both use a monotonic clock and leave out ledger writes.
+    The reading pass is greedy (temperature 0). Its words are restated
+    above the source in the request that follows, so a word sampled
+    differently on the same source would break the served prompt's
+    cached prefix. The source is always held back first
+    (`text.hold_secrets`, contract 10's `--source` rule). Every span
+    that looks like a secret becomes `[held]` before the parts are cut,
+    one stderr line names the count and the shapes, and the turn records
+    `held`. `/read @FILE [question]` in `spark chat` is a client inside
+    the chat: the file is the source, the same law holds, and the
+    exchange lands on the chat's thread.
 12. `spark ask` is the questioner's protocol: the text on stdin (a plan,
     a draft, a decision) and questions about it out, raw, one per line.
     Never a path, never a `[cwd]` line. Mode comes from the argument

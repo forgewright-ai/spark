@@ -104,7 +104,7 @@ class _Part:
 
     def write(self, s):
         if self.first is None:
-            self.first = time.time()
+            self.first = time.monotonic()
         if self.header:
             self.stream.write(self.header + "\n")
             self.header = ""
@@ -277,14 +277,15 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
     def done():
         fence.close()
         gate.close()
-    t0 = time.time()
+    t0 = time.monotonic()
     try:
         s = session.Session(cfg, MODE, shell, "", role="ember")
-        _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
+        _out, _ms = s.ask_stream(text, context, fence.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
     except (wire.BrainError, KeyboardInterrupt):
         done()
         raise
     done()
+    ms = int((time.monotonic() - t0) * 1000)
     if gate.kept and name:
         # the record a second reader sees: what was asked, of which part
         note = ("part %d of %d: " % (want, total) if total > 1 else "") + text
@@ -292,9 +293,9 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
             ledger.keep(ledger.KIND_READ, name, note, cfg)
         except (ledger.Refused, OSError):
             log_exc("read ledger")
-    # first_ms: the reading pass, the prefill and the first kept line --
-    # what a reader waits for, and the number the prompt cache moves
-    first = {"first_ms": int((out.first - t0) * 1000)} if out.first else {}
+    # Both times start before answer setup and end at kept output.
+    # The reading pass has its own turn; ledger writes are not output.
+    first = {"first_ms": int((out.first - t0) * 1000)} if out.first is not None else {}
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
              kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed,
              **dict(first, **({"held": held} if held else {}), **({"thread": thread} if thread else {})))
