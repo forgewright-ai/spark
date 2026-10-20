@@ -56,6 +56,7 @@ import struct
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import wave
 
@@ -1728,14 +1729,32 @@ with look.assume_awake():
     w.width = 40
     w.feed("one two three four five six seven eight nine ten eleven twelve thirteen\n")
     w.close()
+    # Observe a real "later" sample before allowing the synthetic sentence
+    # to start. Hold its span until three redraws are observed: a scheduled
+    # pause must not exhaust a 0.4 s clip before the thread gets three turns.
+    waiting = threading.Event()
+    wait_samples = []
+    sounds = r.sounds
+    def observed_sounds(tags, wait=0.0):
+        state = sounds(tags, wait)
+        if state == "later":
+            wait_samples.append(state)
+            if len(wait_samples) >= 2:   # the first idle redraw has completed
+                waiting.set()
+        return state
+    r.sounds = observed_sounds
     face.add([1])
     face.start()
-    sound(r, 1, 0.6, 0.4)          # a wide gap: a slow runner's sleep overshoots
-    time.sleep(0.08)
+    sampled_wait = waiting.wait(2.0)
     before = redraws(out)
+    sound(r, 1, 0.0, float("inf"))
     until(lambda: len(redraws(out)) >= 3)
-    playing = redraws(out)
-    face.close()
+    with face.lock:
+        playing = redraws(out)
+        face.close()
+        with r.cv:
+            r._silent()          # the synthetic sentence has ended
+            r.cv.notify_all()
     ended = until(lambda: not face.thread.is_alive(), 2.0)
     after = redraws(out)
 shown = textmod.SGR_RE.sub("", out.getvalue())
@@ -1744,11 +1763,12 @@ check("face: _Face is text.FaceLead with the voice as its source; the reply open
       isinstance(face, textmod.FaceLead) and shown.startswith(IDLE + " one two three four five six seven\neight nine ")
       and face.rows == 3, repr(out.getvalue()[:120]))
 check("face: nothing drawn before the sentence sounds; while it plays the mouth moves on the lead's row "
-      "(3 rows up), talking and idle in turn", before == [] and len(playing) >= 3
+      "(3 rows up), talking and idle in turn", sampled_wait and before == [] and len(playing) >= 3
       and all(up == 3 for up, _f in playing) and playing[0][1] == TALK and playing[1][1] == IDLE
       and playing[2][1] == TALK, (before, playing))
+# One sampled "now" may be in flight, then the final idle frame.
 check("face: after the sentence it rests on idle, and the thread ends once no line will sound",
-      ended and after[-1][1] == IDLE and len(after) <= 2 + int(0.4 / forge.MOUTH_STEP), after)
+      ended and after[-1][1] == IDLE and len(after) <= len(playing) + 2, after)
 
 # settled (cli.stream_turn at the reply's end, in the chat): once the last
 # sentence has sounded the mood's score plays, and the face rests on its still
