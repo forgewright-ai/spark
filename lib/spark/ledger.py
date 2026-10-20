@@ -89,9 +89,12 @@ class Refused(Exception):
 def _store():
     """(sealed path, dk, name) of this machine's own account, or None."""
     from . import users
-    name, _ = users.account()
+    name, token = users.account()
     if name and users.exists(name):
-        dk = users.account_key()
+        try:
+            dk = users.local_key((name, token))
+        except vault.SealError:
+            raise Refused(NO_OPEN)
         if dk:
             return os.path.join(users.user_dir(name), "ledger"), dk, name
     return None

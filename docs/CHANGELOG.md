@@ -7,6 +7,11 @@
   applies nothing. A retry checks the changes still pending. A
   refusal's paths print as the review does, every control character
   an escape (#26)
+- S1: two logins racing in one home could pair the account with the
+  other login's cached key, sealing a record its owner cannot open.
+  The cache now carries its name and token hash, every reader keeps
+  the login it captured, and an older unlabelled cache is proven
+  through the token before it is used (#28)
 
 ## v1.90
 

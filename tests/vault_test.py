@@ -12,6 +12,7 @@ store is touched, a thread's bad record is skipped and the rest read, a
 token change survives a crash at every step, and the plain fails index
 carries no secret.
 """
+import base64
 import os
 import shutil
 import struct
@@ -302,8 +303,7 @@ def test_stores_never_write_over():
         check("the refusal names the remedy", "does not open -- spark user login again" in e.hint, True)
     with open(lpath, "wb") as f:
         f.write(good)
-    with open(ACCOUNT_KEY_FILE, "wb") as f:
-        f.write(base64.b64encode(os.urandom(32)) + b"\n")
+    users.cache_key("alice", token, os.urandom(32))
     refuse("a stale account-key refuses keep", keep, ledger.Refused)
     check("the ledger under a stale key is byte-for-byte as it was", read_bytes(lpath), good)
     users.write_login("alice", token, users.unlock("alice", token))
@@ -636,6 +636,87 @@ def test_token_change_is_crash_safe():
     users.write_login("erin", t2, dk)
 
 
+def test_login_interleavings():
+    from unittest.mock import patch
+    from spark import ACCOUNT_FILE, ACCOUNT_KEY_FILE, config, forge, ledger, memory, users
+    ta, tb = users.add("iris"), users.add("june")
+    ka, kb = users.unlock("iris", ta), users.unlock("june", tb)
+    real_write = vault.write_private
+
+    # Pause writer A after its account replace; B completes before A's
+    # cache replace. No scheduler timing or sleeps decide this ordering.
+    def interleave(path, data, **kw):
+        real_write(path, data, **kw)
+        if path == ACCOUNT_FILE:
+            with patch.object(vault, "write_private", real_write):
+                users.write_login("june", tb, kb)
+    with patch.object(vault, "write_private", interleave):
+        users.write_login("iris", ta, ka)
+    st = forge.local_store()
+    check("interleaved writers keep june's identity and key", (st.name, st.dk), ("june", kb))
+    tid = "20260101-120000"
+    st.append(config.load(), tid, "user", "a new record")
+    path = os.path.join(users.user_dir("june"), "threads", tid + ".sealed")
+    check("the interleaved record opens with june's key",
+          len(vault.read_sealed(path, kb, "thread", tid)), 1)
+
+    # A reader captures A, then a complete login switches to B before it
+    # reads the cache. It may keep A's snapshot or refuse, never mix them.
+    real_account = users.account
+    for label, reader in (("forge", forge.local_store), ("memory", memory._store),
+                          ("ledger", ledger._store)):
+        users.write_login("iris", ta, ka)
+        def switch():
+            snapshot = real_account()
+            users.write_login("june", tb, kb)
+            return snapshot
+        with patch.object(users, "account", switch):
+            result = reader()
+        if label == "forge":
+            coherent = isinstance(result, forge._NullStore) or (result.name, result.dk) == ("iris", ka)
+        else:
+            coherent = result is None or (result[2], result[1]) == ("iris", ka)
+        check(label + " reader never pairs iris with june's key", coherent, True)
+        check(label + " reader does not restore an earlier login", real_account(), ("june", tb))
+
+    # A legacy cache has no identity. Recover through the token, even if
+    # an older writer left another account's raw key in it.
+    users.write_login("iris", ta, ka)
+    vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(kb) + b"\n")
+    st = forge.local_store()
+    check("legacy cache is proven by the account token", (st.name, st.dk), ("iris", ka))
+    memory.remember("a fact before migration")
+    ledger.keep(ledger.KIND_EDIT, "note.md", "a note before migration")
+    for cached in (ka, kb):
+        vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(cached) + b"\n")
+        check("legacy recovery keeps memory", memory._all_facts(), ["a fact before migration"])
+        vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(cached) + b"\n")
+        check("legacy recovery keeps ledger notes", [e["note"] for e in ledger.entries("note.md")],
+              ["a note before migration"])
+
+    # Recovery can finish after logout, but must not write the account
+    # back. The captured store is still iris's, with iris's key.
+    os.remove(ACCOUNT_KEY_FILE)
+    real_unlock = users.unlock
+    def logout_during_unlock(name, token):
+        key = real_unlock(name, token)
+        users.logout()
+        return key
+    with patch.object(users, "unlock", logout_during_unlock):
+        st = forge.local_store()
+    check("a reader completing after logout keeps its snapshot", (st.name, st.dk), ("iris", ka))
+    check("cache recovery does not undo logout", users.account(), ("", ""))
+    users.logout()
+    vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(ka) + b"\n")
+    check("a late cache write cannot revive a logout", users.account_key(), None)
+    users.write_login("iris", ta, ka)
+    new = users.rotate("iris", ta)
+    check("rotation invalidates a cached old login", users.account_key(), None)
+    check("an old token cannot recover the cache", isinstance(forge.local_store(), forge._NullStore), True)
+    users.write_login("iris", new, ka)
+    check("rotation preserves the data key", forge.local_store().dk, ka)
+
+
 def test_fails_index_redacts():
     # the plain index the prompt hook reads: NAME=value where NAME smells
     # of a secret becomes NAME=...; PATH=/usr/bin stays
@@ -773,6 +854,7 @@ def main():
     test_remove_validates_the_name()
     test_a_bad_record_is_skipped()
     test_token_change_is_crash_safe()
+    test_login_interleavings()
     test_claim_never_seals_over()
     test_state_files_private()
     test_fails_index_redacts()
