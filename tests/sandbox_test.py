@@ -21,12 +21,17 @@ write to /etc, a unix socket, sudo, an exported variable; on macOS the
 extended denies (the temp dirs, the keychains, Shortcuts, Automator,
 defaults, Launch Services, the daemons behind them) while the ordinary
 tools still work. Exit 0 with a skip line where a primitive is absent.
+--real-only runs only that section. --require-real fails without the
+sandbox capability or any real assertion. The final sandbox-summary JSON
+counts assertions and named skips separately for fixtures, probe and real.
 """
+import argparse
 import errno
 import fcntl
 import io
 import json
 import os
+import platform
 import shutil
 import socket
 import stat
@@ -52,19 +57,25 @@ from spark import IS_MAC, sandbox  # noqa: E402
 IS_LINUX = sys.platform.startswith("linux")
 FAILED = 0
 SKIPPED = []
+PHASE = "fixtures"
+COUNTS = {p: dict(executed=0, skipped=0, failed=0) for p in ("fixtures", "probe", "real")}
+CAPABLE = False
 ESC, RLO, SURR = chr(0x1b), chr(0x202e), chr(0xdcff)
 
 
 def check(name, cond, detail=""):
     global FAILED
+    COUNTS[PHASE]["executed"] += 1
     if cond:
         print("ok   %s" % name)
     else:
         FAILED += 1
+        COUNTS[PHASE]["failed"] += 1
         print("FAIL %s%s" % (name, ("\n  " + sandbox.visible(str(detail))) if detail else ""))
 
 
 def skip(name, why):
+    COUNTS[PHASE]["skipped"] += 1
     SKIPPED.append(name)
     print("skip %s -- %s" % (name, why))
 
@@ -72,20 +83,24 @@ def skip(name, why):
 def refused(name, fn, contains=""):
     """fn() raises SandboxError whose text holds `contains`; returns it."""
     global FAILED
+    COUNTS[PHASE]["executed"] += 1
     try:
         fn()
     except sandbox.SandboxError as e:
         if contains and contains not in str(e):
             FAILED += 1
+            COUNTS[PHASE]["failed"] += 1
             print("FAIL %s -- refused, but with: %s" % (name, e))
         else:
             print("ok   %s" % name)
         return e
     except Exception as e:
         FAILED += 1
+        COUNTS[PHASE]["failed"] += 1
         print("FAIL %s -- %s: %s" % (name, type(e).__name__, e))
         return None
     FAILED += 1
+    COUNTS[PHASE]["failed"] += 1
     print("FAIL %s -- went through instead of refusing" % name)
     return None
 
@@ -1198,10 +1213,18 @@ HAVE_CLT = not IS_MAC or os.path.isdir("/Library/Developer/CommandLineTools") or
 
 
 def test_real():
+    global PHASE, CAPABLE
+    if os.geteuid() == 0:
+        PHASE, CAPABLE = "real", False
+        skip("REAL section", "real isolation tests require a non-root user")
+        return
+    PHASE = "probe"
     good, detail = sandbox.probe(fresh=True)
+    CAPABLE = good
     print("     probe: %s %s" % ("ok" if good else "na", detail))
     cached = sandbox.probe()
     check("probe: the cache answers the same", cached == (good, detail), cached)
+    PHASE = "real"
     if not good:
         skip("REAL section", "this machine cannot run the sandbox: %s" % detail)
         return
@@ -1373,28 +1396,99 @@ def _sh_quote(s):
     return quote(s)
 
 
+def missing_real():
+    missing = []
+    if os.geteuid() == 0:
+        missing.append("non-root user")
+    if not CAPABLE:
+        missing.append("sandbox capability")
+    if not COUNTS["real"]["executed"]:
+        missing.append("real assertions")
+    if IS_MAC and not HAVE_CLT:
+        missing.append("macOS command line tools")
+    if not shutil.which("curl"):
+        missing.append("curl")
+    return missing
+
+
+def result(required):
+    return int(bool(FAILED or (required and missing_real())))
+
+
+def test_required_capability():
+    """A cached/fixture success must never stand in for real assertions."""
+    global CAPABLE
+    saved = CAPABLE, COUNTS["real"]
+    with patch.dict(globals(), FAILED=0, IS_MAC=False), \
+            patch.object(shutil, "which", return_value="/usr/bin/curl"), \
+            patch.object(os, "geteuid", return_value=1000):
+        try:
+            COUNTS["real"] = dict(executed=0, skipped=1, failed=0)
+            CAPABLE = False
+            optional, required = result(False), result(True)
+            CAPABLE = True
+            empty = result(True)
+            COUNTS["real"]["executed"] = 1
+            ran = result(True)
+            CAPABLE = False
+            lost = result(True)
+            CAPABLE = True
+            with patch.dict(globals(), IS_MAC=True, HAVE_CLT=False):
+                no_clt = result(True)
+            with patch.object(shutil, "which", return_value=None):
+                no_curl = result(True)
+            with patch.object(os, "geteuid", return_value=0):
+                root = result(True)
+        finally:
+            CAPABLE, COUNTS["real"] = saved
+    check("required real: missing capability fails; an ordinary skip does not", optional == 0 and required == 1)
+    check("required real: a probe alone is insufficient", empty == 1 and ran == 0)
+    check("required real: previous assertions cannot hide a lost capability", lost == 1)
+    check("required real: missing platform test tools or a root user fail too",
+          no_clt == 1 and no_curl == 1 and root == 1)
+
+
 def main():
-    for t in (test_upper_walk, test_visible, test_whiteout_and_opaque, test_overlay_marks, test_review_max,
+    global PHASE
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--real-only", action="store_true")
+    parser.add_argument("--require-real", action="store_true")
+    args = parser.parse_args()
+    tests = (test_required_capability, test_upper_walk, test_visible, test_whiteout_and_opaque, test_overlay_marks, test_review_max,
               test_apply, test_apply_stage_failure, test_apply_place_retry, test_apply_delete_retry,
               test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output, test_unapplied_visible,
               test_apply_create_and_mode_retry, test_apply_failure_record, test_apply_hash_failure,
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,
               test_detach_lock, test_records, test_ids, test_home_and_root, test_waiting_cap,
-              test_step_linux_shape, test_step_mac_shape, test_mac_manifest, test_check_row, test_real):
+              test_step_linux_shape, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
+    for t in ((test_real,) if args.real_only else tests):
+        PHASE = "fixtures"
         try:
             t()
         except Exception as e:
             global FAILED
             FAILED += 1
+            COUNTS[PHASE]["failed"] += 1
             import traceback
             traceback.print_exc()
             print("FAIL %s crashed: %s" % (t.__name__, e))
         clear_runs()
     if SKIPPED:
         print("%d skipped: %s" % (len(SKIPPED), "; ".join(SKIPPED)))
-    if FAILED:
-        print("%d failed" % FAILED)
+    rc = result(args.require_real)
+    print("sandbox-summary: " + json.dumps({
+        "schema": 1, "system": platform.system(), "release": platform.release(),
+        "machine": platform.machine(), "python": platform.python_version(),
+        "tool": "sandbox-exec" if IS_MAC else "bwrap " + sandbox._bwrap_version(),
+        "capability": CAPABLE, "required_real": args.require_real, "counts": COUNTS,
+        "required_missing": missing_real(),
+        "skips": SKIPPED,
+        "status": "failed" if rc else ("passed" if CAPABLE else "skipped"),
+    }, sort_keys=True))
+    if rc:
+        print("%d failed%s" % (FAILED, "; required: " + ", ".join(missing_real())
+                              if args.require_real and missing_real() else ""))
         return 1
     print("all ok")
     return 0

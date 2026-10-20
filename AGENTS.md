@@ -231,6 +231,13 @@ Never, in this lane:
 
 ## The audition
 
+Real isolation and model compatibility have separate commands and
+evidence limits in `docs/CONTRIBUTING.md`, "Validation boundaries".
+`sandbox_test.py --real-only --require-real` fails without real
+assertions. `model_validation.py` needs pinned local artifacts; its
+selftest runs through `bench_smoke.py` and proves only the harness.
+Dedicated CI jobs remain pending under the protected-workflow policy.
+
 The audition is not in the gate: it needs a live model, and it is the
 one test that judges words. `tests/audition.py` runs 8 fixtures in
 `tests/audition/` (a poem, a chapter, a README, a commit message,

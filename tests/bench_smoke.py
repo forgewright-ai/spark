@@ -29,6 +29,8 @@ print(json.dumps([{"n_prompt": int(opt("-p", "512")), "n_gen": 0, "avg_ts": pp},
 
 
 def main():
+    import model_validation
+    model_validation.selftest()
     fails = 0
 
     def ok(cond, what, extra=""):

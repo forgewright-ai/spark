@@ -2238,6 +2238,15 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 
 ## Adding things
 
+Validation evidence has four scopes: fixtures, real isolation, model
+compatibility and held-out quality. `docs/CONTRIBUTING.md`, "Validation
+boundaries", names the commands, host requirements and report fields.
+`tests/sandbox_test.py --real-only --require-real` refuses a missing
+capability. `tests/model_validation.py` checks pinned local artifacts
+with synthetic requests; it does not grade quality. Its selftest runs
+through `bench_smoke.py`. Dedicated CI jobs are pending: a patch does
+not change the protected workflows or gate script.
+
 - **A doc.** The project site (spark.forgewright.ai) is the docs
   rendered outside this tree, at the newest signed release tag, never
   main:

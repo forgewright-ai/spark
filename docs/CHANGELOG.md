@@ -2,6 +2,11 @@
 
 ## v1.90.2
 
+- S3: sandbox capability skips could look like full validation.
+  The suite now reports separate counts and has a required real mode;
+  a bounded local model harness records compatibility separately from
+  unrun quality checks. Dedicated CI jobs still need a planned release
+  and capable hosts (#46)
 - S3: a verb the page ran could leave a child holding its output, and
   so hold the runner and every later verb; its cap killed the verb
   alone. A verb now runs in a session of its own on a monotonic
