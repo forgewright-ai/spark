@@ -2,6 +2,10 @@
 
 ## v1.90.2
 
+- S3: a page command's descendants or unfinished output could keep the
+  request and its lock alive. Commands now bound output, waiting and
+  writes, clean up their own process group and reap their child on
+  completion, timeout or disconnect; detached services keep running (#39)
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match

@@ -17,6 +17,8 @@
 # accepts it. No TLS: the trust model is your
 # LAN -- see README "What leaves this machine".
 
+import codecs
+import errno
 import fcntl
 import hashlib
 import hmac
@@ -79,6 +81,10 @@ EVENTS_KEEPALIVE = 15
 TMUX_SEQ = re.compile(r"#\[[^\]]*\]")
 QUEUE_WAIT = 0.2                # a chat that waits longer than this for the model says `queued`
 RUN_CAP = 1800                  # seconds a verb may run through /api/run
+RUN_OUTPUT_MAX = 1_000_000       # bytes read from one verb
+RUN_LINE_MAX = 4096             # an unterminated line is sent in bounded pieces
+RUN_POLL = 0.1                  # notice a quiet child's exit or a disconnected browser
+RUN_WRITE_WAIT = 1              # seconds a browser may stall an SSE write
 RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
@@ -90,6 +96,57 @@ RUN_VERBS = {"model": None, "ember": None, "bench": None, "on": None, "off": Non
              "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
+
+
+class _RunLimit(Exception):
+    pass
+
+
+class _RunExit:
+    """Observe an owned child's exit without reaping it. Its pid stays
+    reserved until the runner has signalled the process group. Linux has
+    waitid(WNOWAIT); macOS has kqueue's process-exit notification."""
+    def __init__(self, pid):
+        self.pid, self.queue, self.exited = pid, None, False
+        if not hasattr(os, "waitid"):
+            self.queue = select.kqueue()
+            event = select.kevent(pid, filter=select.KQ_FILTER_PROC,
+                                 flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                                 fflags=select.KQ_NOTE_EXIT)
+            try:
+                self.queue.control([event], 0, 0)
+            except OSError as e:
+                if e.errno != errno.ESRCH:
+                    self.queue.close()
+                    raise
+                self.exited = True
+
+    def ready(self):
+        if self.queue is None:
+            return os.waitid(os.P_PID, self.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        self.exited = self.exited or bool(self.queue.control([], 1, 0))
+        return self.exited
+
+    def close(self):
+        if self.queue is not None:
+            self.queue.close()
+
+
+def _run_kill(p, watcher=None):
+    """Only this request's group, while its leader is still unreaped.
+    Services deliberately handed to their own session or manager survive."""
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except PermissionError as e:
+        # Darwin excludes zombies while signalling a group: a group
+        # containing only its unreaped leader can therefore yield EPERM.
+        # Treat that as completion only after observing this child's exit.
+        if not IS_MAC or e.errno != errno.EPERM or watcher is None or not watcher.ready():
+            raise
+
+
 # Every route the server answers, and who may: none (open -- /api/login
 # still goes through the write gate, /v1/chat/completions takes a bearer
 # only), user (a named user or the admin), admin (the forge-token). A `*`
@@ -1658,7 +1715,9 @@ class Handler(BaseHTTPRequestHandler):
     # ---- the verb runner ----
     def api_run(self, body):
         """`spark VERB ARGS` from the page, its output streamed line by
-        line. Only the allowlisted verbs; the verb validates and applies."""
+        line. The request owns one process group, including ordinary
+        descendants, through completion, timeout or disconnect. Detached
+        services have their own session and log and keep their ownership."""
         verb, args = body.get("verb"), body.get("args", [])
         if not isinstance(verb, str) or verb not in RUN_VERBS:
             return self._error(400, "bad", "not a verb the page may run: %s" % ", ".join(sorted(RUN_VERBS)))
@@ -1670,29 +1729,153 @@ class Handler(BaseHTTPRequestHandler):
         log("%s run %s" % (self._ip(), verb))
         env = dict(os.environ, TERM="dumb", SPARK_ASCII="1")
         env.pop("TMUX", None)
-        self._sse()
-        with self.server.run_lock:
+        end = time.monotonic() + RUN_CAP
+        p, watcher, locked, rc = None, None, False, 130
+        old_timeout = self.connection.gettimeout()
+        pending, count, eof, ended = b"", 0, False, False
+        final_text = None
+        group_stopped = False
+        decode = codecs.getincrementaldecoder("utf-8")("replace").decode
+
+        def stop_group():
+            nonlocal group_stopped
+            if not group_stopped:
+                _run_kill(p, watcher)
+                # A second signal during Darwin's exit transition can
+                # yield EPERM before the exit notification is observable.
+                group_stopped = True
+
+        def check():
+            if time.monotonic() >= end:
+                raise _RunLimit("! run timed out")
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            if readable and not self.connection.recv(1, socket.MSG_PEEK):
+                raise ConnectionResetError("client disconnected")
+
+        def emit(event, obj):
+            check()
+            self.connection.settimeout(min(RUN_WRITE_WAIT, max(0.001, end - time.monotonic())))
+            self._emit(event, obj)
+
+        try:
+            self.connection.settimeout(min(RUN_WRITE_WAIT, RUN_CAP))
+            self._sse()
+            while not locked:
+                check()
+                locked = self.server.run_lock.acquire(timeout=min(RUN_POLL, max(0, end - time.monotonic())))
+            check()                        # a queued disconnect must not start a command
             try:
                 p = subprocess.Popen([sys.executable, os.path.join(REPO, "bin", "spark"), verb] + args, env=env,
-                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     start_new_session=True, bufsize=0)
             except OSError as e:
-                self._emit("line", {"s": "! cannot run: %s" % (e.strerror or e)})
-                self._audit("run", verb=verb, rc=127)
-                return self._emit("done", {"rc": 127})
-            timer = threading.Timer(RUN_CAP, p.kill)
-            timer.daemon = True
-            timer.start()
+                rc = 127
+                emit("line", {"s": "! cannot run: %s" % (e.strerror or e)})
+            else:
+                watcher = _RunExit(p.pid)
+                fd = p.stdout.fileno()
+                os.set_blocking(fd, False)
+                while True:
+                    check()
+                    if not ended and watcher.ready():
+                        ended = True
+                        stop_group()         # remaining ordinary descendants are not services
+                    if eof:
+                        if ended:
+                            break
+                        # A child may close stdout before it exits.
+                        select.select([self.connection], [], [], min(RUN_POLL, max(0, end - time.monotonic())))
+                        continue
+                    readable, _, _ = select.select([fd], [], [], 0 if ended else RUN_POLL)
+                    if not readable:
+                        if ended:
+                            break           # a detached pipe holder cannot prolong completion
+                        continue
+                    try:
+                        chunk = os.read(fd, min(65536, RUN_OUTPUT_MAX - count + 1))
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        eof = True
+                        continue
+                    count += len(chunk)
+                    if count > RUN_OUTPUT_MAX:
+                        raise _RunLimit("! run output limit reached")
+                    pending += chunk
+                    while pending:
+                        newline = pending.find(b"\n", 0, RUN_LINE_MAX + 1)
+                        if newline < 0 and len(pending) < RUN_LINE_MAX:
+                            break
+                        size = newline if newline >= 0 else RUN_LINE_MAX
+                        text = decode(pending[:size], final=newline >= 0)
+                        if newline >= 0:
+                            decode = codecs.getincrementaldecoder("utf-8")("replace").decode
+                        pending = pending[size + (newline >= 0):]
+                        emit("line", {"s": text})
+                final_text = decode(pending, final=True)
+                if final_text:
+                    emit("line", {"s": final_text})
+                pending, final_text = b"", None
+                stop_group()
+                # A macOS exit notification can precede waitable status.
+                # The group is already cleaned; keep the request's leash
+                # and disconnect checks until this child can be reaped.
+                while True:
+                    check()
+                    try:
+                        rc = p.wait(timeout=min(RUN_POLL, max(0, end - time.monotonic())))
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+        except _RunLimit as e:
+            rc = 124
+            if p is not None and p.returncode is None:
+                stop_group()
             try:
-                with p.stdout:
-                    for raw in p.stdout:
-                        self._emit("line", {"s": raw.decode("utf-8", errors="replace").rstrip("\n")})
-                rc = p.wait()
+                text = final_text if final_text is not None else decode(pending, final=True)
+                self.connection.settimeout(RUN_WRITE_WAIT)
+                if text:
+                    self._emit("line", {"s": text})
+                self._emit("line", {"s": str(e)})
+            except OSError:
+                self._status = 499
+        except OSError:
+            self._status = 499
+            rc = 130
+        finally:
+            try:
+                if p is not None:
+                    try:
+                        # returncode is set only after our wait, never by polling.
+                        if p.returncode is None:
+                            stop_group()
+                    finally:
+                        try:
+                            p.stdout.close()
+                        finally:
+                            try:
+                                p.wait(timeout=1)
+                            except subprocess.TimeoutExpired:
+                                # An uninterruptible kernel wait must not retain the
+                                # request lock; reap it when it eventually exits.
+                                threading.Thread(target=p.wait, daemon=True).start()
             finally:
-                timer.cancel()
-                if p.poll() is None:
-                    p.kill()
-        self._audit("run", verb=verb, rc=rc)
-        return self._emit("done", {"rc": rc})
+                try:
+                    if watcher is not None:
+                        watcher.close()
+                finally:
+                    if locked:
+                        self.server.run_lock.release()
+                    self._audit("run", verb=verb, rc=rc)
+                    self.connection.settimeout(old_timeout)
+        if self._status != 499:
+            try:
+                self.connection.settimeout(RUN_WRITE_WAIT)
+                self._emit("done", {"rc": rc})
+            except OSError:
+                self._status = 499
+            finally:
+                self.connection.settimeout(old_timeout)
 
 
 def _shell():

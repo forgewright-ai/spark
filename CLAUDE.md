@@ -1678,7 +1678,26 @@ and may change freely.
    lands the turn. The user line and any partial answer (`partial:
    true`) go on the thread, and the log line says 499. A client that
    leaves while queued pays no prefill and lands nothing, 499 likewise.
-   `/api/run` emits `line {s}` then `done {rc}`. `/api/events` emits
+   `/api/run` emits `line {s}` then `done {rc}`. Its 1800-second
+   monotonic deadline includes waiting for the verb lock. Output is at
+   most 1,000,000 bytes; long lines stream in bounded pieces, consuming
+   at most 4096 bytes at once and preserving UTF-8 across pieces.
+   A deadline or output limit
+   ends with rc 124. Socket writes wait at most one second; a quiet
+   or queued disconnect cancels the request too (audit rc 130).
+   Each command owns a new process group. Completion, cancellation,
+   timeout and disconnect kill its remaining group, close the output
+   pipe, reap the direct child and release the lock. A child stuck in a
+   kernel wait has a dedicated reaper after one second, so it cannot
+   retain the lock. The leader stays unreaped until group cleanup, so
+   its pid cannot be reused for an unrelated process.
+   Services intentionally started in their own session with output to
+   a log (`engine.spawn`, `forgeserve.cmd_start`), or by a service
+   manager, keep that ownership and survive the HTTP request. The
+   detached background check refresh also survives, with its output
+   discarded. Cleanup never scans for other processes or signals those
+   detached groups.
+   `/api/events` emits
    `check`, `bar` and `serve` on change, `log` too for an admin, and a
    `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
    `/v1/models` are OpenAI-shaped and proxied to the llama-server with

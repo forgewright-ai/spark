@@ -277,6 +277,299 @@ def reply_interruptions(ok):
            'terminal follow-up adopts the partial thread after a timeout')
 
 
+def command_lifecycle(ok):
+    """Real local children and sockets; no model, service manager or downloads."""
+    from contextlib import ExitStack
+    import errno
+    from socketserver import _SocketWriter
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from spark import forgeserve as fs
+
+    # A real permission denial must not look like an exited Darwin group.
+    for mac, exited in ((True, False), (False, True)):
+        with patch.object(fs, "IS_MAC", mac), \
+                patch.object(fs.os, "killpg", side_effect=PermissionError(errno.EPERM, "fixture")):
+            try:
+                fs._run_kill(SimpleNamespace(pid=1), SimpleNamespace(ready=lambda: exited))
+            except PermissionError:
+                denied = True
+            else:
+                denied = False
+            ok(denied, "live or non-Darwin group permission errors remain visible")
+
+    # This isolated fixture process adopts its orphaned grandchildren on
+    # Linux, where a container's pid 1 need not reap. Only known fixture
+    # pids are waited for; production never changes process adoption.
+    if sys.platform.startswith("linux"):
+        import ctypes
+        if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0):
+            raise RuntimeError("cannot enable fixture child reaping")
+
+    script = """
+import json, os, subprocess, sys, time
+mode, record = sys.argv[2:]
+child = None
+if mode in ('tree', 'orphan', 'handoff'):
+    detached = mode == 'handoff'
+    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL if detached else None,
+        stderr=subprocess.DEVNULL if detached else None,
+        start_new_session=detached)
+with open(record, 'w') as f:
+    json.dump([os.getpid(), child.pid if child else None], f)
+if mode in ('normal', 'handoff', 'reap'):
+    os.write(1, 'first\\nlast é'.encode())
+    sys.exit(7)
+if mode == 'utf8':
+    os.write(1, b'x' * 4095 + 'é\\n'.encode())
+    sys.exit(0)
+if mode == 'orphan':
+    sys.exit(0)
+if mode == 'partial':
+    os.write(1, b'unfinished')
+if mode == 'closed':
+    os.close(1)
+    os.close(2)
+if mode == 'flood':
+    while True:
+        os.write(1, b'x' * 4096)
+time.sleep(30)
+"""
+    with tempfile.TemporaryDirectory(prefix="spark-run-") as tmp:
+        os.mkdir(os.path.join(tmp, "bin"))
+        with open(os.path.join(tmp, "bin", "spark"), "w") as f:
+            f.write(script)
+        lock = threading.Lock()
+        owned = []
+        popen = subprocess.Popen
+
+        def spawn(*args, **kwargs):
+            p = popen(*args, **kwargs)
+            owned.append(p)
+            if args[0][-2] == "reap":
+                wait = p.wait
+                def deferred_wait(timeout=None):
+                    # Exit notification may precede a waitable child on
+                    # macOS. Keep the real child owned until cleanup,
+                    # while simulating that kernel delay safely.
+                    if p.returncode is not None or timeout == 1:
+                        return wait(timeout=timeout)
+                    if timeout is None:
+                        raise AssertionError("completion reaping must remain bounded")
+                    time.sleep(min(timeout, 0.02))
+                    raise subprocess.TimeoutExpired(p.args, timeout)
+                p.wait = deferred_wait
+            return p
+
+        def stopped(pid):
+            try:
+                got, _ = os.waitpid(pid, os.WNOHANG)
+                if got:
+                    return True
+            except ChildProcessError:
+                pass
+            try:
+                os.kill(pid, 0)
+                return False
+            except ProcessLookupError:
+                return True
+
+        def run(mode, action="", cap=0.6):
+            record = os.path.join(tmp, "pids")
+            if os.path.exists(record):
+                os.unlink(record)
+            server_sock, client = socket.socketpair()
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+            handler = object.__new__(fs.Handler)
+            handler.connection = server_sock
+            handler.wfile = _SocketWriter(server_sock)
+            handler.server = SimpleNamespace(run_lock=lock)
+            handler._status = 200
+            handler._ip = lambda: "fixture"
+            handler._sse = lambda: None
+            audits, errors, events = [], [], []
+            handler._audit = lambda *a, **k: audits.append(k)
+            handler._error = lambda *a: errors.append(a)
+            if action != "blocked":
+                def emit(event, obj):
+                    events.append((event, obj))
+                    if action == "cancel":
+                        raise KeyboardInterrupt()
+                handler._emit = emit
+            raised = []
+            def request():
+                try:
+                    handler.api_run({"verb": "model", "args": [mode, record]})
+                except BaseException as exc:
+                    raised.append(exc)
+            pids = []
+            before = len(owned)
+            start = time.monotonic()
+            killpg = os.killpg
+            signals = []
+            def zombie_group(pid, sig):
+                signals.append((pid, sig))
+                if action == "exit-race" and len(signals) > 1:
+                    raise PermissionError(errno.EPERM, "fixture exit transition")
+                # Darwin reports EPERM for an all-zombie group. Keep the
+                # real leader unreaped and emulate that syscall on Linux.
+                if action == "zombie":
+                    watcher = fs._RunExit(pid)
+                    try:
+                        if watcher.ready():
+                            raise PermissionError(errno.EPERM, "fixture exited group")
+                    finally:
+                        watcher.close()
+                if action == "cleanup-error":
+                    raise OSError(errno.EIO, "fixture signal failure")
+                return killpg(pid, sig)
+            with ExitStack() as scope:
+                scope.enter_context(patch.object(fs, "RUN_CAP", cap))
+                if action in ("zombie", "cleanup-error", "exit-race"):
+                    scope.enter_context(patch.object(fs.os, "killpg", side_effect=zombie_group))
+                    scope.enter_context(patch.object(fs, "IS_MAC", True))
+                if action == "exit-race":
+                    # The first signal really kills the child; a second
+                    # arrives before its exit notification is observable.
+                    scope.enter_context(patch.object(fs._RunExit, "ready", return_value=False))
+                worker = threading.Thread(target=request, daemon=True)
+                worker.start()
+                if action == "disconnect":
+                    until = time.monotonic() + 2
+                    while not os.path.exists(record) and time.monotonic() < until:
+                        time.sleep(0.01)
+                    client.close()
+                elif action == "queued":
+                    client.close()
+                worker.join(3)
+                elapsed = time.monotonic() - start
+                finished = not worker.is_alive()
+                if os.path.exists(record):
+                    with open(record) as f:
+                        pids = [p for p in json.load(f) if p]
+                # A failed regression still cleans up only this fixture's
+                # children; never signal the test runner's own group.
+                if not finished:
+                    for pid in pids:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    client.close()
+                    worker.join(2)
+            server_sock.close()
+            client.close()
+            direct = owned[before:]
+            exceptions = [(type(e).__name__, getattr(e, "errno", None)) for e in raised]
+            if action not in ("cleanup-error", "cancel"):
+                ok(not raised, "run %s/%s has no unexpected exception" % (mode, action), exceptions)
+            if action == "exit-race":
+                ok(len(signals) == 1, "successful group cleanup is not signalled again",
+                   {"signals": len(signals), "exceptions": exceptions})
+            ok(finished and elapsed < 3, "run %s/%s finishes within its bound" % (mode, action))
+            ok(not errors, "run fixture passes the existing argument gate", errors)
+            ok(all(p.returncode is not None for p in direct), "run reaps its direct child",
+               exceptions)
+            if action != "queued" and not (mode == "quiet" and not direct):
+                ok(not lock.locked(), "run releases the verb lock after %s/%s" % (mode, action))
+            if mode == "handoff" and len(pids) > 1:
+                ok(not stopped(pids[1]), "explicit detached service handoff survives request cleanup")
+                os.kill(pids[1], signal.SIGKILL)
+            until = time.monotonic() + 2
+            remaining = pids[:]
+            while remaining and time.monotonic() < until:
+                remaining = [pid for pid in remaining if not stopped(pid)]
+                if remaining:
+                    time.sleep(0.01)
+            ok(not remaining, "run leaves no live fixture descendants", remaining)
+            return events, audits, raised, len(direct)
+
+        with ExitStack() as stack:
+            for name, value in (("REPO", tmp), ("log", lambda *a: None)):
+                stack.enter_context(patch.object(fs, name, value))
+            stack.enter_context(patch.object(fs.subprocess, "Popen", side_effect=spawn))
+            # An unrelated process in another group must survive every case.
+            unrelated = popen([sys.executable, "-c", "import time; time.sleep(30)"],
+                              start_new_session=True)
+            try:
+                events, _, raised, _ = run("normal")
+                ok(events == [("line", {"s": "first"}), ("line", {"s": "last é"}),
+                              ("done", {"rc": 7})] and not raised,
+                   "normal completion keeps line/done output and the exit code", events)
+                events, audits, raised, _ = run("normal", "zombie")
+                ok(not raised and events == [("line", {"s": "first"}), ("line", {"s": "last é"}),
+                                             ("done", {"rc": 7})]
+                   and audits == [{"verb": "model", "rc": 7}],
+                   "Darwin's exited-group EPERM preserves output, status and audit", events)
+                _, audits, raised, _ = run("normal", "cleanup-error")
+                ok(len(raised) == 1 and isinstance(raised[0], OSError)
+                   and raised[0].errno == errno.EIO and len(audits) == 1,
+                   "unexpected cleanup errors remain visible after reaping and lock release")
+                events, _, _, _ = run("utf8")
+                ok("".join(d["s"] for ev, d in events if ev == "line") == "x" * 4095 + "é",
+                   "UTF-8 survives a long line's fragment boundary")
+                events, _, raised, _ = run("reap")
+                ok(not raised and events[-1:] == [("done", {"rc": 124})]
+                   and events.count(("line", {"s": "last é"})) == 1,
+                   "delayed reaping obeys the deadline without replaying output", events)
+                events, audits, raised, _ = run("partial", "exit-race")
+                ok(not raised and events == [("line", {"s": "unfinished"}),
+                                             ("line", {"s": "! run timed out"}),
+                                             ("done", {"rc": 124})]
+                   and audits == [{"verb": "model", "rc": 124}],
+                   "an unobserved exit after cleanup preserves timeout events and audit", events)
+                for mode in ("quiet", "partial", "closed", "tree"):
+                    events, _, raised, _ = run(mode)
+                    ok(not raised and events[-1:] == [("done", {"rc": 124})],
+                       "%s output cannot evade the deadline" % mode, events)
+                    if mode == "partial":
+                        ok(("line", {"s": "unfinished"}) in events,
+                           "timeout preserves output without a final newline")
+                events, _, raised, _ = run("orphan")
+                ok(not raised and events[-1:] == [("done", {"rc": 0})],
+                   "an exited leader's inherited pipe cannot retain the request", events)
+                events, _, _, _ = run("flood", cap=2)
+                ok(events[-1:] == [("done", {"rc": 124})]
+                   and ("line", {"s": "! run output limit reached"}) in events
+                   and sum(len(d.get("s", "")) for _, d in events) <= 1_000_000
+                   and all(len(d.get("s", "")) <= 4096 for _, d in events),
+                   "output and unfinished lines are bounded")
+                events, audits, raised, _ = run("tree", "disconnect", cap=10)
+                ok(not raised and not any(ev == "done" for ev, _ in events)
+                   and audits == [{"verb": "model", "rc": 130}],
+                   "quiet disconnect records cancellation without a done event")
+                _, audits, raised, _ = run("normal", "cancel")
+                ok(len(raised) == 1 and isinstance(raised[0], KeyboardInterrupt),
+                   "cancellation propagates after cleanup")
+                ok(audits == [{"verb": "model", "rc": 130}], "cancellation is audited once")
+                run("flood", "blocked")
+                acquired = lock.acquire(timeout=0.5)
+                ok(acquired, "the fixture can acquire the released verb lock")
+                if acquired:
+                    try:
+                        _, _, _, count = run("quiet", "queued", cap=10)
+                        ok(count == 0, "a disconnected queued request starts no command")
+                        events, _, _, count = run("quiet")
+                        ok(count == 0 and events[-1:] == [("done", {"rc": 124})],
+                           "the deadline also bounds the lock queue")
+                    finally:
+                        lock.release()
+                run("handoff")
+                events, _, _, _ = run("normal")
+                ok(events[-1:] == [("done", {"rc": 7})] and not lock.locked(),
+                   "the next request runs and the lock is released")
+                ok(unrelated.poll() is None, "cleanup leaves unrelated processes alone")
+            finally:
+                unrelated.kill()
+                unrelated.wait()
+                for p in owned:
+                    if p.poll() is None:
+                        p.kill()
+                    p.wait()
+
+
 def main():
     fails = 0
 
@@ -286,6 +579,9 @@ def main():
         fails += not cond
 
     reply_interruptions(ok)
+    fixture = subprocess.run([sys.executable, __file__, "--command-lifecycle"],
+                             timeout=60)
+    ok(fixture.returncode == 0, "HTTP command lifecycle fixtures")
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
@@ -1836,4 +2132,13 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--command-lifecycle"]:
+        failures = []
+        def check(cond, what, extra=""):
+            print("  %s %s%s" % ("ok  " if cond else "FAIL", what,
+                                ("   " + str(extra)[:300]) if extra and not cond else ""), flush=True)
+            if not cond:
+                failures.append(what)
+        command_lifecycle(check)
+        sys.exit(bool(failures))
     sys.exit(main())
