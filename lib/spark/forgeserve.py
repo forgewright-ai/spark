@@ -971,7 +971,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             up = self.server.upstream.require()
             req = urllib.request.Request(up + "/v1/models", headers=wire._headers(cfg))
-            with urllib.request.urlopen(req, timeout=cfg.timeout) as r:
+            with wire.urlopen(req, timeout=cfg.timeout) as r:
                 data = r.read()
         except wire.BrainError as e:
             return self._error(502, e.kind, e.hint)

@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.90.1
+
+- S1: bearer tokens could follow redirects to another origin; credentialed
+  requests now stay on their scheme, host and port (#29)
+
 ## v1.90
 
 spark is an MCP host. The servers on its list offer their tools to the

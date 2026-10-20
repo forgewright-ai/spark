@@ -405,7 +405,7 @@ def warm(cfg, url):
         req = urllib.request.Request(url + "/v1/chat/completions", data=body, headers=wire.request_headers(cfg))
         t0 = time.monotonic()
         try:
-            with urllib.request.urlopen(req, timeout=WARM_TIMEOUT) as r:
+            with wire.urlopen(req, timeout=WARM_TIMEOUT) as r:
                 r.read()
             done.append(role)
         except (OSError, ValueError):
