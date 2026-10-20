@@ -1827,7 +1827,11 @@ and may change freely.
     question for spark itself goes). The turn record is numbers: `kind`,
     the character count, `ms`, `part`, `parts`, `kept`, `dropped`,
     `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
-    line. That is the number the prompt cache moves, and `spark stats`
+    line. Both times start before answer session setup, after the
+    separate reading pass. `ms` ends after the output gate closes;
+    `first_ms` is absent when no line survives. Both use a monotonic
+    clock and leave out ledger writes. That is the number the prompt
+    cache moves, and `spark stats`
     shows it beside each mode's cache hit rate. The reading pass is
     greedy (temperature 0). Its words are restated above the source in
     the request that follows, so a word sampled differently on the same
