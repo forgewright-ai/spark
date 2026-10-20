@@ -1148,7 +1148,17 @@ and may change freely.
    change set. It refuses whole on a conflict too: a touched project
    path whose mtime or ctime is newer than the run's start. No step can
    set ctime back. The run then waits. Anything but `yes` leaves the run
-   waiting. A run that changed nothing is said and removed. Ctrl-C or
+   waiting. An I/O error stops apply at the failed operation and keeps
+   the copy waiting. Staging finishes before any delete or placement;
+   a staging error applies nothing. `ApplyError` carries the count of
+   completed changes and the intentional exclusions separately. A
+   failed operation may itself be partial, such as deleting a tree.
+   Both interfaces report error, never done, and retain the run.
+   A retry computes the remaining differences and needs a fresh review.
+   Completed files already matching the copy are skipped. The original
+   start time and conflict checks stay: a partly deleted tree can
+   require manual recovery before the run is discarded.
+   A run that changed nothing is said and removed. Ctrl-C or
    `SIGTERM` leaves it waiting too. A run's life is `sandbox.STATES`:
    `running` while a process drives it and holds the run's flock,
    `runs/<id>/lock`, then `waiting`. Applied or discarded, its dir is

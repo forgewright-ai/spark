@@ -290,6 +290,13 @@ directory, with no network. At the end it shows the changes, and you
 type `yes` to apply them. `spark do --review` lists the runs that wait.
 Section 6 says what a step can still read.
 
+If applying fails, the copy stays. A failure while preparing the files
+applies nothing. A later failure can leave some changes applied.
+Fix the cause, then use `spark do --review ID` to review what remains.
+Files changed here still cause a conflict, even on a retry. A partly
+deleted directory may need manual recovery. Keep the copy until that
+work is safe; `spark do --discard ID` removes it.
+
 These work on a text on stdin:
 
 - `spark ask < plan.md`: up to 3 questions the text does not answer.

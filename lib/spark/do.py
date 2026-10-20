@@ -1453,11 +1453,14 @@ def _apply(face, box, reviewed=None):
     """sandbox.apply, told: (rc, reason, hint). `reviewed` is what the
     face showed (None: --accept, nothing shown). A refusal -- the copy
     changed after the review, a git lock, a conflict, a project that does
-    not open -- applies nothing and leaves the run waiting."""
+    not open -- applies nothing and leaves the run waiting. An I/O error
+    may leave a partial apply; its completed count is said, its copy kept."""
     try:
         n, problems = sandbox.apply(box, reviewed=reviewed)
     except (sandbox.SandboxError, OSError) as e:
         _wait(box)
+        for problem in getattr(e, "problems", ()):
+            face.note(problem)
         face.unapplied(box, str(e), getattr(e, "paths", []))
         return 1, "error", "%s -- the run waits: spark do --review %s" % (e, box["id"])
     face.applied(box, n, problems)

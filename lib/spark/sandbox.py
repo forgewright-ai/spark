@@ -31,6 +31,8 @@
 #              conflict; deletes first, then creates top-down, every write
 #              walked fd-relative with O_NOFOLLOW per component, so a
 #              symlink in the project cannot carry a write outside it.
+#              An I/O error stops the apply and keeps the copy. A retry
+#              reviews the remaining differences with the same start time.
 #   runs       running -> waiting -> applied | discarded. The process that
 #              drives a run holds its flock (runs/<id>/lock); apply, discard
 #              and claim refuse while another process holds it, and a run
@@ -288,6 +290,19 @@ class SandboxError(Exception):
     def __init__(self, text, paths=()):
         Exception.__init__(self, text)
         self.paths = list(paths)
+
+
+class ApplyError(SandboxError):
+    """An operational failure: completed changes are not rolled back.
+    The failing operation may itself be partial (a directory deletion).
+    `problems` are intentional exclusions, never the operational error."""
+
+    def __init__(self, action, path, err, applied, problems):
+        super().__init__("could not %s %s (%s) -- %d change%s completed; the copy is kept"
+                         % (action, visible(path), err.strerror or err, applied,
+                            "" if applied == 1 else "s"), [path])
+        self.applied = applied
+        self.problems = list(problems)
 
 
 # ------------------------------------------------------------------ small parts
@@ -1729,7 +1744,13 @@ def _conflicts(run, flat):
 
 def apply(run, reviewed=None):
     """Apply the run's changes to its project: (applied, problems); the
-    run's dir goes. `reviewed` is the entries the person was shown: a copy
+    run's dir goes only on success. An I/O error raises ApplyError with
+    the completed count, stops further operations and keeps the run.
+    A retry recomputes differences: matching completed work is skipped,
+    the original start/conflict boundary stays, and a fresh review is
+    needed after a partial apply. A partially deleted tree may conflict
+    even without a person's edits: keep it for manual recovery then.
+    `reviewed` is the entries the person was shown: a copy
     whose changes() no longer has their fingerprint is refused whole
     (CHANGED), and every file's bytes are hashed against it as they are
     copied, before anything is written; None (a non-interactive accept)
@@ -1741,8 +1762,13 @@ def apply(run, reviewed=None):
     try:
         applied, problems = _apply(run, reviewed)
     except BaseException:
-        if acquired:
-            release(run)
+        try:
+            mark(run, "waiting")
+        except OSError:
+            pass             # disk full too: the free lock still makes a running record wait
+        finally:
+            if acquired:
+                release(run)
         raise
     run["state"] = "applied"
     _remove(run)
@@ -1775,17 +1801,18 @@ def _apply(run, reviewed):
         root_fd = os.open(run["cwd"], _DIR_FLAGS)
     except OSError as err:
         raise SandboxError("%s does not open (%s) -- nothing applied" % (run["cwd"], err.strerror or err))
-    src_fd = os.open(_src_root(run), _DIR_FLAGS)
+    src_fd = None
     staged = {}
 
-    def attempt(fn, e, *args):
+    def attempt(action, fn, e, *args):
         try:
             fn(*args)
-            return True
         except OSError as err:
-            problems.append("not applied %s -- %s" % (visible(e["path"]), err.strerror or err))
-            return False
+            raise ApplyError(action, e["path"], err, applied, problems) from err
+        return 1
+
     try:
+        src_fd = os.open(_src_root(run), _DIR_FLAGS)
         # every file's bytes first, hashed against the review: a copy that
         # changed since refuses here, before the project is touched
         files = [e for e in todo if e["status"] in ("added", "changed", "binary") and e["kind"] == "file"]
@@ -1793,32 +1820,32 @@ def _apply(run, reviewed):
             try:
                 staged[e["path"]] = _stage(root_fd, src_fd, e["path"], e["mode_new"], e["sha"])
             except OSError as err:
-                problems.append("not applied %s -- %s" % (visible(e["path"]), err.strerror or err))
+                raise ApplyError("stage", e["path"], err, applied, problems) from err
         # deletes, deepest first
         for e in sorted((e for e in todo if e["status"] == "deleted"), key=depth, reverse=True):
-            applied += attempt(_delete, e, root_fd, e["path"])
+            applied += attempt("delete", _delete, e, root_fd, e["path"])
         # then creates, top-down
         for e in sorted((e for e in todo if e["status"] in ("added", "changed", "binary", "link")),
                         key=lambda e: (depth(e), e["path"])):
             if e["kind"] == "dir":
-                applied += attempt(_make_dir, e, root_fd, e["path"])
+                attempt("create", _make_dir, e, root_fd, e["path"])
             elif e["kind"] == "link":
-                applied += attempt(_write_link, e, root_fd, e["path"], e["new"])
+                applied += attempt("link", _write_link, e, root_fd, e["path"], e["new"])
             elif e["path"] in staged:
-                if attempt(_place, e, root_fd, staged[e["path"]], e["path"]):
-                    del staged[e["path"]]
-                    applied += 1
+                applied += attempt("place", _place, e, root_fd, staged[e["path"]], e["path"])
+                del staged[e["path"]]
         # then modes, deepest first (a directory's last, so its own mode
         # never locks the walk to its children)
         for e in sorted((e for e in todo if e["status"] == "mode" or (e["status"] == "added" and e["kind"] == "dir")),
                         key=depth, reverse=True):
-            ok = attempt(_chmod, e, root_fd, e["path"], e["mode_new"])
-            applied += ok if e["status"] == "mode" else 0
+            # A new directory is complete only once its final mode lands.
+            applied += attempt("set mode on", _chmod, e, root_fd, e["path"], e["mode_new"])
     finally:
         for tmp in staged.values():
             _unlink(root_fd, tmp)
         os.close(root_fd)
-        os.close(src_fd)
+        if src_fd is not None:
+            os.close(src_fd)
     return applied, problems
 
 

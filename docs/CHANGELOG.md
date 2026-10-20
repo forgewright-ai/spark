@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.90.1
+
+- S1: a failed sandbox apply could discard the copy; it now stops,
+  keeps the copy and reports how much completed. A staging failure
+  applies nothing. A retry checks the changes still pending (#26)
+
 ## v1.90
 
 spark is an MCP host. The servers on its list offer their tools to the

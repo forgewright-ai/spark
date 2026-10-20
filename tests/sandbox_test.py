@@ -22,7 +22,9 @@ extended denies (the temp dirs, the keychains, Shortcuts, Automator,
 defaults, Launch Services, the daemons behind them) while the ordinary
 tools still work. Exit 0 with a skip line where a primitive is absent.
 """
+import errno
 import fcntl
+import io
 import json
 import os
 import shutil
@@ -32,6 +34,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 # a throwaway HOME before spark is imported: its paths are read at import
 HOME = os.path.realpath(tempfile.mkdtemp(prefix="spark-sandbox-test-"))
@@ -335,6 +339,248 @@ def test_review_max():
 
 
 # ------------------------------------------------------------------ the apply
+def manifest_run(files, changed, deleted=()):
+    """A fabricated clone and manifest: deletion tests need neither APFS
+    nor permission to create Linux whiteouts."""
+    root, run, _up = linux_run(files, {})
+    clone = os.path.join(run["dir"], "clone")
+    shutil.copytree(root, clone)
+    manifest = {r: sandbox._meta(st) for r, st in sandbox._walk(clone).items()}
+    sandbox._write_private(os.path.join(run["dir"], "manifest.json"), json.dumps(manifest).encode())
+    run["os"] = "macos"
+    sandbox._save(run)
+    for rel, data in changed.items():
+        put(clone, rel, data)
+    for rel in deleted:
+        sandbox._rmtree(os.path.join(clone, rel))
+    return root, run, clone
+
+
+def test_apply_stage_failure():
+    for code in (errno.ENOSPC, errno.EACCES):
+        root, run, src = manifest_run({"gone": "old\n"}, {"a": "a\n", "b": "b\n"}, ["gone"])
+        reviewed = sandbox.changes(run)
+        stage = sandbox._stage
+
+        def fail_write(root_fd, src_fd, rel, mode, sha):
+            if rel == "b":
+                with patch.object(os, "write", side_effect=OSError(code, "injected staging failure")):
+                    return stage(root_fd, src_fd, rel, mode, sha)
+            return stage(root_fd, src_fd, rel, mode, sha)
+
+        with patch.object(sandbox, "_stage", side_effect=fail_write), patch.object(sandbox, "_delete") as delete:
+            e = refused("apply failure: a staging write error fails acceptance",
+                        lambda: sandbox.apply(run, reviewed), "stage")
+        check("apply failure: staging never reaches deletes", not delete.called)
+        check("apply failure: staging leaves the project unchanged and removes all temps",
+              os.listdir(root) == ["gone"] and read(os.path.join(root, "gone")) == "old\n", os.listdir(root))
+        check("apply failure: zero complete changes, recovery bytes kept, run waiting",
+              getattr(e, "applied", None) == 0 and os.path.isdir(run["dir"])
+              and run["state"] == "waiting" and read(os.path.join(src, "b")) == "b\n")
+        if e is not None:
+            check("apply failure: waiting is saved", sandbox.load(run["id"])["state"] == "waiting")
+            n, problems = sandbox.apply(run, reviewed)
+            check("apply failure: retry after staging applies adds and delete, then cleans up",
+                  n == 3 and not problems and sorted(os.listdir(root)) == ["a", "b"] and gone(run))
+
+
+def test_apply_place_retry():
+    for make in (linux_run, manifest_run):
+        root, run, src = make({"a": "old a\n", "b": "old b\n"},
+                              {"a": "new a\n", "b": "new b\n", "c": "new c\n"})
+        reviewed = sandbox.changes(run)
+        sandbox.mark(run, "waiting")
+        sandbox.release(run)
+        run = sandbox.load(run["id"])     # apply owns this lock, not its caller
+        rename = os.rename
+
+        def fail_rename(old, new, **kwargs):
+            if new == "b":
+                raise OSError(errno.EACCES, "injected rename failure")
+            return rename(old, new, **kwargs)
+
+        with patch.object(os, "rename", side_effect=fail_rename):
+            e = refused("apply failure: a placement rename fails acceptance",
+                        lambda: sandbox.apply(run, reviewed), "place")
+        check("apply failure: one complete change, later files untouched",
+              getattr(e, "applied", None) == 1 and read(os.path.join(root, "a")) == "new a\n"
+              and read(os.path.join(root, "b")) == "old b\n" and not os.path.exists(os.path.join(root, "c")))
+        check("apply failure: the recovery copy and all its bytes remain",
+              os.path.isdir(src) and read(os.path.join(src, "a")) == "new a\n"
+              and read(os.path.join(src, "b")) == "new b\n")
+        check("apply failure: acquired lock and staged temps released",
+              run.get("lock") is None and not any(n.startswith(".spark-apply") for n in os.listdir(root)))
+        if e is None:
+            continue
+        run = sandbox.claim(run["id"])
+        refused("apply retry: the old review is no longer valid",
+                lambda: sandbox.apply(run, reviewed), sandbox.CHANGED)
+        pending = sandbox.changes(run)
+        check("apply retry: completed files are no longer pending", [x["path"] for x in pending] == ["b", "c"])
+        with patch.object(sandbox, "_place", wraps=sandbox._place) as place:
+            n, problems = sandbox.apply(run, pending)
+        check("apply retry: only remaining files placed, then cleanup",
+              n == 2 and not problems and [call.args[2] for call in place.call_args_list] == ["b", "c"]
+              and read(os.path.join(root, "b")) == "new b\n" and gone(run))
+
+
+def test_apply_delete_retry():
+    root, run, src = manifest_run({"a": "a\n", "b": "b\n"}, {"new": "new\n"}, ["a", "b"])
+    delete = sandbox._delete
+
+    def fail_delete(fd, rel):
+        if rel == "b":
+            raise OSError(errno.EACCES, "injected delete failure")
+        return delete(fd, rel)
+
+    with patch.object(sandbox, "_delete", side_effect=fail_delete), patch.object(sandbox, "_place") as place:
+        e = refused("apply failure: a deletion error stops acceptance", lambda: sandbox.apply(run), "delete")
+    check("apply failure: a delete failure prevents later placement",
+          not place.called and getattr(e, "applied", None) == 1 and not os.path.exists(os.path.join(root, "a"))
+          and read(os.path.join(root, "b")) == "b\n" and not os.path.exists(os.path.join(root, "new")))
+    check("apply failure: pending addition survives a delete error",
+          os.path.isdir(src) and read(os.path.join(src, "new")) == "new\n")
+    if e is not None:
+        n, problems = sandbox.apply(run, sandbox.changes(run))
+        check("apply retry: completed deletion skipped, remainder applied",
+              n == 2 and not problems and os.listdir(root) == ["new"] and gone(run))
+
+
+def test_apply_partial_delete_conflict():
+    root, run, src = manifest_run({"tree/a": "a\n", "tree/b": "b\n"}, {"new": "new\n"}, ["tree"])
+    rm = sandbox._rm
+
+    def partial_delete(fd, name):
+        if name != "tree":
+            return rm(fd, name)
+        tree_fd = os.open(name, sandbox._DIR_FLAGS, dir_fd=fd)
+        try:
+            rm(tree_fd, "a")
+        finally:
+            os.close(tree_fd)
+        raise OSError(errno.EACCES, "injected partial directory deletion")
+
+    with patch.object(sandbox, "_rm", side_effect=partial_delete):
+        e = refused("apply failure: partial directory deletion is an error",
+                    lambda: sandbox.apply(run), "delete")
+    check("apply failure: zero completed changes does not claim nothing changed",
+          getattr(e, "applied", None) == 0 and "nothing applied" not in str(e)
+          and not os.path.exists(os.path.join(root, "tree/a")) and os.path.exists(os.path.join(root, "tree/b")))
+    if e is not None:
+        refused("apply retry: a partly deleted tree still honors the original conflict boundary",
+                lambda: sandbox.apply(run), "changed here since the run began")
+        check("apply retry: conflicts keep the unapplied bytes", read(os.path.join(src, "new")) == "new\n")
+        sandbox.discard(run)
+        check("apply failure: explicit discard still cleans up", gone(run))
+
+
+def test_apply_retry_conflict():
+    for changed in ("a", "b"):
+        root, run, src = linux_run({"a": "old a\n", "b": "old b\n"}, {"a": "new a\n", "b": "new b\n"})
+        place = sandbox._place
+
+        def fail_place(fd, tmp, rel):
+            if rel == "b":
+                raise OSError(errno.EIO, "injected placement failure")
+            return place(fd, tmp, rel)
+
+        with patch.object(sandbox, "_place", side_effect=fail_place):
+            e = refused("apply retry: prepare a partial apply", lambda: sandbox.apply(run), "place")
+        if e is None:
+            continue
+        put(root, changed, "edited here after failure\n")
+        refused("apply retry: edits to completed or pending files are still conflicts",
+                lambda: sandbox.apply(run), "changed here since the run began")
+        check("apply retry: later project edits and recovery bytes survive",
+              read(os.path.join(root, changed)) == "edited here after failure\n"
+              and read(os.path.join(src, "b")) == "new b\n")
+        sandbox.discard(run)
+
+
+def test_apply_create_and_mode_retry():
+    for operation, action in (("_make_dir", "create"), ("_chmod", "set mode on")):
+        root, run, src = linux_run({"tree": "old file\n"}, {"tree/new": "new\n"})
+        os.chmod(os.path.join(src, "tree"), 0o755)
+        expected_mode = mode_of(os.path.join(src, "tree"))
+        with patch.object(sandbox, operation, side_effect=OSError(errno.EACCES, "injected " + action)):
+            e = refused("apply failure: a type replacement retains its copy on " + action,
+                        lambda: sandbox.apply(run), action)
+        check("apply failure: unfinished directories are not counted as complete changes",
+              getattr(e, "applied", None) == (1 if operation == "_make_dir" else 2))
+        check("apply failure: replacement bytes survive", read(os.path.join(src, "tree/new")) == "new\n")
+        if e is not None:
+            n, problems = sandbox.apply(run, sandbox.changes(run))
+            check("apply retry: directory creation or mode can finish after a type replacement",
+                  n > 0 and not problems and read(os.path.join(root, "tree/new")) == "new\n"
+                  and mode_of(os.path.join(root, "tree")) == expected_mode)
+            check("apply retry: directory recovery cleans up on success", gone(run))
+
+
+def test_apply_failure_record():
+    root, run, src = linux_run({}, {"new": "new\n"})
+    sandbox.release(run)
+    with patch.object(sandbox, "_stage", side_effect=OSError(errno.ENOSPC, "injected staging failure")), \
+            patch.object(sandbox, "_save", side_effect=OSError(errno.ENOSPC, "injected record failure")):
+        e = refused("apply failure: a full state disk does not hide the original failure",
+                    lambda: sandbox.apply(run), "injected staging failure")
+    check("apply failure: record failure releases an acquired lock and preserves the copy",
+          e is not None and run.get("lock") is None and read(os.path.join(src, "new")) == "new\n")
+    if e is not None:
+        claimed = sandbox.claim(run["id"])
+        check("apply retry: an older running record with a free lock is recoverable", claimed["state"] == "waiting")
+        sandbox.discard(claimed)
+
+
+def test_apply_hash_failure():
+    root, run, src = manifest_run({"gone": "old\n"}, {"a": "a\n", "b": "b\n"}, ["gone"])
+    reviewed = sandbox.changes(run)
+    stage = sandbox._stage
+
+    def changed_during_stage(fd, src_fd, rel, mode, sha):
+        if rel == "b":
+            put(src, "b", "changed after the review\n")
+        return stage(fd, src_fd, rel, mode, sha)
+
+    with patch.object(sandbox, "_stage", side_effect=changed_during_stage), patch.object(sandbox, "_delete") as delete:
+        refused("apply failure: changed source bytes during staging still refuse the whole apply",
+                lambda: sandbox.apply(run, reviewed), sandbox.CHANGED)
+    check("apply failure: a hash mismatch leaves no temps and never deletes",
+          not delete.called and os.listdir(root) == ["gone"] and run["state"] == "waiting")
+    n, problems = sandbox.apply(run, sandbox.changes(run))
+    check("apply retry: a fresh review after a hash mismatch applies", n == 3 and not problems and gone(run))
+
+
+def test_apply_exclusions_and_output():
+    from spark import do
+    for porcelain in (False, True):
+        root, run, src = linux_run({".git/config": "old\n"}, {"new": "new\n", ".git/config": "held\n"})
+        os.symlink("/etc", os.path.join(src, "out"))
+        face = do._Porcelain() if porcelain else do._Terminal()
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr), \
+                patch.object(sandbox, "_stage", side_effect=OSError(errno.ENOSPC, "injected disk full")):
+            rc, reason, hint = do._apply(face, run, sandbox.changes(run))
+            if porcelain:
+                face.end(reason, hint, rc)
+        output = stdout.getvalue() + stderr.getvalue()
+        check("apply failure: terminal and porcelain report error, not success",
+              rc == 1 and reason == "error" and "the run waits" in hint and "stage" in output, output)
+        check("apply failure: intentional exclusions remain separate notices",
+              "held back .git/config" in output and "refused out" in output, output)
+        if porcelain:
+            events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+            check("apply failure: porcelain ends with error rc 1",
+                  events[-1]["ev"] == "end" and events[-1]["reason"] == "error" and events[-1]["rc"] == 1)
+        if rc == 1:
+            n, problems = sandbox.apply(run)
+            check("apply retry: successful work plus exclusions still completes normally",
+                  n == 1 and len(problems) >= 2 and read(os.path.join(root, ".git/config")) == "old\n"
+                  and not os.path.lexists(os.path.join(root, "out")) and gone(run), problems)
+    root, run, src = linux_run({".git/config": "old\n"}, {".git/config": "held\n"})
+    n, problems = sandbox.apply(run)
+    check("apply: exclusions alone are not an operational failure", n == 0 and problems and gone(run))
+
+
 def test_apply():
     lower = {"edit.txt": "one\n", "mode.sh": "echo\n", "dir/inner.txt": "in\n"}
     upper = {"edit.txt": "one\ntwo\n", "new.txt": "new\n", "mode.sh": ("echo\n", 0o755),
@@ -1114,7 +1360,10 @@ def _sh_quote(s):
 
 def main():
     for t in (test_upper_walk, test_visible, test_whiteout_and_opaque, test_overlay_marks, test_review_max,
-              test_apply, test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
+              test_apply, test_apply_stage_failure, test_apply_place_retry, test_apply_delete_retry,
+              test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output,
+              test_apply_create_and_mode_retry, test_apply_failure_record, test_apply_hash_failure,
+              test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,
               test_detach_lock, test_records, test_ids, test_home_and_root, test_waiting_cap,
               test_step_linux_shape, test_step_mac_shape, test_mac_manifest, test_check_row, test_real):
