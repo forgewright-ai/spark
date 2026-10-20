@@ -717,20 +717,50 @@ def forget():
             pass
 
 
+def _pid_running(pid, end):
+    """Only proven exit is gone. Reap this child, never a process group."""
+    if pid <= 0:
+        return True
+    try:
+        # A running child stays pending until waitpid itself reaps it;
+        # it could exit between this call and a separate state probe.
+        return os.waitpid(pid, os.WNOHANG)[0] != pid
+    except ChildProcessError:          # not our child
+        pass
+    except OSError:
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    if IS_MAC:
+        left = end - time.monotonic()
+        if left <= 0:
+            return True
+        rc, out = run(["ps", "-o", "stat=", "-p", str(pid)], timeout=min(1, left))
+        return not (rc == 0 and out.strip().startswith("Z"))
+    try:
+        with open("/proc/%d/stat" % pid, encoding="utf-8", errors="replace") as f:
+            # comm is parenthesized and may itself contain spaces or ')'.
+            state = f.read().rsplit(")", 1)[1].split()[0]
+        return state != "Z"
+    except (OSError, IndexError):
+        return True
+
+
 def wait_gone(pids, timeout):
-    end = time.time() + timeout
-    while time.time() < end:
-        alive = []
-        for pid in pids:
-            try:
-                os.kill(pid, 0)
-                alive.append(pid)
-            except OSError:
-                pass
-        if not alive:
-            return []
-        time.sleep(0.3)
-    return alive
+    """Return pids not proven exited, within one monotonic wait budget.
+    Callers still select/authorize every pid; this sends no stop signal."""
+    end = time.monotonic() + max(0, timeout)
+    alive = list(pids)
+    while True:
+        alive = [pid for pid in alive if _pid_running(pid, end)]
+        left = end - time.monotonic()
+        if not alive or left <= 0:
+            return alive
+        time.sleep(min(0.3, left))
 
 
 def terminate(pids, force=False):

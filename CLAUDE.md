@@ -2493,7 +2493,14 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   only the token spark mints counts, never a key file the user named.
   `spark client URL`, `spark uninstall` and `spark serve off` stop
   those alone. `spark serve off --force` is the one way to stop
-  another. `spark client off` refuses, exit 2, while another server
+  another. Shutdown waits use a monotonic deadline and reap only named
+  children. Linux reads zombie state from `/proc/PID/stat`; macOS uses
+  `ps` within the remaining budget. An unreadable state stays pending.
+  Other parents must reap their own zombies. Scheduling and OS calls
+  can overrun a deadline; it is not a hard real-time guarantee.
+  This does not track descendants or remove the existing race between
+  a PID identity check and a signal.
+  `spark client off` refuses, exit 2, while another server
   holds `SPARK_PORT`. That is a `llama-server` in `ps` that is not
   spark's, or anything that answers `/health` there when spark runs
   none. A joiner of the shared engine is not refused. The client keeps
