@@ -2,6 +2,9 @@
 
 ## v1.90.2
 
+- S3: shutdown waited on exited processes as if they were running.
+  It now recognizes zombies, reaps its children and uses a monotonic
+  deadline; an unreadable process stays pending (#40)
 - S3: shell and Python disagreed on repeated config keys and CRLF.
   Both now keep the first non-empty value in each file and read CRLF.
   Python previously kept the last duplicate. Keys starting with a digit
@@ -20,9 +23,6 @@
 
 ## v1.90.1
 
-- S3: shutdown waited on exited processes as if they were running.
-  It now recognizes zombies, reaps its children and uses a monotonic
-  deadline; an unreadable process stays pending (#40)
 - S3: the first kept line of a read could take longer than its recorded
   total. Both times now include answer setup and the final output (#35)
 - S1: a failed sandbox apply could discard the copy; it now stops,
