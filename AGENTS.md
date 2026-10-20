@@ -104,16 +104,16 @@ hooks and the workflows name no test file.
 
 The gate calls `bin/spark` directly. `tests/fixtures.py` holds host
 facts for tests. `tests/platform_test.py`, called by smoke.py, proves
-explicit overrides and conservative ownership and repository rules.
-A suite exiting 77
-reports an unavailable host capability and still blocks a green full
-gate; it is never counted as a pass. `tests/check_selftest.py` is a
-standalone entry to `spark check --selftest`. The privacy gate also
-reads the staged diff for secret shapes: `SOURCE_SHAPES` in
-`lib/spark/text.py`, minus the two tuned for a paste and the two tuned
-for a source. It names the shape, never the line, and skips a line
-marked `spark:allow-secret`. shellcheck is the contributor's tool, not
-a user's package, and the gate skips it with a notice when absent.
+explicit overrides and conservative ownership and repository rules. A
+suite exiting 77 reports an unavailable host capability and still blocks
+a green full gate; it is never counted as a pass.
+`tests/check_selftest.py` is a standalone entry to
+`spark check --selftest`. The privacy gate also reads the staged diff
+for secret shapes: `SOURCE_SHAPES` in `lib/spark/text.py`, minus the two
+tuned for a paste and the two tuned for a source. It names the shape,
+never the line, and skips a line marked `spark:allow-secret`. shellcheck
+is the contributor's tool, not a user's package, and the gate skips it
+with a notice when absent.
 
 CI is where the full gate runs, `.github/workflows/`. `ci.yml` runs on
 a push to `main` or to a `try/` branch, on a pull request and by hand.
