@@ -10664,7 +10664,6 @@ def main():
             " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
             " spark client [URL|off]       use another machine's model; off: your own again",
-            " spark client URL --pin FP    trust that page's certificate (or --ca FILE)",
             " spark user [add NAME]        page logins (not system users); add shows a token"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         # v1.87: the help's rows are what the prompt line knows of spark
