@@ -7,11 +7,24 @@
   the full Origin and refuse malformed or duplicate values. LAN access
   stays plain HTTP; optional HTTPS remains separate work (#27)
 
+- S3: the first kept line of a read could take longer than its recorded
+  total. Both times now include answer setup and the final output (#35)
 - S1: a failed sandbox apply could discard the copy; it now stops,
   keeps the copy and reports how much completed. A staging failure
   applies nothing. A retry checks the changes still pending. A
   refusal's paths print as the review does, every control character
   an escape (#26)
+- S1: two logins racing in one home could pair the account with the
+  other login's cached key, sealing a record its owner cannot open.
+  The cache now carries its name and token hash, every reader keeps
+  the login it captured, and an older unlabelled cache is proven
+  through the token before it is used (#28)
+- S2: a reply that timed out after words arrived was lost from
+  history; it stays once as an incomplete answer, and the next message
+  continues its thread (#30)
+- S2: a bearer token could follow a redirect to another origin; a
+  credentialed request now stays on its scheme, host and port, and a
+  redirect spark did not follow says so (#29)
 
 ## v1.90
 

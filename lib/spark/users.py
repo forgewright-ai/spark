@@ -15,8 +15,8 @@
 # The local login is two 0600 files beside it: `account` (name and
 # token: who this machine acts as) and `account-key` (the unwrapped
 # data key, so the hot paths never pay the KDF). The key is a cache of
-# the account: it goes before the account changes and comes back after
-# (write_login), so a crash leaves no key cached for another login. On
+# the account, bound to its name and token in one atomic cache replace.
+# Readers hold that identity fixed across both reads (account_key). On
 # the box that means your OS login can read your own chat data -- and
 # nobody else's; a stolen disk is ciphertext plus the full-disk story
 # (spark check's encryption row).
@@ -202,24 +202,59 @@ def account():
     return (name, token) if name and token else ("", "")
 
 
-def account_key():
-    """The logged-in data key (bytes), or None -- client machines and
-    logged-out machines have none."""
+def cache_key(name, token, dk):
+    """Cache only: a delayed reader must never restore an earlier login.
+    Identity travels in the same atomic replace as the key. A late write
+    can evict a useful cache, but cannot become another account's key."""
+    data = "spark-account-key-v1 %s %s %s\n" % (
+        name, vault.token_hash(token), base64.b64encode(dk).decode("ascii"))
+    vault.write_private(ACCOUNT_KEY_FILE, data.encode("ascii"), durable=True)
+
+
+def account_key(identity=None):
+    """The key for one captured (name, token), or None on a cache miss.
+    Callers using an account name must pass that same snapshot. Legacy
+    unbound bytes are never trusted: the account's token recovers the key.
+    A rotation invalidates the old token's cache as well as its wrap."""
+    name, token = identity if identity is not None else account()
+    if not name or not token:
+        return None
+    digest = vault.token_hash(token)
+    if verifier(name) != digest:
+        return None
     try:
         with open(ACCOUNT_KEY_FILE, encoding="utf-8") as f:
-            dk = base64.b64decode(f.read().strip(), validate=True)
+            parts = f.read().split()
+        if len(parts) == 1:
+            # Older versions stored only base64(DK), possibly from a
+            # different login. Prove ownership without using those bytes.
+            dk = unlock(name, token)
+            cache_key(name, token, dk)
+            return dk
+        magic, owner, verifier_hash, encoded = parts
+        if (magic, owner, verifier_hash) != ("spark-account-key-v1", name, digest):
+            return None
+        dk = base64.b64decode(encoded, validate=True)
         return dk if len(dk) == vault.DK_LEN else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, vault.SealError):
         return None
+
+
+def local_key(identity):
+    """Recover a cache miss without changing the captured login."""
+    dk = account_key(identity)
+    if dk is None:
+        name, token = identity
+        dk = unlock(name, token)
+        cache_key(name, token, dk)
+    return dk
 
 
 def write_login(name, token, dk=None):
     """This machine's login, and its cached data key when `dk` is given.
-    The key is a cache of the account, so it never outlives the login it
-    was cached for: it goes first, the account is replaced, and only then
-    is the key written back, each step on disk before the next. A crash
-    anywhere leaves no key or the right one; with none, the hot paths
-    unwrap it once with the account's token (forge.local_store)."""
+    Each file is replaced atomically. The cache binds its key to this
+    name and token, so interleaved writers or a crash leave a matching
+    cache or a miss. Readers recover a miss with the captured token."""
     state_dir()
     try:
         os.remove(ACCOUNT_KEY_FILE)
@@ -228,7 +263,7 @@ def write_login(name, token, dk=None):
     vault.sync_dir(os.path.dirname(ACCOUNT_KEY_FILE))
     vault.write_private(ACCOUNT_FILE, ("name=%s\ntoken=%s\n" % (name, token)).encode(), durable=True)
     if dk is not None:
-        vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(dk) + b"\n", durable=True)
+        cache_key(name, token, dk)
 
 
 def logout():
@@ -289,7 +324,8 @@ def _thread_stats(name, dk=None):
 
 
 def _show():
-    me = account()[0]
+    identity = account()
+    me = identity[0]
     if me:
         say("account  this machine is %s" % me)
     else:
@@ -299,7 +335,7 @@ def _show():
         say("users    none yet -- spark user add NAME")
         return 0
     say("users    %d" % len(names))
-    dk = account_key() if me else None
+    dk = account_key(identity) if me else None
     for n in names:
         count, newest, kept = _thread_stats(n, dk if n == me else None)
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else "-"
@@ -414,7 +450,7 @@ def cmd_claim():
     if not exists(name):
         say("! no store for %s could be made here" % name)
         return 2
-    dk = account_key()
+    dk = account_key((name, token))
     if dk is None:
         try:
             dk = unlock(name, token)

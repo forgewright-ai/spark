@@ -9,6 +9,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, SHARE_TOKEN, STATE_DIR, debug, forge_url, run, state_dir
@@ -36,6 +37,41 @@ class BrainError(Exception):
     def __init__(self, kind, hint):
         super().__init__(hint)
         self.kind, self.hint = kind, hint
+
+
+REDIRECT_REFUSED = "a redirect spark did not follow -- use the server's direct URL on the configured origin"
+
+
+def _origin(url):
+    """Scheme, case-insensitive host and effective port; never DNS identity."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None:
+        raise ValueError("invalid HTTP origin")
+    port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+    return parsed.scheme, parsed.hostname, port
+
+
+class _OriginRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect carrying a bearer is followed only on the origin the
+    request went to. Any other target is refused as the HTTP error the
+    redirect was: the caller sees the status, and the request counts
+    as sent, since it did leave, to the configured origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if req.has_header("Authorization"):
+            try:
+                same = _origin(req.full_url) == _origin(newurl)
+            except ValueError:
+                same = False
+            if not same:
+                raise urllib.error.HTTPError(req.full_url, code, REDIRECT_REFUSED, headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Installed once, on the opener every urlopen in the process uses (cli
+# imports wire): no call site has to remember. A request without a
+# bearer keeps urllib's own rules.
+urllib.request.install_opener(urllib.request.build_opener(_OriginRedirect()))
 
 
 # ------------------------------------------------------------------ token
@@ -564,6 +600,8 @@ def _send(cfg, url, data, timeout, forge=False, sent=None):
             raise BrainError("auth", _auth_hint(cfg, url, forge))
         if e.code == 503:
             raise BrainError("loading", LOADING)
+        if e.code in (301, 302, 303, 307, 308):
+            raise BrainError("bad", "%s answered HTTP %d, %s" % (url, e.code, REDIRECT_REFUSED))
         # a FORGE classifies its own failures: the body is
         # {"error": {"kind", "hint"}}. Honour it -- a 502 while the forge
         # re-resolves a just-restarted upstream is "loading", not a raw

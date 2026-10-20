@@ -631,9 +631,12 @@ State is `~/.local/state/spark/`, 0700:
   store holds `audit` too, the admin actions.
 - `account` 0600, this machine's login (name and token), and
   `account-key` 0600, the unwrapped data key, so the hot paths never pay
-  the KDF. The key is a cache of the login (`users.write_login`): it
-  goes before `account` changes and comes back after, so a crash never
-  leaves a key cached for another login.
+  the KDF. The cache holds its name and token hash beside the key in
+  one atomic replace (`users.cache_key`). Readers pass the same captured
+  name and token to `users.account_key`: an interleaved login or a token
+  rotation leaves a matching key or a cache miss. A miss is recovered
+  with that token, without changing the login. Older unbound caches
+  are recovered through the token too; their bytes are never trusted.
 
 Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
 once the voice was turned on. Tools are linked into `~/.local/bin`.
@@ -1670,9 +1673,11 @@ and may change freely.
    `done {thread, ms, model}`, `model` the list's name, and `error
    {kind, hint, thread?}`. `talk`
    and `ask` are still accepted as aliases of `chat` and `answer`, and
-   records write the new names. `thread` rides a `cut`, whose partial
-   already landed, so the page continues that thread instead of opening
-   a new one. A client that hangs up mid-stream (the stop button) still
+   records write the new names. `thread` rides an error after content,
+   including a timeout: the partial already landed once, so the page
+   and terminal continue that thread. A timeout before content saves
+   no turn. Only a `down` before content can retry once.
+   A client that hangs up mid-stream (the stop button) still
    lands the turn. The user line and any partial answer (`partial:
    true`) go on the thread, and the log line says 499. A client that
    leaves while queued pays no prefill and lands nothing, 499 likewise.
@@ -1835,17 +1840,20 @@ and may change freely.
     the character count, `ms`, `part`, `parts`, `kept`, `dropped`,
     `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
     line. That is the number the prompt cache moves, and `spark stats`
-    shows it beside each mode's cache hit rate. The reading pass is
-    greedy (temperature 0). Its words are restated above the source in
-    the request that follows, so a word sampled differently on the same
-    source would break the served prompt's cached prefix. The source is
-    always held back first (`text.hold_secrets`, contract 10's
-    `--source` rule). Every span that looks like a secret becomes
-    `[held]` before the parts are cut, one stderr line names the count
-    and the shapes, and the turn records `held`. `/read @FILE
-    [question]` in `spark chat` is a client inside the chat: the file is
-    the source, the same law holds, and the exchange lands on the chat's
-    thread.
+    shows it beside each mode's cache hit rate. Both times start before
+    answer session setup, after the separate reading pass. `ms` ends
+    after the output gate closes; `first_ms` is absent when no line
+    survives. Both use a monotonic clock and leave out ledger writes.
+    The reading pass is greedy (temperature 0). Its words are restated
+    above the source in the request that follows, so a word sampled
+    differently on the same source would break the served prompt's
+    cached prefix. The source is always held back first
+    (`text.hold_secrets`, contract 10's `--source` rule). Every span
+    that looks like a secret becomes `[held]` before the parts are cut,
+    one stderr line names the count and the shapes, and the turn records
+    `held`. `/read @FILE [question]` in `spark chat` is a client inside
+    the chat: the file is the source, the same law holds, and the
+    exchange lands on the chat's thread.
 12. `spark ask` is the questioner's protocol: the text on stdin (a plan,
     a draft, a decision) and questions about it out, raw, one per line.
     Never a path, never a `[cwd]` line. Mode comes from the argument

@@ -259,7 +259,9 @@ in `~/.config/spark/keys.env`, and `KEYS=off` there turns them off.
 
 `spark chat` talks with the model. It goes on with your newest thread.
 `Esc` on an empty line, `/q` or `Ctrl-D` ends it. `Ctrl-C` cancels a
-reply. The commands:
+reply. If a reply times out after words arrive, history keeps those
+words as an incomplete answer. The next message continues that thread.
+The commands:
 
 | command | what it does |
 |---|---|
