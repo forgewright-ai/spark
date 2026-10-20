@@ -2,6 +2,11 @@
 
 ## v1.90.2
 
+- S3: generation requests could wait without a deadline, and a client
+  that had left could still take the model. Browser and API requests now
+  share a small queue, an account limit and a deadline; busy callers get
+  a retry hint, and expired or disconnected waiters start no work (#42)
+
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match
