@@ -1571,9 +1571,16 @@ and may change freely.
    requester's own regular threads and answers `{cleared, kept}`: the
    kept threads stay, and `kept` says how many. `GET /api/threads` rows
    are `{id, ts, title, turns, kept}`. Every `POST` and `DELETE` under
-   `/api/`, `/api/login` included, also needs `X-Spark: 1`, a `Host`
-   this machine answers to and, when sent, an `Origin` matching it (400
-   or 403). A `POST` there needs a JSON object body sent as
+   `/api/`, `/api/login` included, also needs `X-Spark: 1` and, when
+   sent, one valid `Origin` matching the HTTP scheme, Host and effective
+   port (403 otherwise). Missing Origin remains valid for API clients;
+   empty, duplicate and malformed values are refused. Every known route
+   requires exactly one valid `Host` this machine answers to (400).
+   Forwarded and X-Forwarded-* headers change neither check: this
+   listener is plain HTTP. These gates do not encrypt tokens or sessions
+   or restrict remote administration. Optional HTTPS and trust setup
+   remain separate work (#37); #27's protected boundary is not done.
+   A `POST` there needs a JSON object body sent as
    `Content-Type: application/json` besides (415 otherwise). A `DELETE`
    carries no body. `POST /v1/chat/completions` takes the bearer only. A
    cookie does not open it (401), so a browser's login cannot be ridden

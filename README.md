@@ -201,6 +201,8 @@ is.
 
 Between machines, the traffic is plain HTTP. Anyone on your network can
 read it.
+The page checks the request's Host and, on API writes, its Origin.
+These checks do not encrypt traffic or protect a captured login.
 
 spark downloads itself, the llama.cpp engine and the voice from
 github.com, and your model from huggingface.co. The engine, the voice

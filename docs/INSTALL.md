@@ -754,6 +754,16 @@ When something stops working:
 spark serves plain HTTP on one address of your network. Your network
 is the trust boundary.
 
+Every known page or API route needs one valid Host header naming this
+machine. API writes also check the Origin, when sent, against the HTTP
+scheme, host and port. Duplicate or malformed headers are refused;
+forwarding headers do not make a request HTTPS. Automatic LAN selection,
+login links and remote administration work as before. These checks do
+not protect traffic from interception. Optional HTTPS and certificate
+trust are tracked in #37; the protected administration goal in #27 is
+still open. A TLS-terminating proxy is not a supported deployment here:
+an HTTPS browser Origin does not match the plain HTTP listener.
+
 - On your network, anyone can read the traffic, tokens included. A
   captured token works until it is rotated. Rotate with `spark user
   token --new`, or `spark serve --login --new` for the admin.

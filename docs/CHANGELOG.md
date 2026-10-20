@@ -2,6 +2,11 @@
 
 ## v1.90.1
 
+- S2: the page checked Host only on API writes and ignored Origin's
+  scheme. Known routes now require one valid Host; API writes check
+  the full Origin and refuse malformed or duplicate values. LAN access
+  stays plain HTTP; optional HTTPS remains separate work (#27)
+
 - S1: a failed sandbox apply could discard the copy; it now stops,
   keeps the copy and reports how much completed. A staging failure
   applies nothing. A retry checks the changes still pending. A

@@ -119,6 +119,7 @@ THE SERVER AND OTHER MACHINES
   spark client URL --key-file F   use your own llama-server, its key in F
   Traffic between machines is plain HTTP. The admin token can run any
   command on the machine.
+  Host and Origin checks do not encrypt traffic or protect a stolen token.
 
 THE PAGE (open the address spark serve --login prints)
   1..5                            chat, activity, do, settings, help
