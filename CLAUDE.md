@@ -391,6 +391,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 (`read_sealed_records`), never shown, and `Store.load` says so
                 once on stderr: `! N records in thread ID could not be read --
                 skipped`; a whole-blob file is still refused whole)
+                bounded (bounded context reads: a regular file opened without
+                waiting for a writer, the newest lines within a byte budget)
                 users (the named users, their store under state/users/, and
                 this machine's login: spark user)
                 look (the living prompt's state: the one switch and the 3
