@@ -53,6 +53,8 @@ class Peek(smoke.Stub):
         msgs = SEEN["body"].get("messages") or [{}]
         if SEEN["body"].get("stream") and "dripfeed" in (msgs[-1].get("content") or ""):
             return self.drip()
+        if SEEN["body"].get("stream") and "timeoutfeed" in (msgs[-1].get("content") or ""):
+            return self.quiet(empty="emptytimeoutfeed" in msgs[-1]["content"])
         if SEEN["body"].get("stream") and "cutfeed" in (msgs[-1].get("content") or ""):
             return self.cut()
         self.rfile = io.BytesIO(raw)
@@ -72,6 +74,17 @@ class Peek(smoke.Stub):
             self.wfile.write(b"data: [DONE]\n\n")
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
+
+    def quiet(self, empty=False):
+        """The Forge's 5 s read timeout expires after headers or content."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        if not empty:
+            self.wfile.write(b'data: {"choices":[{"delta":{"content":"half an "}}]}\n\n')
+        self.wfile.flush()
+        time.sleep(6)
+        self.close_connection = True
 
     def cut(self):
         """Half a reply, then the wire dies: the upstream promises more
@@ -132,6 +145,138 @@ def sse(raw):
     return out
 
 
+def reply_interruptions(ok):
+    """Real SSE parsing, sessions and sealed history; no model or clock waits."""
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    from spark import cli, config, forge, session, wire
+
+    class Response:
+        def __init__(self, pieces, failure=None):
+            self.pieces, self.failure = pieces, failure
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def __iter__(self):
+            for piece in self.pieces:
+                yield ('data: ' + json.dumps({'choices': [{'delta': {'content': piece}}]}) + '\n').encode()
+            if self.failure:
+                raise self.failure
+            yield b'data: [DONE]\n'
+
+    with tempfile.TemporaryDirectory(prefix='spark-reply-') as tmp, ExitStack() as stack:
+        stack.enter_context(patch.dict(os.environ, {"SPARK_HISTORY": "7"}))
+        cfg = config.load()
+        stack.enter_context(patch.object(forge, 'state_dir', return_value=tmp))
+        stack.enter_context(patch.object(session.Session, '_system', return_value='fixture'))
+        stack.enter_context(patch.object(session.Session, 'record'))
+        store = forge.Store(os.path.join(tmp, 'threads'), b'x' * 32)
+        brain = lambda fresh: ('http://127.0.0.1:1', 'fixture', False)
+        for kind, failure in [('timeout', socket.timeout('timed out')),
+                              ('cut', ConnectionResetError('reset')),
+                              ('interrupt', KeyboardInterrupt())]:
+            for pieces in ([], ['half ', 'an answer']):
+                for history in (0, 7):
+                    os.environ["SPARK_HISTORY"] = str(history)
+                    visible, said = [], []
+                    with patch.object(wire, '_send', return_value=Response(pieces, failure)) as send:
+                        try:
+                            forge.reply(cfg, None, 'question', store=store, brain=brain,
+                                        on_delta=visible.append, said=said)
+                        except (wire.BrainError, KeyboardInterrupt) as exc:
+                            tid = getattr(exc, 'thread', None)
+                            ok(not isinstance(exc, wire.BrainError) or exc.kind == kind,
+                               'stream failure keeps its kind: ' + kind)
+                        else:
+                            ok(False, 'stream failure must be raised: ' + kind)
+                            continue
+                    rows = store.load(tid) if tid else []
+                    partial = ''.join(pieces)
+                    expected = 2 if partial else (1 if kind != 'timeout' else 0)
+                    ok(send.call_count == 1 and visible == pieces,
+                       'interrupted stream is delivered once, never retried')
+                    ok(len(rows) == (expected if history else 0)
+                       and (not history or not partial or
+                            (rows[-1]['text'] == partial and rows[-1].get('partial') is True)),
+                       'partial history exactly once: %s, content=%s, history=%s' % (kind, bool(pieces), history), rows)
+                    ok(history or (tid is None), 'history off creates no thread')
+                    ok(said == [], 'interruption leaves the existing transient-memory behavior unchanged')
+                    if partial and history:
+                        with patch.object(wire, '_send', return_value=Response(['continued'])) as send:
+                            resumed, answer, _ = forge.reply(cfg, tid, 'go on', store=store, brain=brain)
+                        messages = json.loads(send.call_args[0][2])['messages']
+                        ok(resumed == tid and answer == 'continued' and len(store.load(tid)) == 4
+                           and messages[-3:] == [{'role': 'user', 'content': 'question'},
+                                                 {'role': 'assistant', 'content': partial},
+                                                 {'role': 'user', 'content': 'go on'}],
+                           'follow-up uses the saved partial on the same thread')
+
+        os.environ["SPARK_HISTORY"] = "7"
+        for second in (Response(['retried']), wire.BrainError('down', 'still down'),
+                       Response(['retry partial'], socket.timeout('timed out'))):
+            with patch.object(wire, '_send', side_effect=[wire.BrainError('down', 'down'), second]) as send:
+                resolves = []
+                def resolve(fresh):
+                    resolves.append(fresh)
+                    return brain(fresh)
+                before = len(store.list_threads(n=100))
+                try:
+                    tid, answer, _ = forge.reply(cfg, None, 'retry', store=store, brain=resolve)
+                except wire.BrainError as exc:
+                    if exc.kind == 'timeout':
+                        rows = store.load(getattr(exc, 'thread', None))
+                        ok(len(rows) == 2 and rows[-1]['text'] == 'retry partial'
+                           and rows[-1].get('partial') is True, 'timeout on retry saves its partial once')
+                    else:
+                        ok(len(store.list_threads(n=100)) == before, 'failed retry persists no turn')
+                else:
+                    ok(answer == 'retried' and len(store.load(tid)) == 2,
+                       'successful retry persists one pair')
+                ok(send.call_count == 2 and resolves == [False, True], 'down before content retries once')
+
+        # Kept threads still save turns when ordinary history is disabled.
+        tid, _ = store.keep()
+        os.environ["SPARK_HISTORY"] = "0"
+        for turn in range(2):
+            with patch.object(wire, '_send', return_value=Response(['kept'], socket.timeout('timed out'))):
+                try:
+                    forge.reply(cfg, tid, 'keep going', store=store, brain=brain)
+                except wire.BrainError as exc:
+                    ok(exc.thread == tid and len(store.load(tid)) == 2 * (turn + 1),
+                       'repeated interrupted turns keep the same kept thread without duplicating earlier turns')
+        os.environ["SPARK_HISTORY"] = "7"
+
+        # A late down error must not replay words already delivered to the caller.
+        def late_down(*args, **kwargs):
+            args[3]('once')
+            raise wire.BrainError('down', 'late failure')
+        with patch.object(wire, 'chat_stream', side_effect=late_down) as stream:
+            try:
+                forge.reply(cfg, None, 'late', store=store, brain=brain)
+            except wire.BrainError as exc:
+                tid = getattr(exc, 'thread', None)
+            ok(stream.call_count == 1 and tid and store.load(tid)[-1]['text'] == 'once',
+               'content prevents a down retry and lands once')
+
+        # The terminal loop must adopt the exception's thread just like the page.
+        failure = wire.BrainError('timeout', 'fixture timeout')
+        failure.thread = '2026-01-01-000000'
+        with patch.object(config, 'load', return_value=cfg), \
+                patch.object(forge, 'last_thread', return_value=None), \
+                patch.object(forge, '_voice_setup'), patch.object(forge, '_spoken', return_value=None), \
+                patch.object(forge, '_face_rest'), patch.object(forge, '_refuse'), \
+                patch.object(sys, 'stdin', io.StringIO('question\ngo on\n')), \
+                patch.object(sys, 'stdout', io.StringIO()), \
+                patch.object(cli, 'stream_turn', side_effect=[failure, failure.thread]) as stream:
+            forge.cmd_chat([])
+        ok(stream.call_args_list[1].kwargs['thread'] == failure.thread,
+           'terminal follow-up adopts the partial thread after a timeout')
+
+
 def main():
     fails = 0
 
@@ -139,6 +284,8 @@ def main():
         nonlocal fails
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + str(extra)[:300]) if extra and not cond else ""))
         fails += not cond
+
+    reply_interruptions(ok)
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
@@ -778,6 +925,27 @@ def main():
             evs3 = sse(raw3)
             ok(st == 200 and next((d.get("thread") for e, d in evs3 if e == "done"), "") == ctid,
                "the next message continues the same thread", evs3)
+
+            # Timeouts use the same saved-thread contract as disconnects.
+            for prompt in ("emptytimeoutfeed", "timeoutfeed"):
+                st, _, raw = req(url, "POST", "/api/chat", {"text": prompt}, headers=post, timeout=30)
+                evs = sse(raw)
+                err = next((d for e, d in evs if e == "error"), {})
+                ok(err.get("kind") == "timeout" and not any(e == "done" for e, d in evs),
+                   "a timeout emits an error, never a successful done", evs)
+                if prompt == "emptytimeoutfeed":
+                    ok(not err.get("thread") and not any(e == "delta" for e, d in evs),
+                       "a timeout before content lands no turn", evs)
+                    continue
+                tid = err.get("thread")
+                st, _, raw = req(url, "GET", "/api/threads/" + str(tid), headers=bearer)
+                rows = json.loads(raw).get("messages", [])
+                ok(st == 200 and len(rows) == 2 and rows[-1].get("partial") is True
+                   and rows[-1]["text"] == "half an ", "timeout saves one incomplete assistant turn", rows)
+                st, _, raw = req(url, "POST", "/api/chat", {"text": "go on", "thread": tid}, headers=post)
+                ok(next((d.get("thread") for e, d in sse(raw) if e == "done"), None) == tid
+                   and any(m.get("content") == "half an " for m in SEEN["body"]["messages"]),
+                   "timeout follow-up reaches the model with the partial on its original thread")
 
             st, _, raw = req(url, "GET", "/api/soul", headers=bearer)
             d = json.loads(raw)

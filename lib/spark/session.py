@@ -253,13 +253,14 @@ class Session:
                 + self.history
                 + [{"role": "user", "content": persona.user_message(text, cwd, context)}])
 
-    def _retry_fresh(self, fn):
+    def _retry_fresh(self, fn, can_retry=None):
         """A cached brain may have gone away: on `down`, resolve once more
-        and try again; any other error is the answer."""
+        and try again, unless the caller has already delivered content;
+        any other error is the answer."""
         try:
             return fn()
         except wire.BrainError as e:
-            if e.kind != "down":
+            if e.kind != "down" or (can_retry is not None and not can_retry()):
                 raise
             self.url, self.model, self.forge = self._brain(True)
             return fn()
@@ -278,9 +279,16 @@ class Session:
 
     def ask_stream(self, text, context, on_delta, max_tokens=None, timeout=None):
         t0 = time.time()
+        delivered = False
+
+        def feed(delta):
+            nonlocal delivered
+            delivered = delivered or bool(delta)
+            on_delta(delta)
+
         out, self.timings = self._retry_fresh(lambda: wire.chat_stream(
-            self.cfg, self.url, self._messages(text, context), on_delta, max_tokens=max_tokens or 600,
-            forge=self.forge, model=self.role, timeout=timeout, sent=self.note_sent))
+            self.cfg, self.url, self._messages(text, context), feed, max_tokens=max_tokens or 600,
+            forge=self.forge, model=self.role, timeout=timeout, sent=self.note_sent), can_retry=lambda: not delivered)
         return out, int((time.time() - t0) * 1000)
 
     def note_sent(self, pair):

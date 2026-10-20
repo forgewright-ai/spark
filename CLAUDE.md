@@ -1666,9 +1666,11 @@ and may change freely.
    `done {thread, ms, model}`, `model` the list's name, and `error
    {kind, hint, thread?}`. `talk`
    and `ask` are still accepted as aliases of `chat` and `answer`, and
-   records write the new names. `thread` rides a `cut`, whose partial
-   already landed, so the page continues that thread instead of opening
-   a new one. A client that hangs up mid-stream (the stop button) still
+   records write the new names. `thread` rides an error after content,
+   including a timeout: the partial already landed once, so the page
+   and terminal continue that thread. A timeout before content saves
+   no turn. Only a `down` before content can retry once.
+   A client that hangs up mid-stream (the stop button) still
    lands the turn. The user line and any partial answer (`partial:
    true`) go on the thread, and the log line says 499. A client that
    leaves while queued pays no prefill and lands nothing, 499 likewise.

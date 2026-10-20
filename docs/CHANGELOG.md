@@ -12,6 +12,9 @@
   The cache now carries its name and token hash, every reader keeps
   the login it captured, and an older unlabelled cache is proven
   through the token before it is used (#28)
+- S2: a reply that timed out after words arrived was lost from
+  history; it stays once as an incomplete answer, and the next message
+  continues its thread (#30)
 
 ## v1.90
 

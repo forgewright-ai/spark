@@ -946,13 +946,13 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     request, wire.BrainError from the request. Any end mid-stream -- a
     KeyboardInterrupt (Ctrl-C at the prompt), a BrokenPipeError /
     ConnectionResetError from on_delta (a page or desktop client pressing
-    stop), or a BrainError of kind `cut` (the server died with the answer
-    half sent) -- appends the user line and, when any text arrived, the
-    partial reply (partial=True), then re-raises; the thread id rides on
+    stop), or a BrainError after text arrived (including a timeout) --
+    appends the user line and, when any text arrived, the partial reply
+    (partial=True), then re-raises; the thread id rides on
     the exception (`e.thread`) so the caller can keep going with it. Every
-    other BrainError failed before a byte came back and leaves the thread
-    as it was. `said` (a list), when given, gains the turn's two
-    messages as the thread keeps them -- the chat's memory when no thread
+    pre-content BrainError leaves the thread as it was, except `cut`,
+    which still keeps the user line. `said` (a list), when given, gains
+    a completed turn's two messages -- the chat's memory when no thread
     does (history off). Nothing is printed here -- that is the caller's job."""
     from . import session          # session imports forge: resolved late on purpose
     from . import wire
@@ -993,8 +993,8 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
         # a server that dies mid-reply is that same stop, arriving as an
         # error: the words already on the screen belong on the thread, and
         # a turn the user watched must not vanish with the connection.
-        # Every other kind failed before a byte came back.
-        if e.kind != "cut":
+        # Content, not the error kind, tells us whether a reply began.
+        if not any(collected) and e.kind != "cut":
             raise
         land(e)
         raise
@@ -2329,6 +2329,7 @@ def cmd_chat(args):
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
                                          said=SAID, voice=spoken, linger=True)
             except (RefError, wire.BrainError) as e:
+                thread = getattr(e, "thread", thread)
                 _face_rest()
                 _refuse(e.hint, "alarmed" if isinstance(e, wire.BrainError) else None)
             except KeyboardInterrupt as e:
