@@ -2567,6 +2567,46 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   check row, cached) re-hashes every downloaded file
   (`lib/spark/verify.py`).
 
+## Context read limits
+
+`forge.read_file` reads at most 64,003 bytes per reference before
+UTF-8 replacement decoding: four bytes per existing 16,000-character
+window, plus three to align its tail. Through 64,000 input bytes, the
+existing character count in the cut marker is exact. Larger files keep
+the same 4,000-character head and 12,000-character tail, with `middle
+cut` in between: counting omitted characters would require reading the
+middle.
+
+Continued local threads use at most 1,000,000 input bytes, header
+included, matching the existing `FORGE` request-body ceiling. The
+header has a 4,096-byte ceiling. Reads proceed backwards in 8,192-byte
+blocks; only whole authenticated records are decoded and parsed.
+Selection stops after the newest 20,000 characters and their turn
+boundary. Malformed records, blank lines and empty messages consume
+the same byte budget. At its edge an incomplete record and an orphan
+answer are left out, with a content-free notice. A damaged record
+still earns the usual skipped-record notice. `same_text` scans
+forwards within the same budget and stops at the first user message;
+no match means sending the source again. Full thread display, export
+and whole-blob vault reads keep their existing whole-file
+authentication and corruption rules.
+
+`bounded.regular` opens with `O_NONBLOCK` and checks the opened inode:
+a named pipe, device, directory, or a symlink to one is refused
+without waiting for a writer. A regular file on an unresponsive
+filesystem can still wait on the operating system. Byte limits do not
+promise a disk deadline. Atomic replacement keeps the opened inode; a
+concurrent truncation can shorten context but cannot enlarge the read
+budget.
+
+Whole-document `/read`, editor stdin (rewrites, byte selections and
+source hashes), draft watching, and explicit thread replay are
+separate operations. They are not silently clipped by these context
+readers. No cache, index, database or new stored format is needed. The
+focused regressions live in `tests/vault_test.py`;
+`tests/context_bench.py` measures synthetic scaling without logging
+source or conversation contents.
+
 ## Verifying a claim
 
 ```sh

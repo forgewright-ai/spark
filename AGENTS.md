@@ -132,6 +132,11 @@ GitHub's static analysis over the python and the javascript.
 advisory after the engine pin's date, and one when sherpa-onnx does
 after the voice pin's. `dependabot.yml` keeps every action's sha pin
 current. The Debian image is pinned by its digest, moved by hand.
+`tests/context_bench.py` measures bounded file and thread context with
+synthetic inputs, without a model. It reports input size, bytes read,
+peak Python allocations and elapsed time; fixture creation is excluded.
+It is run by hand, not in the gate.
+
 `tests/forge_probe.py URL` is not in the
 gate: it asks a live `FORGE`'s gates from the wire, one line per gate,
 exit 1 when any does not hold.

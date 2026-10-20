@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.90.3
+
+- S3: file references and continued threads read and decoded their whole
+  input before trimming context. They now bound bytes read and records
+  opened, keep the newest complete turns, and refuse nonregular context
+  files without waiting for a writer (#43)
+
 ## v1.90.2
 
 - S3: shutdown waited on exited processes as if they were running.

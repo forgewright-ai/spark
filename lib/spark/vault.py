@@ -22,7 +22,7 @@ import hashlib
 import os
 import tempfile
 
-from . import chacha
+from . import bounded, chacha
 from .chacha import SealError  # noqa: F401  -- the vault's error is the cipher's
 
 MAGIC = "spark-sealed-v1"
@@ -180,19 +180,42 @@ def read_sealed_records(path, dk, kind=None, name=None):
     return out, skipped
 
 
-def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
-    """The newest records whose decrypted sizes sum to <= max_chars (at
-    least one when any exists): the cheap tail for a long thread. A
-    record that does not open is skipped, as read_sealed_records skips
-    it."""
-    hdr, lines = _record_lines(path, kind, name)
-    out, total = [], 0
-    for line in reversed(lines):
+def newest_sealed_records(path, dk, kind=None, name=None, newest=True):
+    """Bounded authenticated records; False marks a corrupt record and
+    None an omitted prefix (suffix with newest=False). Whole-file readers
+    stay separate. The header and records come from one regular file."""
+    with bounded.regular(path) as f:
+        raw = f.readline(bounded.HEADER_BYTES)
         try:
-            rec = open_line(dk, hdr, line)
-        except SealError:
+            hdr = raw.decode("utf-8").rstrip("\r\n")
+            magic, fkind, fname = hdr.split(" ", 2)
+        except (UnicodeError, ValueError):
+            raise SealError("not a sealed file")
+        if (not raw.endswith(b"\n") or magic != MAGIC or fkind not in KINDS
+                or (kind is not None and kind != fkind)
+                or (name is not None and name != fname)):
+            raise SealError("unexpected sealed header")
+        budget = bounded.HISTORY_BYTES - len(raw)
+        lines = bounded.newest_lines(f, len(raw), budget) if newest else bounded.oldest_lines(f, budget)
+        for line in lines:
+            if line is None:
+                yield None
+            elif line.strip():
+                try:
+                    yield open_line(dk, hdr, line)
+                except SealError:
+                    yield False
+
+
+def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
+    """Newest whole authenticated records within the byte/work ceiling.
+    The output cap counts plaintext bytes, with at least one fitting input
+    record even when it exceeds max_chars, as before."""
+    out, total = [], 0
+    for rec in newest_sealed_records(path, dk, kind, name):
+        if rec is False:
             continue
-        if out and total + len(rec) > max_chars:
+        if rec is None or (out and total + len(rec) > max_chars):
             break
         out.append(rec)
         total += len(rec)

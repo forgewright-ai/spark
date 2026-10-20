@@ -125,6 +125,7 @@ NOT_IN_GATE = (
     ("audition.py", "needs a live model"),
     ("line_audition.py", "needs a live model; smoke.py runs its selftest"),
     ("forge_probe.py", "asks a live server"),
+    ("context_bench.py", "manual synthetic context scaling measurements"),
     ("check_selftest.py", "an entry to spark check --selftest, which the gate runs"),
 )
 # who may name a test file: nobody but the gate. The hooks and ci.yml

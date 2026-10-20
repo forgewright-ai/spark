@@ -835,6 +835,173 @@ def test_state_files_private():
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_bounded_context():
+    """Synthetic files and sealed turns: cap work before decoding or parsing."""
+    import contextlib
+    import io
+    import json
+    import subprocess
+    from unittest import mock
+    from spark import bounded, forge
+
+    reads = []
+    real_regular = bounded.regular
+
+    class Meter:
+        def __init__(self, f):
+            self.f = f
+
+        def __getattr__(self, key):
+            return getattr(self.f, key)
+
+        def read(self, n=-1):
+            assert n >= 0, "context read must have a byte limit"
+            out = self.f.read(n)
+            reads.append(len(out))
+            return out
+
+        def readline(self, n=-1):
+            assert n >= 0, "context line read must have a byte limit"
+            out = self.f.readline(n)
+            reads.append(len(out))
+            return out
+
+    @contextlib.contextmanager
+    def measured(path):
+        with real_regular(path) as f:
+            yield Meter(f)
+
+    with tempfile.TemporaryDirectory(dir=HOME) as d, mock.patch.object(bounded, "regular", measured):
+        path = os.path.join(d, "source.txt")
+        for size in (40000, 64000, 64001, 4_000_000):
+            for unit in (b"a", "\U0001f680".encode(), b"a\xff\xf0\x9f"):
+                data = (unit * (size // len(unit) + 1))[:size]
+                with open(path, "wb") as f:
+                    f.write(data)
+                reads.clear()
+                got = forge.read_file(path)
+                text = data.decode("utf-8", errors="replace")
+                expected = forge.clip(text) if size <= 64000 else text[:4000] + "\n[... middle cut ...]\n" + text[-12000:]
+                check("bounded file preserves Unicode edges (%d bytes)" % size, got == expected, True)
+                check("file read stays within 64003 bytes", sum(reads) <= 64003, True)
+        with open(path, "wb") as f:
+            f.write(b"binary\0source")
+        refuse("binary reference refused", lambda: forge.read_file(path), forge.RefError)
+        refuse("directory reference refused", lambda: forge.read_file(d), forge.RefError)
+        # Truncation between stat and read remains finite; atomic replacement
+        # after open keeps the descriptor on the original complete file.
+        with open(path, "wb") as f:
+            f.write(b"a" * 100000)
+        with real_regular(path) as opened:
+            os.replace(path, path + ".old")
+            with open(path, "wb") as f:
+                f.write(b"replacement")
+            check("opened inode survives atomic replacement", opened.read(3), b"aaa")
+            os.truncate(path + ".old", 0)
+            check("truncated descriptor ends", list(bounded.newest_lines(opened)), [])
+
+        dk, tid = vault.new_key(), "context-test"
+        st = forge.Store(d, dk)
+        sealed = st._path(tid)
+        hdr = vault.header("thread", tid)
+
+        def rec(role, text, **extra):
+            return vault.seal_line(dk, hdr, json.dumps(dict(role=role, text=text, **extra), ensure_ascii=False).encode()).encode() + b"\n"
+
+        crlf = hdr.encode() + b"\n" + rec("user", "windows") + rec("assistant", "ok")
+        with open(sealed, "wb") as f:
+            f.write(crlf.replace(b"\n", b"\r\n"))
+        check("CRLF keeps canonical authenticated header", [m["content"] for m in st.history(tid)], ["windows", "ok"])
+
+        pair = rec("user", "\U0001f680" * 5000, text_sha="fixture") + rec("assistant", "reply" * 1000)
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + pair * 100)
+        reads.clear()
+        calls = []
+        real_open = vault.open_line
+
+        def counted(*args):
+            calls.append(1)
+            return real_open(*args)
+
+        with mock.patch.object(vault, "open_line", counted):
+            got = st.history(tid)
+        check("history preserves newest complete pairs", [m["role"] for m in got], ["user", "assistant"] * 2)
+        check("history decrypts only the needed boundary", len(calls), 6)
+        check("history read bounded including header", sum(reads) <= bounded.HISTORY_BYTES, True)
+        reads.clear()
+        with mock.patch.object(forge, "local_store", lambda: st):
+            check("same_text stops at first user", forge.same_text(tid, "fixture"), True)
+        check("first-message comparison reads only its prefix", sum(reads) < 40000, True)
+
+        # A giant malformed line cannot force allocation/decryption past the
+        # window. Its following orphan assistant is left out with it.
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + b"x" * 2_000_000 + b"\n" + rec("assistant", "orphan") + rec("user", "new") + rec("assistant", "answer"))
+        reads.clear()
+        check("giant first record still marks a written thread", st.last_thread(), tid)
+        check("written check stops at first nonblank chunk", sum(reads) < bounded.BLOCK + bounded.HEADER_BYTES, True)
+        reads.clear()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            got = st.history(tid)
+        check("cut prefix cannot expose orphan answer", [m["content"] for m in got], ["new", "answer"])
+        check("cut prefix is reported without source", err.getvalue(), "! older thread context omitted -- input limit reached\n")
+        check("giant line read bounded", sum(reads) <= bounded.HISTORY_BYTES, True)
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + rec("user", "before") + b"broken\n")
+            for payload in (b"\xff", b"null", b"[" * 2000 + b"]" * 2000):
+                f.write(vault.seal_line(dk, hdr, payload).encode() + b"\n")
+            f.write(rec("assistant", "after").rstrip(b"\n"))
+        with contextlib.redirect_stderr(io.StringIO()):
+            got = st.history(tid)
+        check("bad records skipped; authenticated final line retained", [m["content"] for m in got], ["before", "after"])
+        # A valid base64 record with a changed ciphertext fails its tag.
+        # A following append isolates a torn line and keeps the next turn.
+        intact = rec("assistant", "damaged")
+        flipped = intact[:20] + (b"A" if intact[20:21] != b"A" else b"B") + intact[21:]
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + rec("user", "before") + flipped + intact[:30])
+        vault.append_sealed(sealed, dk, "thread", tid, b'{"role":"assistant","text":"recovered"}')
+        with contextlib.redirect_stderr(io.StringIO()):
+            got = st.history(tid)
+        check("bounded reader skips tag failure and torn append", [m["content"] for m in got], ["before", "recovered"])
+        # Empty content cannot keep selection running past its byte budget.
+        empty_pair = rec("user", "") + rec("assistant", "")
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + empty_pair * (2_000_000 // len(empty_pair)))
+        reads.clear()
+        with contextlib.redirect_stderr(io.StringIO()):
+            got = st.history(tid)
+        check("empty messages still obey input budget", sum(reads) <= bounded.HISTORY_BYTES, True)
+        check("empty history tail starts with a user", got[0]["role"] if got else None, "user")
+        with open(sealed, "wb") as f:
+            f.write(hdr.encode() + b"\n" + b" \n" * 1_000_000 + rec("user", "new"))
+        reads.clear()
+        with contextlib.redirect_stderr(io.StringIO()):
+            got = st.history(tid)
+        check("whitespace scanning obeys input budget", sum(reads) <= bounded.HISTORY_BYTES, True)
+        check("whitespace leaves newest user intact", [m["content"] for m in got], ["new"])
+        refuse("wrong bounded AAD refused", lambda: list(vault.newest_sealed_records(sealed, dk, "thread", "other")))
+        with open(sealed, "wb") as f:
+            f.write(b"x" * 100000)
+        reads.clear()
+        with contextlib.redirect_stderr(io.StringIO()):
+            check("oversized header refused", st.history(tid), [])
+        check("header allocation bounded", sum(reads), bounded.HEADER_BYTES)
+
+        # A process deadline proves opening a FIFO never waits for a writer.
+        fifo = os.path.join(d, "pipe")
+        os.mkfifo(fifo)
+        code = "from spark import forge; import sys\ntry: forge.read_file(sys.argv[1])\nexcept forge.RefError: sys.exit(0)\nsys.exit(1)"
+        env = dict(os.environ, PYTHONPATH=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "lib")))
+        result = subprocess.run([sys.executable, "-c", code, fifo], env=env, timeout=3, capture_output=True)
+        check("FIFO refuses promptly", result.returncode, 0)
+        os.symlink(fifo, fifo + "-link")
+        refuse("FIFO symlink refused on opened inode", lambda: forge.read_file(fifo + "-link"), forge.RefError)
+        refuse("device refused", lambda: forge.read_file(os.devnull), forge.RefError)
+
+
 def main():
     test_block_2_3_2()
     test_stream_2_4_2()
@@ -858,6 +1025,7 @@ def main():
     test_claim_never_seals_over()
     test_state_files_private()
     test_fails_index_redacts()
+    test_bounded_context()
     test_throughput_floor()
     if FAILED:
         print("%d failed" % FAILED)

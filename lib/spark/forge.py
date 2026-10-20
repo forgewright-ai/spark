@@ -30,7 +30,7 @@ import sys
 import time
 from contextlib import contextmanager
 
-from . import THREADS_DIR, log_exc, paint, state_dir, vault
+from . import THREADS_DIR, bounded, log_exc, paint, state_dir, vault
 from . import look, memory, persona, soul
 from . import text as textmod
 
@@ -114,9 +114,19 @@ def _written(path):
     alone is a thread made and not yet written: a first turn that
     failed, or a thread a program made over the API."""
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            f.readline()
-            return any(line.strip() for line in f)
+        with bounded.regular(path) as f:
+            head = f.readline(bounded.HEADER_BYTES)
+            if not head.endswith(b"\n"):
+                return False
+            left = bounded.HISTORY_BYTES - len(head)
+            while left:
+                chunk = f.read(min(bounded.BLOCK, left))
+                if chunk.strip():
+                    return True
+                if not chunk:
+                    break
+                left -= len(chunk)
+            return False
     except OSError:
         return False
 
@@ -314,14 +324,49 @@ class Store:
         pairs dropped until at most HISTORY_MAX_CHARS remain."""
         if not tid:
             return []
-        msgs = [{"role": m["role"], "content": m["text"]}
-                for m in self.load(tid) if m["role"] in ("user", "assistant")]
-        total = sum(len(m["content"]) for m in msgs)
-        while msgs and total > HISTORY_MAX_CHARS:
-            total -= len(msgs.pop(0)["content"])
-            if msgs and msgs[0]["role"] == "assistant":
-                total -= len(msgs.pop(0)["content"])
-        return msgs
+        msgs, total, bad, cut = [], 0, 0, False
+        try:
+            for rec in vault.newest_sealed_records(self._path(tid), self.dk, "thread", tid):
+                if rec is None:
+                    cut = True
+                    break
+                if rec is False:
+                    bad += 1
+                    continue
+                try:
+                    m = json.loads(rec.decode("utf-8"))
+                except (ValueError, RecursionError):
+                    bad += 1
+                    continue
+                if not isinstance(m, dict) or m.get("role") not in ("user", "assistant") or not isinstance(m.get("text"), str):
+                    continue
+                msgs.append({"role": m["role"], "content": m["text"]})
+                total += len(m["text"])
+                # Include the user at the boundary so trimming drops its
+                # answer with it, just as the whole-thread reader did.
+                if total > HISTORY_MAX_CHARS and m["role"] == "user":
+                    break
+        except vault.SealError:
+            self.refused = getattr(self, "refused", 0) + 1
+            log_exc("thread %s refused" % tid)
+            return []
+        except OSError:
+            return []
+        msgs.reverse()
+        first = 0
+        while first < len(msgs) and total > HISTORY_MAX_CHARS:
+            total -= len(msgs[first]["content"])
+            first += 1
+            if first < len(msgs) and msgs[first]["role"] == "assistant":
+                total -= len(msgs[first]["content"])
+                first += 1
+        if cut:
+            while first < len(msgs) and msgs[first]["role"] == "assistant":
+                first += 1
+            print("! older thread context omitted -- input limit reached", file=sys.stderr)
+        if bad:
+            skipped_line(self._path(tid), tid, bad)
+        return msgs[first:]
 
     def pick(self, cfg, more):
         if cfg.history <= 0:
@@ -662,8 +707,24 @@ def same_text(tid, sha):
     sha. The rule every grounded contract's --thread follows: the same
     text again rides as the words alone, a changed one is sent again,
     labelled as it is now."""
-    first = next((m for m in load(tid) if m.get("role") == "user"), {})
-    return first.get("text_sha") == sha
+    st = local_store()
+    if not tid or not isinstance(st, Store):
+        return False
+    try:
+        for rec in vault.newest_sealed_records(st._path(tid), st.dk, "thread", tid, newest=False):
+            if rec is None:
+                return False
+            if rec is False:
+                continue
+            try:
+                m = json.loads(rec.decode("utf-8"))
+            except (ValueError, RecursionError):
+                continue
+            if isinstance(m, dict) and m.get("role") == "user" and isinstance(m.get("text"), str):
+                return m.get("text_sha") == sha
+    except (OSError, vault.SealError):
+        pass
+    return False
 
 
 def pick(cfg, more):
@@ -883,8 +944,33 @@ def refs(words):
 
 def read_file(name, cwd=""):
     """The text of one @FILE, relative to cwd (~ expanded): at most FILE_MAX
-    chars, the middle cut. Refuses a directory, a missing file, a binary."""
-    return clip(file_text(name, cwd))
+    chars, the middle cut. Reads at most 4 * FILE_MAX + 3 bytes; only a
+    regular file is accepted. The cut count is exact through 4 * FILE_MAX
+    input bytes, otherwise the marker says the middle was cut."""
+    path = os.path.expanduser(name)
+    if not os.path.isabs(path) and cwd:
+        path = os.path.join(cwd, path)
+    if os.path.isdir(path):
+        raise RefError("@%s is a directory -- name a file" % name)
+    try:
+        with bounded.regular(path) as f:
+            size = os.fstat(f.fileno()).st_size
+            head = f.read(4 * FILE_MAX if size <= 4 * FILE_MAX else 4 * FILE_HEAD)
+            if b"\0" in head[:8192]:
+                raise RefError("@%s is not a text file" % name)
+            if size <= 4 * FILE_MAX:
+                return clip(head.decode("utf-8", errors="replace"))
+            f.seek(max(len(head), size - 4 * FILE_TAIL - 3))
+            tail = f.read(4 * FILE_TAIL + 3)
+            # Three extra bytes put a split UTF-8 character outside the
+            # kept tail. Counting omitted chars would scan the whole file.
+            return (head.decode("utf-8", errors="replace")[:FILE_HEAD]
+                    + "\n[... middle cut ...]\n"
+                    + tail.decode("utf-8", errors="replace")[-FILE_TAIL:])
+    except FileNotFoundError:
+        raise RefError("@%s: no such file" % name)
+    except OSError as e:
+        raise RefError("@%s: %s" % (name, e.strerror or e))
 
 
 def file_text(name, cwd=""):
@@ -897,7 +983,7 @@ def file_text(name, cwd=""):
     if os.path.isdir(path):
         raise RefError("@%s is a directory -- name a file" % name)
     try:
-        with open(path, "rb") as f:
+        with bounded.regular(path) as f:
             head = f.read(8192)
             if b"\0" in head:
                 raise RefError("@%s is not a text file" % name)
