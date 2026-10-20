@@ -60,7 +60,7 @@ _spark() {
             bar)     comp=(line) ;;
             check)   comp=(--all --history --watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
-            serve)   comp=(on off boot share status --login --audit) ;;
+            serve)   comp=(on off boot share https status --login --audit) ;;
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
@@ -68,7 +68,7 @@ _spark() {
             ver)     comp=(--credits --sbom) ;;
             stats)   comp=(--week --all --sends --porcelain) ;;
             clear)   comp=(--history) ;;
-            client)  comp=(off status --key-file) ;;
+            client)  comp=(off status --key-file --ca --pin) ;;
             setup)   comp=(--yes --model --engine --name --user --no-serve) ;;
             user)    comp=(list add remove login logout token claim status) ;;
             mcp)     comp=(add rm trust call read status ${(f)"$(_spark_mcp_names)"}) ;;

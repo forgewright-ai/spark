@@ -16,8 +16,10 @@
 import http.client
 import json
 import os
+import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -55,11 +57,22 @@ def free_port():
     return p
 
 
+TLS_CTX = None            # set for the pass over TLS: the scratch root is the one anchor
+
+
+def conn(u, timeout=30):
+    """An HTTP connection to the split url, or an HTTPS one verifying
+    against TLS_CTX when the url says https."""
+    if u.scheme == "https":
+        return http.client.HTTPSConnection(u.hostname, u.port, timeout=timeout, context=TLS_CTX)
+    return http.client.HTTPConnection(u.hostname, u.port, timeout=timeout)
+
+
 def probe(url, method, path, bearer="", body=None):
     """(status, parsed body or None). A stream (SSE) answers its headers
     and goes on: only the status is read there, and the socket closed."""
     u = urllib.parse.urlsplit(url)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
+    c = conn(u)
     h = {}
     if bearer:
         h["Authorization"] = "Bearer " + bearer
@@ -86,7 +99,7 @@ def probe(url, method, path, bearer="", body=None):
 def raw(url, method, path, data=None, headers=None):
     """(status, headers, bytes) for a body sent as given, never re-encoded."""
     u = urllib.parse.urlsplit(url)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
+    c = conn(u)
     h = {"X-Spark": "1", "Content-Type": "application/json"} if method == "POST" else {}
     h.update(headers or {})
     try:
@@ -174,12 +187,14 @@ def main():
 
             ok(len(forgeserve.ROUTES) >= 30 and set(forgeserve.ROUTES.values()) == {"none", "user", "admin"},
                "ROUTES: %d rows, the three roles" % len(forgeserve.ROUTES))
+            bare_codes = {}             # what each row answers nobody: the pass over TLS must agree
             for (method, pattern), role in sorted(forgeserve.ROUTES.items()):
                 path = FILL.get(pattern, pattern)
                 body = BODIES.get(pattern)
                 if pattern == "/api/login":
                     # the login's own gate: the credential is the body
                     bare = probe(url, method, path, body={})[0]
+                    bare_codes[(method, pattern)] = bare
                     as_user = probe(url, method, path, body={"token": user})[0]
                     as_admin = probe(url, method, path, body={"token": admin})[0]
                     ok(bare == 401 and as_user == 200 and as_admin == 200,
@@ -187,6 +202,7 @@ def main():
                        (bare, as_user, as_admin))
                     continue
                 bare, _ = probe(url, method, path, body=body)
+                bare_codes[(method, pattern)] = bare
                 as_user, ubody = probe(url, method, path, user, body)
                 as_admin, abody = probe(url, method, path, admin, body)
                 if pattern == "/api/user/token":
@@ -375,6 +391,66 @@ def main():
             except subprocess.TimeoutExpired:
                 p.kill()
                 ok(False, "foreground forge ignored SIGTERM")
+        # v1.91: the same table over TLS. A scratch pair from the openssl
+        # binary (skipped with a notice where there is none); every row as
+        # nobody answers what it answered over plain HTTP, the off-table
+        # requests are the same 404, and the two gates only TLS has hold: the
+        # listener changes the wire, never the policy
+        global TLS_CTX
+        exe = shutil.which("openssl")
+        if not exe:
+            print("  skip the route table over TLS   (no openssl binary here)")
+        else:
+            d = os.path.join(home, "pair")
+            smoke.mint_pair(exe, d, {"leaf": (["fixture.local"], ["127.0.0.1"])}, ["fixture.local"])
+            tport = free_port()
+            turl = "https://127.0.0.1:%d" % tport
+            tenv = dict(env, SPARK_FORGE_PORT=str(tport), SPARK_FORGE_CERT=os.path.join(d, "leaf.crt"),
+                        SPARK_FORGE_KEY=os.path.join(d, "leaf.key"))
+            TLS_CTX = ssl.create_default_context(cafile=os.path.join(d, "root.crt"))
+            p = subprocess.Popen([sys.executable, SPARK, "forge", "--foreground"], env=tenv,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            deadline = time.time() + 20
+            st = 0
+            while time.time() < deadline and st != 200:
+                try:
+                    st, _ = probe(turl, "GET", "/api/health")
+                except OSError:
+                    st = 0
+                if st != 200:
+                    time.sleep(0.3)
+            try:
+                ok(st == 200, "--foreground answers /api/health over TLS")
+                if st != 200:
+                    print(p.communicate()[0][-2000:])
+                else:
+                    for (method, pattern), role in sorted(forgeserve.ROUTES.items()):
+                        path = FILL.get(pattern, pattern)
+                        body = {} if pattern == "/api/login" else BODIES.get(pattern)
+                        got = probe(turl, method, path, body=body)[0]
+                        ok(got == bare_codes.get((method, pattern)), "%s %s over TLS answers nobody as over HTTP (%s)" % (method, pattern, got),
+                           (got, bare_codes.get((method, pattern))))
+                    for method, path in (("GET", "/api/nope"), ("HEAD", "/"), ("OPTIONS", "*"), ("POST", "/api/health")):
+                        st, hd, body = raw(turl, method, path)
+                        ok(st == 404 and (hd.get("Content-Type") or "").startswith("application/json"),
+                           "%s %s over TLS is off the table: 404" % (method, path), st)
+                    admin = open(state + "/forge-token").read().strip()
+                    st, hd, _ = raw(turl, "POST", "/api/login", json.dumps({"token": admin}).encode(), {"Origin": turl})
+                    ok(st == 200 and "; Secure" in hd.get("Set-Cookie", ""), "login over TLS with its own origin: 200, a Secure cookie", (st, hd.get("Set-Cookie", "")[-30:]))
+                    st, _, _ = raw(turl, "POST", "/api/login", json.dumps({"token": admin}).encode(), {"Origin": "http://127.0.0.1:%d" % tport})
+                    ok(st == 403, "an http Origin on the https page is refused (403)", st)
+                    st, hd, _ = raw(turl, "GET", "/", headers={"Host": "fixture.local:%d" % tport})
+                    ok(st == 200 and hd.get("Strict-Transport-Security") == "max-age=604800", "a name the certificate carries: served, HSTS one week", (st, hd.get("Strict-Transport-Security")))
+                    st, hd, _ = raw(turl, "GET", "/")
+                    ok(st == 200 and "Strict-Transport-Security" not in hd, "by address: no HSTS", (st, hd.get("Strict-Transport-Security")))
+            finally:
+                TLS_CTX = None
+                p.send_signal(signal.SIGTERM)
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    ok(False, "foreground forge over TLS ignored SIGTERM")
     stub.shutdown()
     print("policy_test: %s" % ("all ok" if not fails else "%d FAILED" % fails))
     return 1 if fails else 0

@@ -109,6 +109,9 @@ THE SERVER AND OTHER MACHINES
   spark serve --login             the page's address and login, QR for a phone
   spark serve --login --new       a new admin token. Old logins end
   spark serve --audit [N]         what the admin did
+  spark serve https               the page's certificate, who must trust it
+  spark serve https CERT KEY      serve the page with your pair (--name HOST)
+  spark serve https own | off     a pair of this machine's; or plain http again
   spark user [list]               the users here
   spark user add NAME             add a user. The token shows once
   spark user remove NAME          delete a user and their data (asks)
@@ -117,8 +120,9 @@ THE SERVER AND OTHER MACHINES
   spark user claim                move older chats into your account
   spark client [URL|off]          another machine's model; off: your own again
   spark client URL --key-file F   use your own llama-server, its key in F
-  Traffic between machines is plain HTTP. The admin token can run any
-  command on the machine.
+  spark client URL --pin FP       trust that page's certificate (or --ca FILE)
+  Traffic between machines is plain HTTP unless the page has a certificate.
+  The admin token can run any command on the machine.
 
 THE PAGE (open the address spark serve --login prints)
   1..5                            chat, activity, do, settings, help

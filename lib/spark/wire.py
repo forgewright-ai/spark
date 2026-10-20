@@ -14,6 +14,7 @@ import urllib.request
 
 from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, SHARE_TOKEN, STATE_DIR, debug, forge_url, run, state_dir
 from . import text as textmod
+from . import tls
 
 HEALTH_TIMEOUT = 2.0
 CACHE_TTL = 60
@@ -70,8 +71,10 @@ class _OriginRedirect(urllib.request.HTTPRedirectHandler):
 
 # Installed once, on the opener every urlopen in the process uses (cli
 # imports wire): no call site has to remember. A request without a
-# bearer keeps urllib's own rules.
-urllib.request.install_opener(urllib.request.build_opener(_OriginRedirect()))
+# bearer keeps urllib's own rules. The trust handler is spark's https:
+# the system store plus SPARK_CA_FILE and the roots saved for a host,
+# and a pinned connection where a host's saved file is a leaf (tls.py).
+urllib.request.install_opener(urllib.request.build_opener(_OriginRedirect(), tls.HANDLER))
 
 
 # ------------------------------------------------------------------ token

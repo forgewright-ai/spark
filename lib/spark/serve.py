@@ -22,6 +22,11 @@ USAGE = """%s serve -- serve the model and the page on your network
   spark serve off --force     also stop an engine spark did not start
   spark serve boot [on|off]   up from boot, nobody logged in, never asleep
   spark serve share [on|off]  one model for every user here (Linux)
+  spark serve https           the page's certificate, who must trust it
+  spark serve https CERT KEY  serve the page over https with your pair
+                              (--name HOST: the name in its links)
+  spark serve https own       a certificate of this machine's own, for home
+  spark serve https off       plain http again
   spark serve --login         the page's address and the admin login
                               (--no-qr; --show-token when piped)
   spark serve --login --new   a new admin token; old logins end
@@ -435,7 +440,8 @@ def cmd_show():
         return 0
     engine_is = {"ok": "serving at %s" % url, "loading": "loading at %s" % url}.get(st, "not running")
     say("  %-8s %s (%s)" % ("engine", engine_is, UNIT_WORD[units[0]]))
-    page_is = ("%s/login" % furl) if isinstance(fh, dict) else "not running"
+    from . import forgeserve
+    page_is = ("%s/login" % forgeserve.link_url(cfg, furl)) if isinstance(fh, dict) else "not running"
     say("  %-8s %s (%s)" % ("page", page_is, UNIT_WORD[units[1]]))
     tok = cfg.forge_token_file
     if os.path.exists(tok):
@@ -526,8 +532,9 @@ def cmd_off(args):
 
 def main(sub, args):
     """`spark serve` alone shows; `on` and `off` are the only switch words
-    (the grammar); boot and share are its two machine choices, --login and
-    --audit the page's; --foreground and --warm-when-up are the unit's."""
+    (the grammar); boot, share and https are its machine choices, --login
+    and --audit the page's; --foreground and --warm-when-up are the
+    unit's."""
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
@@ -546,6 +553,8 @@ def main(sub, args):
     from . import forgeserve
     if word == "--login":
         return forgeserve.cmd_login(rest)
+    if word == "https":
+        return forgeserve.cmd_https(rest)
     if word == "--print-client":                     # an older spelling: the login's client half
         return forgeserve.cmd_print_client(rest)
     if word == "--audit":

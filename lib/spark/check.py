@@ -835,6 +835,59 @@ def row_hardening(ctx):
     return ok("%d of %d safety checks pass at %s" % (len(held), len(gates), where))
 
 
+@row("CAPABILITY", fixture=False, reason="needs a served certificate; tests/forge_smoke.py proves it over a scratch pair")
+def row_https(ctx):
+    """The page over TLS: the pair spark.env names reads and is private,
+    the page serves that very pair and this machine trusts it, and it
+    has more than 14 days to live. In own mode the timer's run mints the
+    leaf again tls.RENEW_DAYS before its end, and the listener's reload
+    picks it up. On a client: whether this machine trusts the other
+    machine's page. na for plain HTTP; a problem is a warn with its
+    remedy, never a fail."""
+    from . import forge_url, tls
+    cfg = ctx.cfg
+    if cfg.client:
+        peer = cfg.peer_ai_url
+        if not peer.startswith("https://"):
+            return na("the other machine's page is plain http")
+        host = peer.split("//")[-1].rstrip("/")
+        err = tls.verify_error(peer)
+        if err is None:
+            return na("%s does not answer" % host)
+        if err:
+            return warn("%s is not trusted here: %s" % (host, err),
+                        "spark client %s --pin FINGERPRINT (spark serve --login there shows it), or --ca FILE" % peer)
+        pc = tls.peer_certificate(peer)
+        days = int(tls.days_left(pc[1])) if pc and pc[1]["not_after"] else -1
+        return ok("%s trusted%s" % (host, ", %d days left" % days if days >= 0 else ""))
+    if not cfg.forge_cert:
+        return na("plain http", "spark serve https CERT KEY, or spark serve https own")
+    own = tls.is_own(cfg.forge_cert)
+    again = "spark serve https own" if own else "spark serve https CERT KEY"
+    try:
+        info = tls.check_pair(cfg.forge_cert, cfg.forge_key)
+    except tls.TlsError as e:
+        return warn(str(e), again)
+    renewed = ""
+    if own and ctx.unattended and tls.renew_due():
+        try:
+            info = tls.mint_leaf(info["dns"], info["ips"], cfg.name or "spark")
+            renewed = ", renewed today"
+        except tls.TlsError as e:
+            return warn("the certificate ends in %d days and did not renew: %s" % (tls.days_left(info), e), again)
+    days = int(tls.days_left(info))
+    names = ", ".join(info["dns"] + info["ips"]) or "no name"
+    url = forge_url()
+    if url.startswith("https://"):
+        err = tls.verify_error(url)
+        if err:
+            return warn("the page at %s does not serve this pair: %s" % (url.split("//")[-1], err), _page_restart(ctx))
+    if days < 14:
+        return warn("%s ends in %d days" % (names, days),
+                    "spark check from the timer renews it; %s mints it now" % again if own else "%s with the renewed pair" % again)
+    return ok("%s, %d days left%s%s" % (names, days, renewed, ", the root on each device" if own else ""))
+
+
 @row("CAPABILITY", fixture=False, reason="runs one real sandboxed step (bwrap or sandbox-exec); tests/sandbox_test.py proves it")
 def row_sandbox(ctx):
     """spark do --sandbox's containment, proven by one real step

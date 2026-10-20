@@ -328,7 +328,60 @@ CLIENT_USAGE = """%s client -- use another machine's model
 
   to log in: spark user add NAME there, then spark user login NAME here
   your own llama-server: spark client URL [--key-file FILE]
+  a page over https: --pin FINGERPRINT (spark serve --login there shows
+  it) pins its certificate, or --ca FILE trusts the people who issued it
 """ % MARK
+
+
+def _trust(url, ca_file, pin):
+    """What `spark client URL --ca FILE` and `--pin FINGERPRINT` save
+    under ~/.config/spark/trust/, one file a host: the file given, or
+    the page's own certificate when the fingerprint is its sha256, or
+    the root the page's trust listener serves when the fingerprint is
+    the root's. 0 when saved; 2, with the reason, when nothing matched.
+    Trust is typed, never assumed: nothing is saved without a match."""
+    import ssl
+    import urllib.request
+    from . import tls
+    host = urlsplit(url).hostname or url
+    port = urlsplit(url).port or 443
+    if ca_file is not None:
+        try:
+            with open(ca_file, encoding="utf-8", errors="replace") as f:
+                path = tls.save_trust(host, f.read())
+        except (OSError, tls.TlsError) as e:
+            say("%s client -- %s" % (MARK, e))
+            return 2
+        tls.HANDLER.refresh()
+        say("* trust    %s saved for %s" % (path.replace(os.path.expanduser("~"), "~"), host))
+        return 0
+    pc = tls.peer_certificate(url)
+    if pc and tls.same_pin(pc[0], pin):
+        tls.save_trust(host, ssl.DER_cert_to_PEM_cert(pc[0]))
+        tls.HANDLER.refresh()
+        say("* trust    the page's certificate is pinned for %s" % host)
+        return 0
+    root_url = "http://%s:%d/ca" % (host, port + tls.TRUST_PORT_OFFSET)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(root_url), timeout=5) as r:
+            der = r.read(65536)
+    except (OSError, ValueError):
+        der = b""
+    if der and tls.same_pin(der, pin):
+        try:
+            tls.read_der(der)
+            tls.save_trust(host, ssl.DER_cert_to_PEM_cert(der))
+        except (tls.TlsError, ValueError) as e:
+            say("%s client -- the root at %s does not read: %s" % (MARK, root_url, e))
+            return 2
+        tls.HANDLER.refresh()
+        say("* trust    the root of %s is saved; its pages verify by name" % host)
+        return 0
+    say("%s client -- the fingerprint matches neither the certificate at %s nor a root at %s" % (MARK, host, root_url))
+    if pc:
+        say("  the page's certificate is %s" % tls.fingerprint(pc[0]))
+    say("  compare with spark serve --login there")
+    return 2
 
 
 def cmd_client(args):
@@ -389,6 +442,9 @@ def cmd_client(args):
             say("%s client -- another server holds port %d -- stop it, or set SPARK_PORT" % (MARK, cfg.port))
             return 2
         say("* this machine runs its own model now")
+        from . import tls
+        if tls.forget_trust(urlsplit(cfg.peer_ai_url or "").hostname or "-"):
+            say("* the certificate trusted for the other machine is forgotten")
         set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
         wire.forget_peer()
         # a joiner's shared token, the key file of the user's own engine
@@ -416,13 +472,49 @@ def cmd_client(args):
                 or re.search(r"[;`$()|&<>]", key_file)):
             say("%s client -- no file to read at %s -- --key-file FILE holds the key" % (MARK, given or "FILE"))
             return 2
+    ca_file = pin = None
+    for flag in ("--ca", "--pin"):
+        if flag in args:
+            i = args.index(flag)
+            given = args[i + 1] if i + 1 < len(args) else ""
+            args = args[:i] + args[i + 2:]
+            if flag == "--ca":
+                ca_file = os.path.abspath(os.path.expanduser(given)) if given else ""
+                if not ca_file or not os.path.isfile(ca_file) or not os.access(ca_file, os.R_OK):
+                    say("%s client -- no file to read at %s -- --ca FILE holds the certificate" % (MARK, given or "FILE"))
+                    return 2
+            else:
+                from . import tls
+                pin = tls.normal_pin(given)
+                if not pin:
+                    say("%s client -- --pin takes the sha256 fingerprint spark serve --login shows there" % MARK)
+                    return 2
     if len(args) != 1:
         say(CLIENT_USAGE.rstrip())
         return 2
     url = args[0].rstrip("/")
     if not CLIENT_URL.match(url):
-        say("%s client -- URL is http://host:port (spark serve --login there shows it)" % MARK)
+        say("%s client -- URL is http://host:port or https://host:port (spark serve --login there shows it)" % MARK)
         return 2
+    if ca_file is not None or pin is not None:
+        if not url.startswith("https://"):
+            say("%s client -- --ca and --pin are for a page over https; %s is plain http" % (MARK, url))
+            return 2
+        rc = _trust(url, ca_file, pin)
+        if rc:
+            return rc
+    if url.startswith("https://"):
+        from . import tls
+        why = tls.verify_error(url)
+        if why:
+            host = urlsplit(url).hostname or url
+            say("%s client -- the certificate at %s is not trusted here: %s" % (MARK, host, why))
+            pc = tls.peer_certificate(url)
+            if pc:
+                say("  sha256   %s" % tls.fingerprint(pc[0]))
+                say("  compare it with spark serve --login there, then: spark client %s --pin FINGERPRINT" % url)
+            say("  or the file of the people who issued it: spark client %s --ca FILE" % url)
+            return 2
     from . import engine
     # spark's own engine as this machine ran it, read before the keys
     # change (a machine that served under a key file of its own)

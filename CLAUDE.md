@@ -344,6 +344,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 the first key read raw under libedit))
                 forgeserve (the page's server under spark serve: the API, the page;
                 ROUTES is the one table of every route and its role)
+                tls (the page over https: the certificate readers, the
+                listener's pair and its reload, a client's trust -- a CA
+                file, a saved root, a pinned leaf -- and the own root)
                 do (spark do: the one loop, a face per driver -- the terminal,
                 --porcelain (contract 15) -- the budget, the hold, the man excerpt)
                 intake grounding judge (the prompt line's knowledge, three
@@ -752,7 +755,18 @@ and may change freely.
      SPARK_HEIGHT SPARK_VOICE SPARK_VOICE_RATE SPARK_VOICE_DEVICE
      SPARK_HISTORY SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE
      SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT
-     SPARK_FORGE_TOKEN_FILE`.
+     SPARK_FORGE_TOKEN_FILE SPARK_FORGE_CERT SPARK_FORGE_KEY
+     SPARK_FORGE_NAME SPARK_CA_FILE`.
+     `SPARK_FORGE_CERT` and `SPARK_FORGE_KEY` are the page's
+     certificate pair, PEM files, the key 0600, both or neither: with
+     them the page serves https (`spark serve https`, contract 9).
+     `SPARK_FORGE_NAME` is the name in the page's links, the bind
+     address when unset. `SPARK_CA_FILE` is a PEM bundle trusted beside
+     the system store for every TLS connection spark makes. What `spark
+     client URL --ca FILE` and `--pin FINGERPRINT` save lives under
+     `~/.config/spark/trust/`, one file a host, 0600: a root verifies
+     that host by name, a leaf pins it. The pair `spark serve https
+     own` mints lives under `~/.local/state/spark/https/`.
      `SPARK_REVEAL_CPS` is optional: the reveal pace in characters a
      second (`spark reveal`).
      `SPARK_LOOK` is `auto`, `on` or `off`, `off` until `spark awaken`
@@ -1598,7 +1612,22 @@ and may change freely.
    when sent, one `Origin` whose scheme, host and port are the
    request's own (403). An API client may omit the `Origin`. A second
    `Host` or `Origin`, or one that does not parse, is refused, and a
-   forwarded header changes neither check. A `POST` there needs a JSON
+   forwarded header changes neither check. With a certificate pair
+   (contract 3) the listener is TLS: 1.2 or newer, one port and one
+   scheme, no plain listener beside it and no redirect. The pair is
+   read again when its files change, at most once a minute, with no
+   restart. A pair that does not load keeps the old one, and the
+   `https` row says so. The cookie carries `Secure` there, and every
+   answer to a Host that is a name carries `Strict-Transport-Security:
+   max-age=604800`, one week. The names the page answers to grow by
+   `SPARK_FORGE_NAME` and the certificate's DNS names. The links say
+   `SPARK_FORGE_NAME` when it is set, and `state/forge-url` keeps the
+   bound address. In own mode (`spark serve https own`) a second, plain
+   listener runs on the page's port plus one, with two routes and
+   nothing else. `GET /` says what to do, and `GET /ca` is the root in
+   DER (`application/x-x509-ca-cert`). No cookie, no token, 404 to
+   every other route and method. `lib/spark/tls.py` holds the readers,
+   the contexts, the trust and the minting. A `POST` there needs a JSON
    object body sent as
    `Content-Type: application/json` besides (415 otherwise). A `DELETE`
    carries no body. `POST /v1/chat/completions` takes the bearer only. A
@@ -2672,7 +2701,7 @@ ownership capability exits 77 with an explicit message; the full gate
 remains unsuccessful. Native CI must pass the real integrations before
 a change is ready.
 
-`spark check` has 41 rows today, by category `8 SOFTWARE, 23
+`spark check` has 42 rows today, by category `8 SOFTWARE, 24
 CAPABILITY, 10 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The good

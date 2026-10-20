@@ -82,12 +82,6 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
-/* host and mode gates: spark.js stamps host-web|host-tauri on body,
-   mode-raw when the upstream is a bare llama-server (chat only) */
-body:not(.host-tauri) .tauri { display: none !important; }
-.host-tauri .web { display: none !important; }
-.mode-raw .threads, .mode-raw .drawer-btn { display: none !important; }
-.mode-raw .chat { grid-template-columns: minmax(0, 1fr); }
 
 .skip { position: absolute; left: -999px; top: 0; background: var(--bg); padding: 0.3rem; z-index: 20; }
 .skip:focus { left: 0.5rem; }

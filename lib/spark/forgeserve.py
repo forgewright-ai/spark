@@ -20,6 +20,7 @@
 import fcntl
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -27,6 +28,7 @@ import secrets
 import select
 import signal
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -42,7 +44,7 @@ from . import (BAR_CACHE, CHECK_JSON, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                bind_check, config, confirm, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
                wait_ready)
-from . import engine, mem_total_gb, qr, wire
+from . import engine, mem_total_gb, qr, tls, wire
 from . import version as _version
 
 # resolved once, at daemon import: `spark forge` is a long-running process,
@@ -199,10 +201,11 @@ def same_token(a, b):
         return False
 
 
-def set_cookie(sid):
+def set_cookie(sid, secure=False):
     """The Set-Cookie value for a session id: HttpOnly, same-site, the
-    whole page, 90 days."""
-    return "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, sid, COOKIE_AGE)
+    whole page, 90 days; Secure when the page is served over TLS."""
+    return "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d%s" % (COOKIE, sid, COOKIE_AGE,
+                                                                     "; Secure" if secure else "")
 
 
 def http_origin(value):
@@ -468,10 +471,13 @@ class ForgeServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, addr, cfg, url):
+    def __init__(self, addr, cfg, url, served=None):
         ThreadingHTTPServer.__init__(self, addr, Handler)
         self._cfg, self._cfg_t, self.url = cfg, self._config_stamp(), url
         self.host, self.port = addr
+        self.served = served                    # tls.Served: the listener is TLS; None: plain HTTP
+        self.scheme = "https" if served else "http"
+        self._tls_t = 0.0                       # the last "tls" log line (a scanner is a flood)
         self.upstream = Upstream(cfg, url)
         self.generations = GenerationQueue()   # one generation at a time: the model is one
         self.run_lock = threading.Lock()       # one verb at a time
@@ -485,8 +491,43 @@ class ForgeServer(ThreadingHTTPServer):
         self._conns = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._refused_t = 0.0                   # the last "too many connections" log line
         self._streams = {}                      # (role, user) -> /api/events streams open
-        names = {self.host, "127.0.0.1", "localhost"} | own_hostnames() | {lan_ip()}
+        # the names the page answers to: its address, this machine's
+        # names, the name in its links and every name its certificate
+        # carries (a name the certificate names is a name the page is)
+        names = {self.host, "127.0.0.1", "localhost", cfg.forge_name} | own_hostnames() | {lan_ip()}
+        if served:
+            names |= set(served.names())
         self.hosts = {n.lower() for n in names if n} | {"%s:%d" % (n.lower(), self.port) for n in names if n}
+
+    def get_request(self):
+        """accept(), and under TLS the socket wrapped with the pair served
+        now (a renewed pair is picked up here). The handshake itself
+        waits for the connection's thread: never on the accept loop."""
+        sock, addr = self.socket.accept()
+        if self.served:
+            try:
+                sock = self.served.context().wrap_socket(sock, server_side=True, do_handshake_on_connect=False)
+            except (ssl.SSLError, OSError) as e:
+                sock.close()
+                raise OSError("tls: %s" % e)
+        return sock, addr
+
+    def _handshake(self, request, client_address):
+        """The TLS handshake, in the connection's own thread with a short
+        clock. A client that speaks no TLS, or another one, is closed
+        here and named in the log at most once in 10 s."""
+        try:
+            request.settimeout(10)
+            request.do_handshake()
+            request.settimeout(None)
+            return True
+        except (ssl.SSLError, OSError) as e:
+            now = time.time()
+            if now - self._tls_t > 10:
+                self._tls_t = now
+                log("%s tls: %s" % (client_address[0], getattr(e, "reason", None) or e))
+            self.shutdown_request(request)
+            return False
 
     def process_request(self, request, client_address):
         """A thread per connection, at most MAX_CONNECTIONS at once: one
@@ -496,9 +537,12 @@ class ForgeServer(ThreadingHTTPServer):
             body = b'{"error": {"kind": "busy", "hint": "too many connections; try again"}}'
             try:
                 request.settimeout(1)
-                request.sendall(b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\n"
-                                b"Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
-                                b"Retry-After: 5\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+                # under TLS the 503 would need a handshake first: a refused
+                # connection is closed unanswered instead
+                if not self.served:
+                    request.sendall(b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\n"
+                                    b"Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
+                                    b"Retry-After: 5\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
             except OSError:
                 pass
             now = time.time()
@@ -515,9 +559,21 @@ class ForgeServer(ThreadingHTTPServer):
 
     def process_request_thread(self, request, client_address):
         try:
+            if self.served and not self._handshake(request, client_address):
+                return
             ThreadingHTTPServer.process_request_thread(self, request, client_address)
         finally:
             self._conns.release()
+
+    def handle_error(self, request, client_address):
+        """A connection that dies before or between requests (a reset, a
+        broken pipe, a TLS record cut, a client gone quiet) is no error
+        worth a traceback: the stdlib would print one for each. Anything
+        else lands in the debug log, once, with its trace."""
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, ssl.SSLError, TimeoutError, socket.timeout)):
+            return
+        log_exc("forge %s" % client_address[0])
 
     def stream_open(self, who):
         """True, counted, when `who` holds fewer than EVENTS_PER_USER
@@ -713,7 +769,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(length))
         for k, v in (extra or {}).items():
             self.send_header(k, v)
+        if self.server.scheme == "https" and self._named_host():
+            # one week: enough to stick, short enough that `https off`
+            # strands no name for a year (browsers ignore it on an address)
+            self.send_header("Strict-Transport-Security", "max-age=%d" % tls.HSTS_SECONDS)
         self.end_headers()
+
+    def _named_host(self):
+        origin = http_origin("http://" + (self.headers.get("Host") or ""))
+        if not origin:
+            return False
+        try:
+            ipaddress.ip_address(origin[1])
+            return False
+        except ValueError:
+            return True
 
     def _json(self, code, obj, extra=None):
         data = json.dumps(obj).encode()
@@ -830,11 +900,12 @@ class Handler(BaseHTTPRequestHandler):
             return False
         origins = self.headers.get_all("Origin", [])
         if origins:
-            # This listener is plain HTTP. Forwarded and X-Forwarded-*
-            # are not evidence of TLS and never change this boundary.
-            expected = http_origin("http://" + self.headers["Host"])
+            # The scheme is the listener's own: https under TLS, http
+            # otherwise. Forwarded and X-Forwarded-* are not evidence of
+            # anything and never change this boundary.
+            expected = http_origin("%s://%s" % (self.server.scheme, self.headers["Host"]))
             if len(origins) != 1 or http_origin(origins[0]) != expected:
-                self._error(403, "forbidden", "Origin does not match this HTTP request")
+                self._error(403, "forbidden", "Origin does not match this %s request" % self.server.scheme.upper())
                 return False
         return True
 
@@ -1003,7 +1074,7 @@ class Handler(BaseHTTPRequestHandler):
         sid = self.server.new_session(role, given, uname, dk)
         log("%s login ok %s%s" % (ip, role, " " + uname if uname else ""))
         return self._json(200, {"ok": True, "name": self.server.cfg.name, "role": role, "user": uname},
-                          {"Set-Cookie": set_cookie(sid)})
+                          {"Set-Cookie": set_cookie(sid, self.server.scheme == "https")})
 
     def static(self, name):
         if name not in STATIC:
@@ -1873,11 +1944,34 @@ def _host_port(cfg, args, foreground):
 
 
 def _url_of(cfg):
-    """The URL the FORGE has or would have here."""
+    """The URL the FORGE has or would have here: the bound address."""
     u = forge_url()
     if u:
         return u
-    return "http://%s:%d" % (cfg.forge_host or lan_ip() or "<lan-ip>", cfg.forge_port)
+    return "%s://%s:%d" % (cfg.forge_scheme, cfg.forge_host or lan_ip() or "<lan-ip>", cfg.forge_port)
+
+
+def link_url(cfg, url=None):
+    """The address a person opens: the page's URL with SPARK_FORGE_NAME
+    in place of the bound address when one is set (a certificate names
+    a name; the links say it)."""
+    u = url or _url_of(cfg)
+    if not cfg.forge_name or "<" in u:
+        return u
+    parts = urllib.parse.urlsplit(u)
+    return "%s://%s:%d" % (parts.scheme, cfg.forge_name, parts.port or (443 if parts.scheme == "https" else 80))
+
+
+def root_url(cfg):
+    """Own mode's plain listener for the root: the page's host, its port
+    plus one."""
+    parts = urllib.parse.urlsplit(link_url(cfg))
+    return "http://%s:%d" % (parts.hostname, (parts.port or 443) + tls.TRUST_PORT_OFFSET)
+
+
+def _short(path):
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if path.startswith(home + "/") else path
 
 
 def _misconfigured(cfg):
@@ -1930,12 +2024,18 @@ def cmd_foreground(args):
     if why:
         return _die(why + " -- ./bootstrap.sh, then spark serve on", EX_CONFIG)
     ensure_token(cfg)
-    url = "http://%s:%d" % (host, port)
+    served = None
+    if cfg.forge_scheme == "https":
+        try:
+            served = tls.Served(cfg.forge_cert, cfg.forge_key)
+        except tls.TlsError as e:
+            return _die("%s -- spark serve https CERT KEY, or spark serve https off" % e, EX_CONFIG)
+    url = "%s://%s:%d" % (cfg.forge_scheme, host, port)
     # bind FIRST, write the records after: writing forge-url before the
     # bind meant a failed second start forget()'d the RUNNING FORGE's
     # url and pid on its way out
     try:
-        srv = ForgeServer((host, port), cfg, url)
+        srv = ForgeServer((host, port), cfg, url, served)
     except OSError as e:
         recorded = forge_url()
         if recorded and isinstance(wire.forge_health(recorded), dict):
@@ -1945,6 +2045,17 @@ def cmd_foreground(args):
         return _die("cannot bind %s: %s" % (url, e.strerror or e))
     _write_url(url)
     engine.write_pid(FORGE_PID, os.getpid())
+    if served and tls.is_own(cfg.forge_cert):
+        # own mode: the root on its own plain listener, port plus one, so
+        # a phone can fetch it before it trusts anything
+        try:
+            root = RootServer((host, port + tls.TRUST_PORT_OFFSET), tls.own_paths()["root"], link_url(cfg, url))
+            threading.Thread(target=root.serve_forever, daemon=True).start()
+            log("root %s" % root.url)
+        except (OSError, tls.TlsError) as e:
+            say("%s forge -- warning: the root's listener did not start on port %d: %s"
+                % (MARK, port + tls.TRUST_PORT_OFFSET, e))
+            log("warning: root listener: %s" % e)
 
     def stop(signum, frame):
         raise SystemExit(0)
@@ -1977,7 +2088,7 @@ def cmd_start(args):
     why = _misconfigured(cfg)
     if why:
         return _die(why + " -- ./bootstrap.sh, then spark serve on", EX_CONFIG)
-    url = "http://%s:%d" % (host, port)
+    url = "%s://%s:%d" % (cfg.forge_scheme, host, port)
     if wire.forge_health(url) not in (None, "down"):
         say("%s serve -- the page already running at %s/login" % (MARK, url))
         return 0
@@ -2101,7 +2212,7 @@ def cmd_stop(args):
 def page_url(cfg=None):
     """The page's login URL -- the public seam users.cmd_add prints a
     QR of (with a personal token in the fragment; _url_of stays ours)."""
-    return _url_of(cfg or config.load()) + "/login"
+    return link_url(cfg or config.load()) + "/login"
 
 
 def print_qr(link):
@@ -2124,15 +2235,46 @@ def cmd_print_url(args):
     if "--user" in args:
         say("%s serve -- each user has a token now: spark user add NAME" % MARK)
         return 2
-    url = _url_of(cfg)
+    url = link_url(cfg)
     say(url + "/login")
+    cert_lines(cfg)
+    own = cfg.forge_scheme == "https" and tls.is_own(cfg.forge_cert)
     if "--show-token" in args or sys.stdout.isatty():
         tok = ensure_token(cfg)
         say("token  " + tok)
-        if sys.stdout.isatty() and "--no-qr" not in args and print_qr(url + "/login#t=" + tok):
-            say("scan: sign in as admin (others: spark user add NAME)")
-            say("or open  %s/login#t=%s" % (url, tok))
+        if sys.stdout.isatty() and "--no-qr" not in args:
+            if own and print_qr(root_url(cfg) + "/ca"):
+                say("scan 1: install this certificate on the phone (iOS: then turn it on under")
+                say("        General > About > Certificate Trust Settings)")
+            if print_qr(url + "/login#t=" + tok):
+                say("scan%s: sign in as admin (others: spark user add NAME)" % (" 2" if own else ""))
+                say("or open  %s/login#t=%s" % (url, tok))
     return 0
+
+
+def cert_lines(cfg):
+    """Two lines under the page's address when it serves TLS: the
+    certificate's names and end, and the fingerprint a client pins (the
+    root's in own mode, the page's own otherwise)."""
+    if cfg.forge_scheme != "https":
+        return
+    try:
+        info = tls.read_cert(cfg.forge_cert)
+    except tls.TlsError as e:
+        say("cert   %s" % e)
+        return
+    say("cert   %s, until %s" % (", ".join(info["dns"] + info["ips"]) or "no name",
+                                 time.strftime("%Y-%m-%d", time.gmtime(info["not_after"]))))
+    if tls.is_own(cfg.forge_cert):
+        try:
+            root = tls.read_cert(tls.own_paths()["root"])
+            say("root   %s" % root["sha256"])
+            say("       each device installs it once; another spark: spark client URL --pin it")
+        except tls.TlsError as e:
+            say("root   %s" % e)
+    else:
+        say("sha256 %s" % info["sha256"])
+        say("       another spark that does not trust the issuer: spark client URL --pin it")
 
 
 def client_steps(url):
@@ -2148,7 +2290,7 @@ def cmd_print_client(args):
     """What a peer machine needs: the URL and a personal user. No secret
     ever leaves this box -- the token is shown once at the mint."""
     cfg = config.load()
-    url = _url_of(cfg)
+    url = link_url(cfg)
     say("SITE_PEER_AI_URL=%s" % url)
     say("\n".join(client_steps(url)))
     say("the admin token stays on this machine (spark serve --login)")
@@ -2174,8 +2316,221 @@ def cmd_login(args):
         return 0
     rc = cmd_print_url(args)
     if rc == 0:
-        say("\n".join(client_steps(_url_of(config.load()))))
+        say("\n".join(client_steps(link_url(config.load()))))
     return rc
+
+
+HTTPS_USAGE = """%s serve https -- the page over https
+
+  spark serve https            the certificate served, who must trust it
+  spark serve https CERT KEY   your own pair, PEM files, the key private
+                               (--name HOST: the name in the page's links)
+  spark serve https own        a root and a certificate of this machine's
+                               own: each device installs the root once
+  spark serve https off        plain http again
+""" % MARK
+
+
+def cmd_https(args):
+    """`spark serve https`: bare shows; CERT KEY, own and off act. The
+    keys land in spark.env and the page's server starts again with
+    them; `spark serve --login` then prints the https link, the
+    fingerprint and, in own mode, the root's QR."""
+    cfg = config.load()
+    if args and args[0] in ("-h", "--help", "help"):
+        say(HTTPS_USAGE.rstrip())
+        return 0
+    if cfg.client:
+        from .check import client_of
+        say("%s serve https -- %s: the page is the other machine's" % (MARK, client_of(cfg)))
+        return 0
+    if not args:
+        return _https_show(cfg)
+    name = ""
+    if "--name" in args:
+        i = args.index("--name")
+        name = args[i + 1].strip().lower() if i + 1 < len(args) else ""
+        args = args[:i] + args[i + 2:]
+        if not name or re.search(r"[^a-z0-9.-]", name):
+            say("%s serve https -- --name takes a DNS name" % MARK)
+            return 2
+    if args == ["off"]:
+        return _https_off(cfg)
+    if args == ["own"]:
+        return _https_own(cfg, name)
+    if len(args) != 2:
+        say(HTTPS_USAGE.rstrip())
+        return 2
+    cert, key = (os.path.abspath(os.path.expanduser(a)) for a in args)
+    if any(re.search(r"[;`$()|&<>]", a) for a in (cert, key)):
+        say("%s serve https -- a path cannot hold ; ` $ ( ) | & < > (contract 3)" % MARK)
+        return 2
+    try:
+        info = tls.check_pair(cert, key)
+    except tls.TlsError as e:
+        say("%s serve https -- %s" % (MARK, e))
+        return 2
+    target = name or cfg.forge_host or lan_ip()
+    if target and target not in info["dns"] and target not in info["ips"]:
+        hint = " -- --name %s" % info["dns"][0] if info["dns"] and not name else ""
+        say("%s serve https -- the certificate does not name %s; it names %s%s"
+            % (MARK, target, ", ".join(info["dns"] + info["ips"]) or "nothing", hint))
+        return 2
+    from . import site
+    site.set_keys(_file=SPARK_ENV, SPARK_FORGE_CERT=cert, SPARK_FORGE_KEY=key, SPARK_FORGE_NAME=name)
+    tls.HANDLER.refresh()
+    rc = _restart_page()
+    return rc or _https_show(config.load())
+
+
+def _https_own(cfg, name):
+    """A root of this machine's own, minted once and constrained to its
+    names, and a leaf under it for its names and address; minted again
+    when due or when the names moved. A name the root does not cover
+    is refused: the root is what the devices installed."""
+    if not tls.openssl():
+        say("%s serve https -- no openssl binary here -- install openssl, or give spark a pair: spark serve https CERT KEY" % MARK)
+        return 2
+    from . import site
+    p = tls.own_paths()
+    names = sorted(own_hostnames() | {n for n in (name, cfg.forge_name) if n})
+    host = cfg.forge_host or lan_ip()
+    ips = list(dict.fromkeys(i for i in (host, "127.0.0.1") if i))
+    try:
+        if not (os.path.isfile(p["root"]) and os.path.isfile(p["root_key"])):
+            tls.mint_root(names, cfg.name or "spark")
+            say("* a root of this machine's own, for %s" % ", ".join(names))
+        else:
+            missing = [n for n in names if n not in tls.own_names()]
+            if missing:
+                say("%s serve https -- the root does not cover %s -- spark serve https off, then own again (each device installs the root again)"
+                    % (MARK, ", ".join(missing)))
+                return 2
+        need = True
+        if os.path.isfile(p["cert"]):
+            try:
+                cur = tls.read_cert(p["cert"])
+                need = tls.renew_due() or sorted(cur["dns"]) != names or sorted(cur["ips"]) != sorted(ips)
+            except tls.TlsError:
+                need = True
+        if need:
+            tls.mint_leaf(names, ips, cfg.name or "spark")
+            say("* the page's certificate, for %s" % ", ".join(names + ips))
+    except tls.TlsError as e:
+        say("%s serve https -- %s" % (MARK, e))
+        return 2
+    site.set_keys(_file=SPARK_ENV, SPARK_FORGE_CERT=p["cert"], SPARK_FORGE_KEY=p["key"], SPARK_FORGE_NAME=name or cfg.forge_name)
+    tls.HANDLER.refresh()
+    rc = _restart_page()
+    return rc or _https_show(config.load())
+
+
+def _https_off(cfg):
+    if cfg.forge_scheme != "https":
+        say("%s serve https -- the page is plain http already" % MARK)
+        return 0
+    from . import site
+    named = cfg.forge_name
+    site.set_keys(_file=SPARK_ENV, SPARK_FORGE_CERT="", SPARK_FORGE_KEY="", SPARK_FORGE_NAME="")
+    tls.HANDLER.refresh()
+    rc = _restart_page()
+    say("* the page is plain http again%s" % ("; a browser that saw https://%s keeps asking for https for up to a week" % named if named else ""))
+    return rc
+
+
+def _https_show(cfg):
+    if cfg.forge_scheme != "https":
+        say("%s serve https -- the page is plain http" % MARK)
+        say("  spark serve https CERT KEY   a pair you were given: an office, certbot, step, tailscale cert")
+        say("  spark serve https own        a root and a certificate of this machine's own")
+        return 0
+    own = tls.is_own(cfg.forge_cert)
+    say("%s serve https -- %s" % (MARK, "a root and a certificate of this machine's own" if own else "your pair, " + _short(cfg.forge_cert)))
+    say("  page     %s/login" % link_url(cfg))
+    try:
+        info = tls.read_cert(cfg.forge_cert)
+        say("  names    %s" % (", ".join(info["dns"] + info["ips"]) or "none"))
+        say("  until    %s (%d days)" % (time.strftime("%Y-%m-%d", time.gmtime(info["not_after"])), int(tls.days_left(info))))
+        say("  sha256   %s" % info["sha256"])
+    except tls.TlsError as e:
+        say("  ! %s" % e)
+    if own:
+        try:
+            root = tls.read_cert(tls.own_paths()["root"])
+            say("  root     %s, until %s" % (root["sha256"], time.strftime("%Y-%m-%d", time.gmtime(root["not_after"]))))
+        except tls.TlsError as e:
+            say("  root     ! %s" % e)
+        say("  trust    each device installs the root once (spark serve --login shows its QR);")
+        say("           another spark: spark client URL --pin ROOT")
+    else:
+        say("  trust    browsers must trust the issuer: nothing to do for a public one;")
+        say("           another spark that does not: spark client URL --pin SHA256, or --ca FILE")
+    return 0
+
+
+def _restart_page():
+    """The page's server again with the keys as they are now: through
+    its unit when one is loaded, by hand otherwise; nothing when it is
+    not running."""
+    cfg = config.load()
+    if not (_pid() or engine.forge_service_state(cfg) == "loaded"):
+        return 0
+    rc = cmd_stop(["--force"])
+    return rc or cmd_start([])
+
+
+class RootHandler(BaseHTTPRequestHandler):
+    """Own mode's plain listener: `GET /ca` is the root in DER, the shape
+    iOS and Android install from; `GET /` says what to do with it.
+    Nothing else: no cookie, no token, 404 to every other route and
+    method. It runs beside the page, on its port plus one."""
+    server_version = "spark-forge/" + VERSION
+    sys_version = ""
+    timeout = 10
+
+    def log_message(self, *a):
+        pass
+
+    def __getattr__(self, name):
+        if not name.startswith("do_"):
+            raise AttributeError(name)
+        return self._missing
+
+    def _send(self, code, ctype, body, extra=None):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _missing(self):
+        self._send(404, "application/json", b'{"error": {"kind": "missing", "hint": "no such route"}}')
+
+    def do_GET(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path == "/ca":
+            return self._send(200, "application/x-x509-ca-cert", self.server.root_der,
+                              {"Content-Disposition": 'attachment; filename="spark-root.crt"'})
+        if path == "/":
+            body = ("install the certificate at %s/ca on this device, then open %s/login\n"
+                    % (self.server.url, self.server.page_url)).encode()
+            return self._send(200, "text/plain; charset=utf-8", body)
+        return self._missing()
+
+
+class RootServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, addr, root_path, page_url):
+        self.root_der = tls.read_pem(root_path)
+        self.url = "http://%s:%d" % addr
+        self.page_url = page_url
+        ThreadingHTTPServer.__init__(self, addr, RootHandler)
 
 
 def cmd_token(args):

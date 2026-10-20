@@ -6379,6 +6379,246 @@ def own_imports_cases(t):
     t.ok(not shadow, "smoke: no function imports again a name the module imports", ", ".join(shadow))
 
 
+def mint_pair(exe, d, leaves, constrain):
+    """A scratch root constrained to the DNS names in `constrain`, and a
+    leaf per entry of `leaves` ({name: (dns names, addresses)}), under d
+    with the openssl binary exe: root.crt, root.key, NAME.crt, NAME.key,
+    the keys 0600. What tls_cases, forge_smoke and policy_test serve; a
+    fixture key never lands in the tree."""
+    os.makedirs(d, exist_ok=True)
+
+    def run(args):
+        subprocess.run([exe] + args, cwd=d, check=True, capture_output=True, preexec_fn=lambda: os.umask(0o077))
+
+    run(["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "3650",
+         "-keyout", "root.key", "-out", "root.crt", "-subj", "/CN=fixture root",
+         "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+         "-addext", "nameConstraints=critical," + ",".join("permitted;DNS:" + n for n in constrain)])
+    for name, (dns, ips) in leaves.items():
+        san = ",".join(["DNS:" + n for n in dns] + ["IP:" + i for i in ips])
+        run(["req", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-keyout", name + ".key",
+             "-out", name + ".csr", "-subj", "/CN=" + (dns[0] if dns else ips[0])])
+        with open(os.path.join(d, name + ".ext"), "w") as f:
+            f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\n" % san)
+        run(["x509", "-req", "-in", name + ".csr", "-CA", "root.crt", "-CAkey", "root.key", "-CAcreateserial",
+             "-days", "398", "-out", name + ".crt", "-extfile", name + ".ext"])
+        os.chmod(os.path.join(d, name + ".key"), 0o600)
+    for f in os.listdir(d):
+        if f.endswith((".csr", ".ext", ".srl")):
+            os.remove(os.path.join(d, f))
+
+
+def tls_cases(t):
+    """lib/spark/tls.py, the page over https: the three readers over a
+    certificate (its sha256, its end, its names), the pair a listener
+    serves and reloads, the trust a client types (a CA file, a saved
+    root, a pinned leaf) and the own root. A scratch pair from the
+    openssl binary; skipped with a notice where there is none."""
+    import hashlib
+    import shutil
+    import socket
+    import ssl
+    import threading
+    import types
+    import urllib.request
+    from spark import tls
+    exe = shutil.which("openssl")
+    if not exe:
+        t.skip("tls: the readers, the pair and the trust", "no openssl binary here")
+        return
+    tmp = tempfile.mkdtemp(prefix="spark-tls-")
+    d = os.path.join(tmp, "pair")
+    mint_pair(exe, d, {"leaf": (["lab.local", "lab"], ["192.0.2.10", "127.0.0.1"]), "evil": (["evil.example"], [])},
+              ["lab.local", "lab"])
+    leaf, key, root = (os.path.join(d, f) for f in ("leaf.crt", "leaf.key", "root.crt"))
+    # the readers, held to openssl's own view of the same file
+    info = tls.read_cert(leaf)
+    t.ok(info["dns"] == ["lab.local", "lab"] and info["ips"] == ["192.0.2.10", "127.0.0.1"] and not info["ca"],
+         "read_cert: the leaf's names, addresses, not a CA", str(info))
+    t.ok(tls.read_cert(root)["ca"] and tls.read_cert(root)["dns"] == [], "read_cert: the root is a CA with no names")
+    o = subprocess.run([exe, "x509", "-in", leaf, "-noout", "-enddate", "-fingerprint", "-sha256"], capture_output=True, text=True).stdout
+    end = next(l for l in o.splitlines() if l.startswith("notAfter=")).split("=", 1)[1].strip()
+    fp = next(l for l in o.splitlines() if "Fingerprint" in l).split("=", 1)[1].strip()
+    import calendar
+    t.ok(abs(info["not_after"] - calendar.timegm(time.strptime(end, "%b %d %H:%M:%S %Y GMT"))) < 1, "read_cert: notAfter is openssl's", (info["not_after"], end))
+    t.ok(info["sha256"] == "sha256:" + fp, "fingerprint: openssl's, colon by colon", (info["sha256"], fp))
+    t.ok(tls.normal_pin(info["sha256"]) == hashlib.sha256(tls.read_pem(leaf)).hexdigest() == tls.normal_pin(fp.lower()),
+         "normal_pin: with or without sha256:, colons and case")
+    t.ok(tls.normal_pin("sha256:short") == "" and tls.normal_pin("") == "", "normal_pin: no fingerprint reads as none")
+    t.ok(tls.normal_pin(info["sha256"].lower().replace(":", "")) == tls.normal_pin(info["sha256"]), "normal_pin: typed without any colon")
+    t.ok(390 < tls.days_left(info) < 399, "days_left: about 398", tls.days_left(info))
+    for junk in (b"junk", tls.read_pem(leaf)[:40], b"\x30\x84\xff\xff\xff\xff"):
+        try:
+            tls.read_der(junk)
+            t.ok(False, "read_der refuses %r" % junk[:8])
+        except tls.TlsError:
+            t.ok(True, "read_der refuses %r" % junk[:8])
+    # check_pair: what the verb asks before a key is written
+    try:
+        tls.check_pair(leaf, key, "lab.local")
+        t.ok(True, "check_pair: the pair by a name it carries")
+    except tls.TlsError as e:
+        t.ok(False, "check_pair: the pair by a name it carries", str(e))
+    for bad, what, why in ((("other.example",), "a name the certificate lacks", "does not name other.example"),):
+        try:
+            tls.check_pair(leaf, key, *bad)
+            t.ok(False, "check_pair refuses " + what)
+        except tls.TlsError as e:
+            t.ok(why in str(e), "check_pair refuses " + what, str(e))
+    try:
+        tls.check_pair(leaf, os.path.join(d, "evil.key"))
+        t.ok(False, "check_pair refuses a key that is not the certificate's")
+    except tls.TlsError as e:
+        t.ok("does not load" in str(e), "check_pair refuses a key that is not the certificate's", str(e))
+    os.chmod(key, 0o644)
+    try:
+        tls.check_pair(leaf, key)
+        t.ok(False, "check_pair refuses a key others can read")
+    except tls.TlsError as e:
+        t.ok("readable by others" in str(e) and "chmod 600" in str(e), "check_pair refuses a key others can read", str(e))
+    os.chmod(key, 0o600)
+    # the listener's pair: served, reloaded when the files change, kept when the new pair does not load
+    served = tls.Served(leaf, key)
+    t.ok(served.names() == ["lab.local", "lab"], "Served.names: the certificate's DNS names")
+    before = served.ctx
+    served.t -= tls.RELOAD_SECONDS
+    os.utime(leaf)
+    served.context()
+    t.ok(served.ctx is not before and served.error == "", "a touched pair is read again, within the reload window")
+    served.t -= tls.RELOAD_SECONDS
+    real = open(key).read()
+    with open(key, "w") as f:
+        f.write("broken\n")
+    os.utime(key)
+    kept = served.ctx
+    served.context()
+    with open(key, "w") as f:
+        f.write(real)
+    t.ok(served.ctx is kept and "does not load" in served.error, "a pair that does not load keeps the old context and says so", served.error)
+    # the trust: a scratch trust dir and own dir, a stub config
+    saved = (tls.TRUST_DIR, tls.OWN_DIR)
+    tls.TRUST_DIR, tls.OWN_DIR = os.path.join(tmp, "trust"), os.path.join(tmp, "https")
+    cfg = types.SimpleNamespace(forge_cert="", forge_key="", forge_host="127.0.0.1", forge_name="", ca_file="")
+    ls = socket.socket()
+    ls.bind(("127.0.0.1", 0))
+    ls.listen(5)
+    port = ls.getsockname()[1]
+    url = "https://127.0.0.1:%d" % port
+
+    def serve():
+        while True:
+            try:
+                c, _ = ls.accept()
+            except OSError:
+                return
+
+            def one(c=c):
+                try:
+                    with served.context().wrap_socket(c, server_side=True) as s:
+                        s.recv(1024)
+                        s.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{\"forge\": true}")
+                except Exception:       # noqa: BLE001 -- a refused handshake is the point of some of these
+                    pass
+            threading.Thread(target=one, daemon=True).start()
+    threading.Thread(target=serve, daemon=True).start()
+    opener_before = urllib.request._opener
+    handler = tls.TrustHandler()
+    urllib.request.install_opener(urllib.request.build_opener(handler))
+    try:
+        cas, pins = tls.trust_state(cfg)
+        t.ok(cas == [] and pins == {}, "trust_state: nothing saved, nothing served here: empty", (cas, pins))
+        err = tls.verify_error(url)
+        t.ok(bool(err) and "certificate" in err.lower(), "no trust: verify_error names the refusal", err)
+        pc = tls.peer_certificate(url)
+        t.ok(pc is not None and pc[1]["dns"] == ["lab.local", "lab"], "peer_certificate reads the leaf with no trust asked")
+        path = tls.save_trust("127.0.0.1", open(root).read())
+        handler.refresh()
+        t.ok(os.stat(tls.TRUST_DIR).st_mode & 0o777 == 0o700 and os.stat(path).st_mode & 0o777 == 0o600, "save_trust: the dir 0700, the file 0600")
+        t.ok(tls.verify_error(url) == "", "a saved root verifies the server by address", tls.verify_error(url))
+        tls.forget_trust("127.0.0.1")
+        tls.save_trust("127.0.0.1", open(leaf).read())
+        handler.refresh()
+        cas, pins = tls.trust_state(cfg)
+        t.ok(cas == [] and list(pins) == ["127.0.0.1"], "trust_state: a saved leaf is a pin, not a CA", (cas, pins))
+        t.ok(tls.verify_error(url) == "", "a saved leaf pins the server", tls.verify_error(url))
+        tls.save_trust("127.0.0.1", open(os.path.join(d, "evil.crt")).read())
+        handler.refresh()
+        err = tls.verify_error(url)
+        t.ok(bool(err) and "not the one pinned" in err, "a pin that does not match refuses the connection", err)
+        tls.forget_trust("127.0.0.1")
+        t.ok(not tls.forget_trust("127.0.0.1"), "forget_trust: nothing to forget the second time")
+        # the machine that serves trusts its own pair: local pins (the
+        # handler reads the process's config, so the pair goes through
+        # the environment here, as a unit's would)
+        cfg.forge_cert, cfg.forge_key = leaf, key
+        cas, pins = tls.trust_state(cfg)
+        t.ok(pins.get("127.0.0.1") == hashlib.sha256(tls.read_pem(leaf)).hexdigest() and "lab.local" in pins and "localhost" in pins,
+             "local_pins: the served pair pins the page's own names", sorted(pins))
+        cfg.forge_cert = cfg.forge_key = ""
+        os.environ.update({"SPARK_FORGE_CERT": leaf, "SPARK_FORGE_KEY": key, "SPARK_FORGE_HOST": "127.0.0.1"})
+        handler.refresh()
+        try:
+            t.ok(tls.verify_error(url) == "", "the serving machine reaches its own page", tls.verify_error(url))
+        finally:
+            for k in ("SPARK_FORGE_CERT", "SPARK_FORGE_KEY", "SPARK_FORGE_HOST"):
+                os.environ.pop(k, None)
+        # SPARK_CA_FILE: a bundle beside the system store
+        cfg.ca_file = root
+        t.ok(tls.trust_state(cfg)[0] == [root], "trust_state: SPARK_CA_FILE is a CA file")
+        cfg.ca_file = ""
+        os.environ["SPARK_CA_FILE"] = root
+        handler.refresh()
+        try:
+            t.ok(tls.verify_error(url) == "", "a CA file verifies the server", tls.verify_error(url))
+        finally:
+            os.environ.pop("SPARK_CA_FILE", None)
+            handler.refresh()
+        # down is unknown, never trusted
+        ls.close()
+        t.ok(tls.verify_error("https://127.0.0.1:%d" % port, timeout=2) is None, "verify_error: nothing answers reads as None")
+        # the own root: minted, constrained, renewed when due
+        rt = tls.mint_root(["lab.local", "lab"], "fixture")
+        lf = tls.mint_leaf(["lab.local", "lab"], ["192.0.2.10", "127.0.0.1"], "fixture")
+        p = tls.own_paths()
+        t.ok(rt["ca"] and lf["dns"] == ["lab.local", "lab"] and lf["ips"] == ["192.0.2.10", "127.0.0.1"], "mint_root and mint_leaf read back", (rt, lf))
+        t.ok(all(os.stat(p[k]).st_mode & 0o777 == 0o600 for k in ("root_key", "key")), "the minted keys are 0600")
+        t.ok(tls.own_names() == ["lab.local", "lab"], "own_names: the root's names, recorded at the mint", tls.own_names())
+        t.ok(tls.is_own(p["cert"]) and not tls.is_own(leaf), "is_own: the minted leaf, not another file")
+        t.ok(not tls.renew_due() and tls.renew_due(time.time() + (tls.LEAF_DAYS - 10) * 86400), "renew_due: not now, yes ten days before the end")
+        t.ok(sorted(os.listdir(tls.OWN_DIR)) == ["leaf.crt", "leaf.key", "root.crt", "root.key", "root.names"], "the own dir holds the pair, the root and its names, nothing else", os.listdir(tls.OWN_DIR))
+        own_ctx = tls.client_context([p["root"]])
+        srv = tls.server_context(p["cert"], p["key"])
+        ls2 = socket.socket()
+        ls2.bind(("127.0.0.1", 0))
+        ls2.listen(1)
+
+        def one2():
+            c, _ = ls2.accept()
+            try:
+                with srv.wrap_socket(c, server_side=True) as s:
+                    s.recv(1)
+                    s.sendall(b"x")
+            except Exception:       # noqa: BLE001
+                pass
+        threading.Thread(target=one2, daemon=True).start()
+        try:
+            with socket.create_connection(("127.0.0.1", ls2.getsockname()[1]), timeout=5) as c, own_ctx.wrap_socket(c, server_hostname="127.0.0.1") as s:
+                s.sendall(b"y")
+                s.recv(1)
+            t.ok(True, "the minted chain verifies by address under the own root")
+        except Exception as e:      # noqa: BLE001
+            t.ok(False, "the minted chain verifies by address under the own root", str(e))
+        ls2.close()
+        o = subprocess.run([exe, "verify", "-CAfile", p["root"], os.path.join(d, "evil.crt")], capture_output=True, text=True)
+        t.ok(o.returncode != 0, "a leaf for another name is refused under a constrained root (openssl verify)", o.stdout + o.stderr)
+        cas, pins = tls.trust_state(cfg)
+        t.ok(cas == [p["root"]], "trust_state: the own root is a CA of this machine's", cas)
+    finally:
+        urllib.request.install_opener(opener_before)
+        tls.TRUST_DIR, tls.OWN_DIR = saved
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -12098,6 +12338,7 @@ site.cmd_headless([])
     own_mark_cases(t, url)
     grammar_cases(t)
     own_imports_cases(t)
+    tls_cases(t)
     srv.shutdown()
     print("smoke: %s; %d skipped" % ("all ok" if not t.fail else "%d FAILED" % t.fail, t.skipped))
     return 1 if t.fail else 0

@@ -467,8 +467,9 @@ answers more often: `spark model list` shows them.
 ## 5. Other machines and your phone
 
 This machine can serve its model to other machines and to a browser,
-at `http://<host>:8081`. The traffic is plain HTTP. Anyone on your
-network can read it.
+at `http://<host>:8081`. The traffic is plain HTTP unless you give the
+page a certificate (below). Anyone on your network can read plain
+HTTP.
 
 - `spark serve on` starts the engine and the page's server. They come
   back after a restart. `spark serve off` stops them.
@@ -527,6 +528,35 @@ A browser or a phone:
 3. On iOS, add the page to the home screen.
 
 The QR holds the token. Show it only to the person it is for.
+
+HTTPS for the page:
+
+The page is plain HTTP until you give it a certificate. Then it serves
+https on the same port, and the login link, the QR and `spark client
+URL` follow.
+
+1. A pair you were given, from your office, certbot, step or `tailscale
+   cert`: `spark serve https CERT KEY`. When the certificate carries a
+   name, add `--name HOST`, and the links say it. A browser that trusts
+   the issuer needs nothing. A renewed pair is read within a minute,
+   with no restart.
+2. A pair of this machine's own, for home: `spark serve https own`.
+   spark mints a root for this machine's names and a certificate under
+   it, and renews the certificate itself. Each phone installs the root
+   once: `spark serve --login` shows its QR first, then the login's.
+   On iOS, after the profile, turn the root on under General, About,
+   Certificate Trust Settings. Android says the network may be
+   monitored: that is the root. The root signs for this machine's
+   names and no other.
+3. `spark serve https` shows the certificate and who must trust it.
+   `spark serve https off` is plain HTTP again.
+
+Another spark that does not trust the issuer pins the certificate:
+`spark client https://HOST:8081 --pin FINGERPRINT`, with the
+fingerprint `spark serve --login` prints there. `--ca FILE` trusts the
+issuer instead. On macOS, Python reads no root from the keychain, so an
+office root needs `--ca FILE` even when Safari trusts it. On Fedora and
+openSUSE, open 8082 too in own mode: the root is served there.
 
 Another OS user on this Linux machine: run `spark serve share on` and
 `sudo gpasswd -a NAME spark`. That user logs in again and runs the
@@ -735,7 +765,7 @@ Keep passwordless `sudo` off a machine that serves your network. The
 admin token can run any command here. With passwordless `sudo`, that
 means root.
 
-The check. `spark check` has 41 rows and exits 0 when no row fails.
+The check. `spark check` has 42 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 a bug report, with no names or paths.
@@ -770,12 +800,14 @@ When something stops working:
 
 ## 8. What an attacker can and cannot do
 
-spark serves plain HTTP on one address of your network. Your network
-is the trust boundary.
+spark serves plain HTTP on one address of your network, or https with
+a certificate you gave it (`spark serve https`). Without one, your
+network is the trust boundary.
 
-- On your network, anyone can read the traffic, tokens included. A
-  captured token works until it is rotated. Rotate with `spark user
-  token --new`, or `spark serve --login --new` for the admin.
+- Over plain HTTP, anyone on your network can read the traffic, tokens
+  included. A captured token works until it is rotated. Rotate with
+  `spark user token --new`, or `spark serve --login --new` for the
+  admin.
 - Guessing a token is slow: 10 wrong tokens in a minute lock that
   address out for a minute.
 - The admin token can run any command on this machine. With

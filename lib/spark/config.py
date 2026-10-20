@@ -27,7 +27,8 @@ SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_H
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
               "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_LOOK", "SPARK_HEIGHT",
               "SPARK_VOICE", "SPARK_VOICE_RATE", "SPARK_VOICE_DEVICE", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_KNOWLEDGE", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
-              "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE")
+              "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE",
+              "SPARK_FORGE_CERT", "SPARK_FORGE_KEY", "SPARK_FORGE_NAME", "SPARK_CA_FILE")
 KEYS = SITE_KEYS + SPARK_KEYS
 
 
@@ -374,6 +375,34 @@ class Config:
     @property
     def forge_token_file(self):
         return self.get("SPARK_FORGE_TOKEN_FILE", FORGE_TOKEN_FILE)
+
+    @property
+    def forge_cert(self):
+        """The page's certificate (PEM, the chain), '' for plain HTTP."""
+        return self.get("SPARK_FORGE_CERT", "")
+
+    @property
+    def forge_key(self):
+        return self.get("SPARK_FORGE_KEY", "")
+
+    @property
+    def forge_name(self):
+        """The name in the page's links, '' for the bind address."""
+        return self.get("SPARK_FORGE_NAME", "").strip().lower()
+
+    @property
+    def ca_file(self):
+        """A PEM bundle trusted beside the system store, for every TLS
+        connection spark makes."""
+        return self.get("SPARK_CA_FILE", "")
+
+    @property
+    def forge_scheme(self):
+        """https once a certificate pair is named, both keys or neither."""
+        cert, key = self.forge_cert, self.forge_key
+        if bool(cert) != bool(key):
+            die("SPARK_FORGE_CERT and SPARK_FORGE_KEY go together: set both, or neither", 2)
+        return "https" if cert else "http"
 
     def loopback_url(self):
         return "http://127.0.0.1:%d" % self.port

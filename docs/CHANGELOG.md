@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.91
+
+The page over https. A certificate pair you were given, or one spark
+mints for your home, and the page serves TLS on the same port. Every
+spark client follows, and trust is typed, never assumed.
+
+- `spark serve https CERT KEY`: your pair, PEM files, the key private;
+  `--name HOST` puts the name in the links. The listener is TLS 1.2 or
+  newer, one port and one scheme. A renewed pair is read again within
+  a minute, with no restart; a pair that does not load keeps the old
+  one, and the new `https` check row says so.
+- `spark serve https own`: a root of this machine's own, constrained
+  to its names, and a certificate under it for its names and address,
+  minted with the openssl binary and renewed by the check timer. The
+  root is served plain on the page's port plus one, `GET /ca`, for a
+  phone to install; `spark serve --login` shows its QR first, then
+  the login's. `spark serve https` shows the certificate and who must
+  trust it; `spark serve https off` is plain http again.
+- Over TLS the cookie is Secure, every answer to a name carries
+  Strict-Transport-Security for one week, and the Origin check follows
+  the listener's scheme. The page answers to the certificate's names
+  and to `SPARK_FORGE_NAME`, and its links say that name.
+- `spark client https://HOST:PORT --pin FINGERPRINT` pins that page's
+  certificate, or saves its root when the fingerprint is the root's;
+  `--ca FILE` trusts an issuer. A page whose certificate is not
+  trusted is refused with its fingerprint and both remedies, nothing
+  set. `SPARK_CA_FILE` is a bundle trusted beside the system store for
+  every TLS connection spark makes. The saved trust lives under
+  `~/.config/spark/trust/`, one file a host; `spark client off`
+  forgets it. The machine that serves trusts its own pair.
+- Contract 3: `SPARK_FORGE_CERT`, `SPARK_FORGE_KEY`, `SPARK_FORGE_NAME`
+  and `SPARK_CA_FILE`. Contract 9: the TLS listener and the root's.
+  `openssl` joins the core packages on Linux. 42 check rows.
+- The page's code for the retired desktop app is gone: the browser is
+  its one host. A connection that dies between requests no longer
+  leaves a traceback in the page's log.
+
 ## v1.90.4
 
 - S3: generation requests could wait without a deadline, and a client

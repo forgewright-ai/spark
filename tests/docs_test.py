@@ -58,7 +58,7 @@ ALL_DOCS = ROOT_DOCS + tuple("docs/" + f for f in DOCS_DIR) + ("site.env.example
 # the two env examples and every NAME_LIKE_THIS constant is allowed too
 CAPS_OK = {
     "ASCII", "ARCH", "CPU", "GPU", "RAM", "LAN", "WLAN", "HTTP", "HTTPS", "JSON", "URL", "GGUF",
-    "UKI", "WSL", "SSH", "TLS", "SGR", "SBOM", "API", "TODO", "KEY", "NAME", "WORDS", "PATH",
+    "UKI", "WSL", "SSH", "TLS", "SGR", "SBOM", "API", "TODO", "KEY", "NAME", "WORDS", "PATH", "CERT",
     "FILE", "HOME", "ADDR", "PORT", "USER", "HOST", "MODEL", "THEME", "SITE", "SPARK", "XDG",
     "PID", "EOF", "UTF", "POSIX", "GRUB", "EFI", "DRM", "AMD", "NVIDIA", "CUDA", "OK", "FAIL",
     "WARN", "NA", "TTY", "VT", "QR", "PR", "CI", "ID", "OS", "LICENSE", "README", "CREDITS",

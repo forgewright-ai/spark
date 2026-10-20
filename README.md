@@ -118,7 +118,8 @@ on a Mac.
 12. `spark memory add "short answers"`, then `spark chat`. In the chat,
     `/read @notes.txt what is due` answers from the file.
 13. `spark serve --login`: open the address on your phone. The traffic
-    is plain HTTP, so use a network you trust.
+    is plain HTTP, so use a network you trust, or give the page a
+    certificate: `spark serve https`.
 
 ## Apps
 
@@ -203,8 +204,9 @@ and an API key. They also catch a credential line, a long base64 run, a
 one-time code and a link token. The other commands send the text as it
 is.
 
-Between machines, the traffic is plain HTTP. Anyone on your network can
-read it.
+Between machines, the traffic is plain HTTP unless you give the page a
+certificate (`spark serve https`). Anyone on your network can read
+plain HTTP.
 
 spark downloads itself, the llama.cpp engine and the voice from
 github.com, and your model from huggingface.co. The engine, the voice

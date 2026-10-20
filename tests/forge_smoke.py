@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import signal
+import ssl
 import socket
 import struct
 import subprocess
@@ -551,6 +552,233 @@ def verb_runner(ok):
         rc = forgeserve.run_verb([os.path.join(tmp, "nothing")], None, lines.append, cap=5)
         ok(rc == 127 and lines[-1].startswith("! cannot run"), "/api/run's runner: a verb that cannot start is rc 127",
            (rc, lines))
+def free_pair():
+    """Two free ports side by side: the page's and the root listener's."""
+    while True:
+        p = free_port()
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", p + 1))
+            return p
+        except OSError:
+            continue
+        finally:
+            s.close()
+
+
+def tls_cases(ok, spark, env, home, state, exe):
+    """v1.91, the page over TLS, by hand in this scratch home: the verb's
+    refusals, a pair served (the listener, its headers and gates over
+    https, the https row, the login's lines), a pair that does not load,
+    own mode with the root's listener, a client in a second home that is
+    refused, pins the root, pins the leaf, trusts a CA file and forgets,
+    and https off. The pair comes from the openssl binary (smoke.mint_pair)."""
+    d = os.path.join(home, "pair")
+    smoke.mint_pair(exe, d, {"leaf": (["fixture.local", "fixture"], ["127.0.0.1"])}, ["fixture.local", "fixture"])
+    cert, key, root = (os.path.join(d, f) for f in ("leaf.crt", "leaf.key", "root.crt"))
+    port = free_pair()
+    url = "https://127.0.0.1:%d" % port
+    tenv = {"SPARK_FORGE_PORT": str(port), "SPARK_FORGE_CERT": cert, "SPARK_FORGE_KEY": key}
+    ctx = ssl.create_default_context(cafile=root)
+    sys.path.insert(0, os.path.join(REPO, "lib"))
+    from spark import tls, wire
+
+    def hreq(method, path, body=None, headers=None, timeout=10, p=None, cafile=None):
+        c = http.client.HTTPSConnection("127.0.0.1", p or port, timeout=timeout,
+                                        context=ssl.create_default_context(cafile=cafile) if cafile else ctx)
+        h = dict(headers or {})
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode()
+            h.setdefault("Content-Type", "application/json")
+        try:
+            c.request(method, path, data, h)
+            r = c.getresponse()
+            return r.status, dict(r.getheaders()), r.read()
+        finally:
+            c.close()
+
+    def start(extra):
+        p = subprocess.Popen([sys.executable, SPARK, "forge", "--foreground"], env=dict(env, **extra),
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        deadline = time.time() + 20
+        st = 0
+        while time.time() < deadline and st != 200:
+            try:
+                st = hreq("GET", "/api/health", p=int(extra["SPARK_FORGE_PORT"]), cafile=extra.get("CAFILE"))[0]
+            except (OSError, http.client.HTTPException):
+                st = 0
+            if st != 200:
+                time.sleep(0.3)
+        return p, st
+
+    def stop(p):
+        p.send_signal(signal.SIGTERM)
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+
+    def row(extra=None, name="https"):
+        rc, out, _ = spark("check", "--porcelain", extra=extra)
+        for line in out.splitlines():
+            f = line.split("\t")
+            if len(f) >= 4 and f[2] == name:
+                return f[1], f[3], (f[4] if len(f) > 4 else "")
+        return ("missing", out[-300:], "")
+
+    try:
+        # the verb: plain first, then its refusals, then the pair
+        rc, out, _ = spark("serve", "https")
+        ok(rc == 0 and "plain http" in out and "spark serve https own" in out, "spark serve https, plain: says so and names both ways", out)
+        rc, out, _ = spark("serve", "https", cert, os.path.join(d, "root.key"))
+        ok(rc == 2 and "does not load" in out, "a key that is not the certificate's is refused, nothing written", out)
+        rc, out, _ = spark("serve", "https", cert, key, "--name", "other.example")
+        ok(rc == 2 and "does not name other.example" in out and "fixture.local" in out, "a name the certificate lacks is refused, its names said", out)
+        os.chmod(key, 0o644)
+        rc, out, _ = spark("serve", "https", cert, key)
+        ok(rc == 2 and "readable by others" in out, "a key others can read is refused", out)
+        os.chmod(key, 0o600)
+        ok("SPARK_FORGE_CERT" not in open(home + "/.config/spark/spark.env").read(), "no refusal wrote a key")
+        # half a pair, before spark.env holds one: refused before anything binds
+        rc, out, err = spark("forge", "--foreground", extra={"SPARK_FORGE_PORT": str(port), "SPARK_FORGE_CERT": cert}, timeout=20)
+        ok(rc == 2 and "go together" in out + err, "one key without the other: refused, exit 2", out + err)
+        rc, out, _ = spark("serve", "https", cert, key)
+        ok(rc == 0 and "your pair" in out and "fixture.local, fixture, 127.0.0.1" in out and "sha256:" in out,
+           "spark serve https CERT KEY: the pair written, the show with names and fingerprint", out)
+        ok("SPARK_FORGE_CERT=%s" % cert in open(home + "/.config/spark/spark.env").read(), "spark.env names the pair")
+        rc, out, _ = spark("serve", "https", cert, key, "--name", "fixture.local")
+        ok(rc == 0 and "https://fixture.local:%d/login" % port in spark("serve", "https", extra=tenv)[1],
+           "--name HOST: the page's link says the name", out)
+        rc, out, _ = spark("serve", "https", cert, key)      # the address again for the probes below
+        # the page over TLS
+        p, st = start(dict(tenv, CAFILE=root))
+        try:
+            ok(st == 200, "--foreground answers /api/health over TLS")
+            if st != 200:
+                print(p.communicate()[0][-1500:])
+            ok(open(state + "/forge-url").read().strip() == url, "forge-url carries https://")
+            try:
+                req("http://127.0.0.1:%d" % port, "GET", "/api/health", timeout=5)
+                plain = "answered"
+            except (OSError, http.client.HTTPException):
+                plain = "refused"
+            ok(plain == "refused", "a plain-text client gets no page from the TLS port")
+            st, hd, _ = hreq("GET", "/")
+            ok(st == 200 and "Strict-Transport-Security" not in hd, "the page by address: 200, no HSTS", (st, hd.get("Strict-Transport-Security")))
+            st, hd, _ = hreq("GET", "/", headers={"Host": "fixture.local:%d" % port})
+            ok(st == 200 and hd.get("Strict-Transport-Security") == "max-age=604800",
+               "the page by a name the certificate carries: answered (the name is the page's), HSTS one week", (st, hd.get("Strict-Transport-Security")))
+            st, _, _ = hreq("GET", "/api/health", headers={"Host": "evil.example"})
+            ok(st == 400, "a Host that is not the page's is 400 over TLS too", st)
+            admin = open(state + "/forge-token").read().strip()
+            st, hd, _ = hreq("POST", "/api/login", {"token": admin}, {"X-Spark": "1", "Origin": url})
+            ok(st == 200 and "; Secure" in hd.get("Set-Cookie", ""), "login over TLS with its own origin: 200, a Secure cookie", (st, hd.get("Set-Cookie", "")[-40:]))
+            st, _, _ = hreq("POST", "/api/login", {"token": admin}, {"X-Spark": "1", "Origin": "http://127.0.0.1:%d" % port})
+            ok(st == 403, "an http Origin on the https page is refused", st)
+            os.environ["SPARK_CA_FILE"] = root
+            tls.HANDLER.refresh()
+            try:
+                gates = wire.probe_gates(url)
+            finally:
+                del os.environ["SPARK_CA_FILE"]
+                tls.HANDLER.refresh()
+            ok(len(gates) == len(wire.GATES) and all(g[1] for g in gates), "the eight gates hold over TLS", [g for g in gates if not g[1]])
+            status, value, remedy = row(tenv)
+            ok(status == "ok" and "fixture.local" in value and "days left" in value, "the https row: ok, the names, the days", (status, value, remedy))
+            status, value, remedy = row(tenv, "hardening")
+            ok(status == "ok" and "8 of 8" in value, "the hardening row probes the page over TLS through the machine's own trust", (status, value, remedy))
+            rc, out, _ = spark("serve", "--login", "--show-token", "--no-qr", extra=tenv)
+            ok(rc == 0 and out.splitlines()[0] == url + "/login" and "cert   fixture.local" in out and "sha256 sha256:" in out,
+               "spark serve --login: the https link, the certificate's names, its fingerprint", out[:300])
+            ok("there:  spark client %s" % url in out, "the join steps say the https URL", out[-200:])
+        finally:
+            stop(p)
+        # a pair that does not load: refused before anything binds
+        rc, out, err = spark("forge", "--foreground", extra=dict(tenv, SPARK_FORGE_KEY=root), timeout=20)
+        ok(rc == 78 and "does not load" in out + err, "--foreground with a pair that does not load: 78, the reason", out + err)
+        # own mode: a root of this machine's own and the root's listener
+        port2 = free_pair()
+        url2 = "https://127.0.0.1:%d" % port2
+        oenv = {"SPARK_FORGE_PORT": str(port2)}
+        rc, out, _ = spark("serve", "https", "own", extra=oenv)
+        own = os.path.join(state, "https")
+        ok(rc == 0 and "a root of this machine's own" in out and "the page's certificate" in out and "each device installs the root once" in out,
+           "spark serve https own: the root and the certificate minted, the show", out[:400])
+        ok(all(os.stat(os.path.join(own, f)).st_mode & 0o777 == 0o600 for f in ("root.key", "leaf.key")), "the minted keys are 0600")
+        rc, out, _ = spark("serve", "https", "own", extra=oenv)
+        ok(rc == 0 and "a root of" not in out, "own again: nothing minted twice", out[:300])
+        rc, out, _ = spark("serve", "https", "own", "--name", "elsewhere.example", extra=oenv)
+        ok(rc == 2 and "does not cover elsewhere.example" in out, "a name the root does not cover is refused", out)
+        p, st = start(dict(oenv, CAFILE=os.path.join(own, "root.crt")))
+        try:
+            ok(st == 200, "the page answers over TLS with the own pair")
+            if st != 200:
+                print(p.communicate()[0][-1500:])
+            st, hd, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/ca")
+            ok(st == 200 and hd.get("Content-Type") == "application/x-x509-ca-cert" and body == tls.read_pem(os.path.join(own, "root.crt")),
+               "GET /ca on the root's listener: the root in DER, the type phones install from", (st, hd.get("Content-Type"), len(body)))
+            st, _, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/")
+            ok(st == 200 and b"install the certificate at http://127.0.0.1:%d/ca" % (port2 + 1) in body and url2.encode() in body,
+               "GET / there says what to do", body[:160])
+            sts = [req("http://127.0.0.1:%d" % (port2 + 1), m, pth)[0] for m, pth in (("GET", "/api/health"), ("HEAD", "/"), ("POST", "/ca"), ("GET", "/login"))]
+            ok(sts == [404, 404, 404, 404], "every other route and method there is 404", sts)
+            rc, out, _ = spark("serve", "--login", "--show-token", "--no-qr", extra=oenv)
+            ok("root   sha256:" in out and "each device installs it once" in out, "spark serve --login in own mode names the root", out[:400])
+            rc, out, _ = spark("serve", "https", extra=oenv)
+            ok("a root and a certificate of this machine's own" in out and "root     sha256:" in out and "each device installs the root once" in out,
+               "spark serve https in own mode: the root, who installs it", out[:400])
+            status, value, _ = row(oenv)
+            ok(status == "ok" and "the root on each device" in value, "the https row in own mode", (status, value))
+            root_fp = tls.read_cert(os.path.join(own, "root.crt"))["sha256"]
+            leaf_fp = tls.read_cert(os.path.join(own, "leaf.crt"))["sha256"]
+            # a client in a second home
+            chome = tempfile.mkdtemp(prefix="spark-tls-client-")
+            for sub in (".config/spark", ".local/state/spark", ".local/share/spark"):
+                os.makedirs(os.path.join(chome, sub))
+            os.chmod(os.path.join(chome, ".local/state/spark"), 0o700)
+            cenv = {"HOME": chome, "XDG_CONFIG_HOME": chome + "/.config", "XDG_STATE_HOME": chome + "/.local/state",
+                    "XDG_DATA_HOME": chome + "/.local/share"}
+            trust = os.path.join(chome, ".config", "spark", "trust")
+            rc, out, _ = spark("client", url2, extra=cenv)
+            ok(rc == 2 and "is not trusted here" in out and leaf_fp in out and "--pin FINGERPRINT" in out and "--ca FILE" in out,
+               "a client of a page it does not trust is refused with the fingerprint and both remedies", out)
+            ok(not os.path.exists(os.path.join(chome, ".config", "spark", "site.env")), "and nothing was set")
+            rc, out, _ = spark("client", url2, "--pin", "sha256:" + ":".join(["00"] * 32), extra=cenv)
+            ok(rc == 2 and "matches neither" in out and not os.path.exists(trust), "a fingerprint that matches nothing: refused, nothing saved", out)
+            rc, out, _ = spark("client", url2, "--pin", root_fp.lower().replace(":", ""), extra=cenv)
+            ok(rc == 0 and "the root of 127.0.0.1 is saved" in out and os.path.isfile(os.path.join(trust, "127.0.0.1.pem")),
+               "--pin with the root's fingerprint (typed loosely) saves the root", out[:300])
+            ok(os.path.isdir(trust) and os.stat(trust).st_mode & 0o777 == 0o700
+               and os.path.isfile(os.path.join(trust, "127.0.0.1.pem")) and os.stat(os.path.join(trust, "127.0.0.1.pem")).st_mode & 0o777 == 0o600,
+               "the trust dir 0700, the file 0600")
+            rc, out, _ = spark("client", extra=cenv)
+            ok(rc == 0 and "peer" in out and ("up" in out or "ok" in out), "spark client: the other machine answers over TLS", out)
+            status, value, _ = row(cenv)
+            ok(status == "ok" and "127.0.0.1:%d trusted" % port2 in value, "the client's https row: trusted", (status, value))
+            rc, out, _ = spark("client", "off", extra=cenv)
+            ok(rc == 0 and "forgotten" in out and not os.listdir(trust), "spark client off forgets the trust", out)
+            rc, out, _ = spark("client", url2, "--pin", leaf_fp, extra=cenv)
+            ok(rc == 0 and "is pinned for 127.0.0.1" in out, "--pin with the page's own fingerprint pins the leaf", out[:300])
+            ok(row(cenv)[0] == "ok", "the pinned leaf verifies")
+            spark("client", "off", extra=cenv)
+            rc, out, _ = spark("client", url2, "--ca", os.path.join(own, "root.crt"), extra=cenv)
+            ok(rc == 0 and "saved for 127.0.0.1" in out and row(cenv)[0] == "ok", "--ca FILE saves the file as the host's trust", out[:300])
+            rc, out, _ = spark("client", "http://127.0.0.1:9", "--pin", leaf_fp, extra=cenv)
+            ok(rc == 2 and "plain http" in out, "--pin on a plain http URL is refused", out)
+            spark("client", "off", extra=cenv)
+        finally:
+            stop(p)
+        status, value, _ = row(oenv)
+        ok(status == "ok", "the https row with the page down: the pair still reads", (status, value))
+        rc, out, _ = spark("serve", "https", "off", extra=oenv)
+        ok(rc == 0 and "plain http again" in out and "SPARK_FORGE_CERT=\n" in open(home + "/.config/spark/spark.env").read(),
+           "spark serve https off: the keys cleared", out)
+        rc, out, _ = spark("serve", "https", "off", extra=oenv)
+        ok(rc == 0 and "already" in out, "off twice says so", out)
+    finally:
+        spark("serve", "https", "off")
+        spark("forge", "off", "--force")
 
 
 def main():
@@ -2061,6 +2289,13 @@ def main():
             spark("forge", "off", "--force")
         rc, out, _ = spark("forge", "off")
         ok(rc == 0 and "not running" in out, "stopped for good", out)
+        # v1.91: the page over TLS. A scratch pair from the openssl binary,
+        # skipped with a notice where there is none, as shellcheck is
+        exe = shutil.which("openssl")
+        if not exe:
+            print("  skip the page over TLS   (no openssl binary here)")
+        else:
+            tls_cases(ok, spark, env, home, state, exe)
         # v1.64: a unit here (runit, played by an sv stub under SPARK_OS=
         # Linux): `forge on` starts the page's server through it and waits
         # on its health -- never a Popen beside the unit

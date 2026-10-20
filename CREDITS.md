@@ -57,6 +57,7 @@ Where the families name one project differently, every name is here.
 - git -- GPL-2.0-only.
 - curl -- the curl license.
 - ca-certificates -- MPL-2.0, Mozilla's bundle as the distro ships it.
+- openssl -- Apache-2.0, the binary `spark serve https own` mints with.
 - python3 -- PSF-2.0, on Debian, Void, Fedora and openSUSE.
 - python -- PSF-2.0, Arch's name for python3.
 - tar -- GPL-3.0-or-later, GNU tar, on Fedora and openSUSE. It unpacks
