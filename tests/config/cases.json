@@ -1,0 +1,145 @@
+[
+  {
+    "name": "missing files use defaults",
+    "want": {"SITE_AI_MODEL": "auto", "PROBE_VALUE": "fallback"}
+  },
+  {
+    "name": "blank lines and whole-line comments",
+    "site": "\n \t\n# ignored\n \t# PROBE_VALUE=ignored\nPROBE_VALUE=plain\n",
+    "want": {"PROBE_VALUE": "plain"}
+  },
+  {
+    "name": "all ASCII whitespace in blank and comment lines",
+    "site": "\r\n\u000b\u000c\n\u000b# ignored=too\nPROBE_VALUE=plain\n",
+    "want": {"PROBE_VALUE": "plain"}
+  },
+  {
+    "name": "empty values are absent",
+    "site": "PROBE_EMPTY=\nPROBE_QUOTED=\"\"\nSITE_AI_MODEL=\"\"\n",
+    "want": {"PROBE_EMPTY": "fallback", "PROBE_QUOTED": "fallback", "SITE_AI_MODEL": "auto"}
+  },
+  {
+    "name": "double quotes are removed once and spaces are kept",
+    "site": "PROBE_VALUE=\" two words \"\nPROBE_SPACE=  \nPROBE_QUOTES=\"\"word\"\"\n",
+    "want": {"PROBE_VALUE": " two words ", "PROBE_SPACE": "  ", "PROBE_QUOTES": "\"word\""}
+  },
+  {
+    "name": "single and unmatched quotes remain literal",
+    "site": "PROBE_SINGLE='word'\nPROBE_OPEN=\"word\nPROBE_CLOSE=word\"\nPROBE_LONE=\"\n",
+    "want": {"PROBE_SINGLE": "'word'", "PROBE_OPEN": "\"word", "PROBE_CLOSE": "word\"", "PROBE_LONE": "\""}
+  },
+  {
+    "name": "inline hash equals and backslashes remain literal",
+    "site": "PROBE_HASH=value # literal\nPROBE_EQUALS=a=b=c\nPROBE_SLASH=one\\two\\\n",
+    "want": {"PROBE_HASH": "value # literal", "PROBE_EQUALS": "a=b=c", "PROBE_SLASH": "one\\two\\"}
+  },
+  {
+    "name": "tilde expands only at the start after double quotes",
+    "site": "PROBE_HOME=~\nPROBE_PATH=\"~/two words\"\nPROBE_USER=~nobody/path\nPROBE_INNER=a/~/b\nPROBE_SINGLE='~/path'\n",
+    "want": {"PROBE_HOME": "{home}", "PROBE_PATH": "{home}/two words", "PROBE_USER": "~nobody/path", "PROBE_INNER": "a/~/b", "PROBE_SINGLE": "'~/path'"}
+  },
+  {
+    "name": "first non-empty duplicate wins",
+    "site": "PROBE_VALUE=\nPROBE_VALUE=\"\"\nPROBE_VALUE=first\nPROBE_VALUE=last\nPROBE_VALUE=\n",
+    "want": {"PROBE_VALUE": "first"}
+  },
+  {
+    "name": "identical duplicates are accepted",
+    "site": "PROBE_VALUE=same\nPROBE_VALUE=same\n",
+    "want": {"PROBE_VALUE": "same"}
+  },
+  {
+    "name": "spark file wins over site file",
+    "site": "PROBE_VALUE=site\nPROBE_EMPTY=site\nPROBE_ONLY=site\n",
+    "spark": "PROBE_VALUE=spark-first\nPROBE_VALUE=spark-last\nPROBE_EMPTY=\"\"\n",
+    "want": {"PROBE_VALUE": "spark-first", "PROBE_EMPTY": "site", "PROBE_ONLY": "site"}
+  },
+  {
+    "name": "inherited values win and inherited empties fall through",
+    "site": "PROBE_VALUE=site\nPROBE_EMPTY=site\n",
+    "spark": "PROBE_VALUE=spark\nPROBE_EMPTY=spark\n",
+    "env": {"PROBE_VALUE": "inherited", "PROBE_EMPTY": "", "PROBE_ONLY": "inherited-only"},
+    "want": {"PROBE_VALUE": "inherited", "PROBE_EMPTY": "spark", "PROBE_ONLY": "inherited-only"}
+  },
+  {
+    "name": "inherited values are not parsed as file syntax",
+    "site": "PROBE_VALUE=file\n",
+    "env": {"PROBE_VALUE": "\"literal\" # $text; (data)"},
+    "want": {"PROBE_VALUE": "\"literal\" # $text; (data)"}
+  },
+  {
+    "name": "CRLF and an unterminated final line",
+    "site": "# comment\r\nPROBE_VALUE=\"words\"\r\nPROBE_PATH=~/path",
+    "want": {"PROBE_VALUE": "words", "PROBE_PATH": "{home}/path"}
+  },
+  {
+    "name": "unknown valid names remain accepted",
+    "site": "_PROBE_1=one\nPROBE_2=two\n",
+    "want": {"_PROBE_1": "one", "PROBE_2": "two"}
+  },
+  {
+    "name": "value line separators are data",
+    "site": "PROBE_VALUE=one\u000btwo\u000cthree\u0085four\u2028five\n",
+    "want": {"PROBE_VALUE": "one\u000btwo\u000cthree\u0085four\u2028five"}
+  },
+  {
+    "name": "a key must not start with a digit",
+    "site": "PROBE_VALUE=before\n1PROBE=wrong\n",
+    "error": {"file": "site.env", "line": 2}
+  },
+  {
+    "name": "all-digit keys are invalid",
+    "site": "12=wrong\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "lowercase keys are invalid",
+    "site": "probe=wrong\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "indented assignments are invalid",
+    "site": " PROBE_VALUE=wrong\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "spaces before equals are invalid",
+    "site": "PROBE_VALUE =wrong\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "export syntax is invalid",
+    "site": "export PROBE_VALUE=wrong\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "a bare line is invalid",
+    "site": "PROBE_VALUE\n",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "a continued value is invalid",
+    "site": "PROBE_VALUE=one\\\ntwo\n",
+    "error": {"file": "site.env", "line": 2}
+  },
+  {
+    "name": "malformed duplicates are still checked",
+    "site": "PROBE_VALUE=first\nPROBE_VALUE=$wrong\n",
+    "env": {"PROBE_VALUE": "inherited"},
+    "kept": "inherited",
+    "error": {"file": "site.env", "line": 2}
+  },
+  {
+    "name": "a shadowed site file is still checked",
+    "site": "PROBE_VALUE=$wrong\n",
+    "spark": "PROBE_VALUE=spark\n",
+    "kept": "spark",
+    "error": {"file": "site.env", "line": 1}
+  },
+  {
+    "name": "a malformed spark file is refused",
+    "site": "PROBE_VALUE=site\n",
+    "spark": "PROBE_VALUE=before\nnot an assignment\n",
+    "error": {"file": "spark.env", "line": 2}
+  }
+]

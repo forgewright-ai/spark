@@ -669,6 +669,23 @@ whether to remove the packages it installed. spark prints how to undo
 what it cannot remove, such as a hostname it set.
 
 The settings. `~/.config/spark/site.env` holds the machine's choices.
+`~/.config/spark/spark.env` holds the runtime settings. Non-empty
+environment values win over `spark.env`, then `site.env`, then defaults.
+Within each file, the first non-empty value of a key wins.
+Empty values, including `""`, leave the next source in use.
+
+These files are data, never shell code. Write `KEY=value`, with no
+space before `=`. Keys start with an uppercase letter or underscore;
+digits may follow. Blank lines and whole-line `#` comments are skipped.
+One pair of surrounding double quotes is removed. Other quotes,
+backslashes, spaces and inline `#` stay literal. A leading `~` or `~/`
+then expands to your home. Unix and Windows line endings both work.
+A bad line refuses the file, even when another value would win.
+
+Older Python readers kept the last non-empty duplicate; now both
+readers keep the first. Keep one line per key to avoid ambiguity.
+Keys starting with a digit are now refused by both readers.
+
 Each has a command:
 
 | key | what | default |

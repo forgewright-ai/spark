@@ -2,6 +2,10 @@
 
 ## v1.90.2
 
+- S3: shell and Python disagreed on repeated config keys and CRLF.
+  Both now keep the first non-empty value in each file and read CRLF.
+  Python previously kept the last duplicate. Keys starting with a digit
+  are refused by both readers before any value is applied (#41)
 - S3: the page checked Host on API writes alone, and compared an
   Origin by its host alone. Every known route now needs one valid Host
   this machine answers to; an API write's Origin, when sent, must match

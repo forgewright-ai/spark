@@ -62,6 +62,10 @@ keys. `spark keys` lists them, moves one, or turns them all off. With
 the keys off, `? words` still works. `docs/INSTALL.md` has the
 details.
 
+Config files use `KEY=value`. Non-empty environment values win over
+`spark.env`, then `site.env`, then defaults. Within each file, the first
+non-empty value wins. See `docs/INSTALL.md` for quoting and comments.
+
 ## Use it
 
 ```
