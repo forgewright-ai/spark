@@ -581,6 +581,21 @@ def test_apply_exclusions_and_output():
     check("apply: exclusions alone are not an operational failure", n == 0 and problems and gone(run))
 
 
+def test_unapplied_visible():
+    """A refusal names its paths as the review does, every control
+    character an escape: a name a step chose cannot redraw the screen."""
+    from spark import do
+    box = {"id": "20260101-000000-abcdef", "cwd": HOME}
+    e = sandbox.ApplyError("place", "dir/\x1b]0;owned\x07name", OSError(errno.EACCES, "injected"), 1, [])
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        do._Terminal().unapplied(box, str(e), e.paths)
+    output = stdout.getvalue() + stderr.getvalue()
+    check("unapplied: a refused path prints every control character as an escape",
+          "\x1b" not in output and "\x07" not in output and output.count("dir/\\x1b]0;owned\\x07name") == 2,
+          repr(output))
+
+
 def test_apply():
     lower = {"edit.txt": "one\n", "mode.sh": "echo\n", "dir/inner.txt": "in\n"}
     upper = {"edit.txt": "one\ntwo\n", "new.txt": "new\n", "mode.sh": ("echo\n", 0o755),
@@ -1361,7 +1376,7 @@ def _sh_quote(s):
 def main():
     for t in (test_upper_walk, test_visible, test_whiteout_and_opaque, test_overlay_marks, test_review_max,
               test_apply, test_apply_stage_failure, test_apply_place_retry, test_apply_delete_retry,
-              test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output,
+              test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output, test_unapplied_visible,
               test_apply_create_and_mode_retry, test_apply_failure_record, test_apply_hash_failure,
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,

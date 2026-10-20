@@ -4,7 +4,9 @@
 
 - S1: a failed sandbox apply could discard the copy; it now stops,
   keeps the copy and reports how much completed. A staging failure
-  applies nothing. A retry checks the changes still pending (#26)
+  applies nothing. A retry checks the changes still pending. A
+  refusal's paths print as the review does, every control character
+  an escape (#26)
 
 ## v1.90
 

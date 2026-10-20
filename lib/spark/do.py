@@ -1059,7 +1059,7 @@ class _Terminal:
     def unapplied(self, box, text, paths):
         print("%s %s" % (glyph("warn"), text), file=sys.stderr)
         for p in paths:
-            print("  " + p, file=sys.stderr)
+            print("  " + sandbox.visible(p), file=sys.stderr)
         print("  the run waits: spark do --review %s" % box["id"], file=sys.stderr, flush=True)
 
     def discarded(self, box):

@@ -1109,7 +1109,8 @@ and may change freely.
    danger step runs, contained, and is named. A step's own group is
    killed when it ends, so a background writer cannot outlive it. Its
    echo passes `sandbox.visible`: output nobody confirmed cannot redraw
-   the screen the review is read on. The goal carries `do.SANDBOX_NOTE`.
+   the screen the review is read on, and a refusal's paths pass it too.
+   The goal carries `do.SANDBOX_NOTE`.
    The system message stays byte-identical to plain do's. The review is
    `sandbox.changes`: entries sorted by path, each with a status from
    `sandbox.STATUSES` and its sha256. The statuses are added, changed,
