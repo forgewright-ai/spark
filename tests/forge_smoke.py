@@ -277,6 +277,98 @@ def reply_interruptions(ok):
            'terminal follow-up adopts the partial thread after a timeout')
 
 
+def _gone(pid):
+    """True when pid no longer runs: missing, or a zombie nobody reaped yet
+    (/proc on Linux; macOS has none, and its launchd reaps an orphan)."""
+    if os.path.isdir("/proc/self"):
+        try:
+            with open("/proc/%d/stat" % pid) as f:
+                return f.read().rsplit(")", 1)[1].split()[0] == "Z"
+        except FileNotFoundError:
+            return True
+        except OSError:
+            pass
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        pass
+    return False
+
+
+def verb_runner(ok):
+    """/api/run's runner on synthetic processes, short caps: the verb's
+    lines, its deadline, a hang-up, and a service it hands off."""
+    from spark import forgeserve
+
+    def gone_soon(pid, seconds=3):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if _gone(pid):
+                return True
+            time.sleep(0.05)
+        return False
+
+    with tempfile.TemporaryDirectory(prefix="spark-run-") as tmp:
+        pidf = os.path.join(tmp, "pid")
+
+        def sh(script):
+            return ["sh", "-c", script, "sh", pidf]
+
+        def pid():
+            with open(pidf) as f:
+                return int(f.read().split()[0])
+
+        lines = []
+        rc = forgeserve.run_verb(sh("echo one; printf two"), None, lines.append, cap=5)
+        ok(rc == 0 and lines == ["one", "two"], "/api/run's runner: every line, a partial last one too, rc 0",
+           (rc, lines))
+
+        lines, t0 = [], time.monotonic()
+        rc = forgeserve.run_verb(sh("echo $$ > \"$1\"; echo start; sleep 30"), None, lines.append, cap=1)
+        took = time.monotonic() - t0
+        ok(rc == 124 and lines == ["start"] and took < 4 and gone_soon(pid()),
+           "/api/run's runner: a quiet verb past its cap is rc 124, killed and reaped", (rc, lines, took))
+
+        lines, t0 = [], time.monotonic()
+        rc = forgeserve.run_verb(sh("sleep 30 & echo $! > \"$1\"; echo left"), None, lines.append, cap=20)
+        took = time.monotonic() - t0
+        ok(rc == 0 and lines == ["left"] and took < 4 and gone_soon(pid()),
+           "/api/run's runner: a verb that exits leaves no child holding its pipe", (rc, lines, took))
+
+        def hang_up(s):
+            raise BrokenPipeError("the page left")
+        t0 = time.monotonic()
+        try:
+            forgeserve.run_verb(sh("sleep 30 & echo $! > \"$1\"; echo x; wait"), None, hang_up, cap=20)
+            left = False
+        except BrokenPipeError:
+            left = True
+        took = time.monotonic() - t0
+        ok(left and took < 4 and gone_soon(pid()),
+           "/api/run's runner: a hang-up kills what the verb started", (left, took))
+
+        handoff = ("import subprocess, sys; p = subprocess.Popen(['sleep', '30'], start_new_session=True, "
+                   "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); "
+                   "open(sys.argv[1], 'w').write(str(p.pid))")
+        rc = forgeserve.run_verb([sys.executable, "-c", handoff, pidf], None, [].append, cap=5)
+        served = pid()
+        alive = not _gone(served)
+        try:
+            os.kill(served, signal.SIGKILL)
+        except OSError:
+            pass
+        ok(rc == 0 and alive, "/api/run's runner: a service started in a session of its own keeps running", rc)
+
+        lines = []
+        rc = forgeserve.run_verb(["sh", "-c", "echo next"], None, lines.append, cap=5)
+        ok(rc == 0 and lines == ["next"], "/api/run's runner: the next verb runs as usual", (rc, lines))
+        rc = forgeserve.run_verb([os.path.join(tmp, "nothing")], None, lines.append, cap=5)
+        ok(rc == 127 and lines[-1].startswith("! cannot run"), "/api/run's runner: a verb that cannot start is rc 127",
+           (rc, lines))
+
+
 def main():
     fails = 0
 
@@ -286,6 +378,7 @@ def main():
         fails += not cond
 
     reply_interruptions(ok)
+    verb_runner(ok)
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
     threading.Thread(target=stub.serve_forever, daemon=True).start()

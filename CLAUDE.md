@@ -1678,8 +1678,12 @@ and may change freely.
    lands the turn. The user line and any partial answer (`partial:
    true`) go on the thread, and the log line says 499. A client that
    leaves while queued pays no prefill and lands nothing, 499 likewise.
-   `/api/run` emits `line {s}` then `done {rc}`. `/api/events` emits
-   `check`, `bar` and `serve` on change, `log` too for an admin, and a
+   `/api/run` emits `line {s}` then `done {rc}`. A verb runs in a
+   session of its own (`forgeserve.run_verb`), `RUN_CAP` seconds at most
+   (rc 124). When it ends, times out or the page hangs up, its process
+   group is killed and it is reaped. A service it starts in a session of
+   its own stays. `/api/events` emits `check`, `bar` and `serve` on
+   change, `log` too for an admin, and a
    `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
    `/v1/models` are OpenAI-shaped and proxied to the llama-server with
    the api-token. The request's `model` field routes, and a missing
