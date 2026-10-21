@@ -799,6 +799,13 @@ def main():
           "INSTALL leads with requirements and a signed existing-computer path")
     check("Developer-only alternative" in inst and "without signed-release verification" in inst,
           "INSTALL states the clone-from-main tradeoff beside that path")
+    # the docs rendered outside this tree (CLAUDE.md, "A doc") draw code
+    # spans, bold, bare URLs and doc names, and nothing else: a markdown
+    # link or an emphasis there shows as typed
+    for doc in ("docs/INSTALL.md", "docs/CHANGELOG.md", "docs/ROADMAP.md", "docs/CONTRIBUTING.md", "CREDITS.md"):
+        hits = re.findall(r"\]\(|(?<![*\w])\*[A-Za-z][^*\n]*\*(?![*\w])", prose(read(doc)))
+        check(not hits, "%s uses no markdown link or emphasis, which the page shows as typed%s"
+              % (doc, ": " + ", ".join(h[:40] for h in hits[:3]) if hits else ""))
     seen = set()
     for r in rows:
         up = upstream(r[8].split()[-1])

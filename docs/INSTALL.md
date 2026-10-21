@@ -1,9 +1,9 @@
 # Installing spark
 
 Start with the signed installer on a computer you already use. It does
-not reinstall the OS or erase a disk. [Section 2](#2-install-spark) has
-the steps. Section 1 is optional OS provisioning for a bare machine;
-its disk choices can erase existing data. The rest is for later.
+not reinstall the OS or erase a disk. Section 2 has the steps. Section
+1 is optional OS provisioning for a bare machine; its disk choices can
+erase existing data. The rest is for later.
 
 ## Before you start
 
@@ -15,10 +15,10 @@ its disk choices can erase existing data. The rest is for later.
   is 3.2, so use zsh there. Have `sudo`, `git`, `curl`, Python 3.9 or
   newer and `ssh-keygen`. Section 2 checks these before installation.
 - A CPU can run a model without a GPU. Listed model files range from
-  1.3 to 17.4 GB and need a 3 to 21 GB *model memory budget*. The
+  1.3 to 17.4 GB and need a 3 to 21 GB model memory budget. The
   budget defaults to 60 percent of RAM plus GPU memory; it is not a
   whole-computer RAM minimum. For example, the 1.3 GB file needs a
-  3 GB model budget. [Section 4](#4-models) lists the choices.
+  3 GB model budget. Section 4 lists the choices.
 - Leave more free disk space than the model file for the engine and
   setup. spark downloads its code and engine from GitHub and model
   weights from Hugging Face. Setup time depends on your connection,
@@ -34,15 +34,14 @@ curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get 
 ```
 
 It checks the prerequisites and asks before setup changes anything.
-[Section 2](#2-install-spark) has prerequisite fixes, a way to read
-the script first, and the first check.
+Section 2 has prerequisite fixes, a way to read the script first, and
+the first check.
 
 ## 1. A machine from zero
 
 Optional: only follow this section if you intend to install an OS on a
 bare machine. Writing an installer USB stick or choosing a target disk
-can erase data. On a computer you already use, skip to [section
-2](#2-install-spark).
+can erase data. On a computer you already use, skip to section 2.
 
 Debian:
 

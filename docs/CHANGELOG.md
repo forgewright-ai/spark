@@ -1,6 +1,21 @@
 # Changelog
 
-## v1.91.1
+## v1.93
+
+v1.92 was tagged with its CHANGELOG section still headed v1.91.1, so
+release.yml refused it and it has no release page. Its two fixes stand
+under their own heading below. This release carries them, and two
+more:
+
+- The bug form, README.md and INSTALL.md say GitHub issues are public,
+  prefer `spark check --report`, ask for made-up names and paths, and
+  never a login QR screenshot (#59)
+- INSTALL.md names its sections in words. The page renders the docs'
+  own subset of markdown, so its section links and one emphasis showed
+  as typed. docs_test refuses a markdown link or an emphasis in a
+  rendered doc now
+
+## v1.92
 
 - S4: INSTALL led with a bare machine and README gave no requirements;
   both now open with the signed installer on a computer in use, and the
