@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.94
+
+`spark help` opens with what spark is, more exactly: a local model by
+default, no account or telemetry, and a configured model server
+receives the text you send. The docs say the same where a new user
+reads first, and before the phone is shared.
+
+- `spark help`, README.md, INSTALL.md and the cheatsheet qualify
+  privacy at first use: setup starts the engine, the page and the
+  health check; the page is plain HTTP on one LAN address until you
+  configure https; an ordinary user's token against the admin's; the
+  login QR holds the admin token; `spark serve https` bare reports
+  status (#62)
+- README.md's Documents list links each doc, and its License paragraph
+  says what is MIT and where the other licenses are
+- INSTALL.md explains each prompt key once, in the keys table
+
 ## v1.93
 
 v1.92 was tagged with its CHANGELOG section still headed v1.91.1, so
