@@ -36,6 +36,8 @@ spark client follows, and trust is typed, never assumed.
 - The page's code for the retired desktop app is gone: the browser is
   its one host. A connection that dies between requests no longer
   leaves a traceback in the page's log.
+- LICENSE says the tale under `home/.config/spark/tale` is CC BY-NC-ND
+  4.0, apart from the MIT grant; CREDITS said it alone.
 
 ## v1.90.4
 
