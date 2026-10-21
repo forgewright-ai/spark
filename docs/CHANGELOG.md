@@ -7,7 +7,6 @@
   share a small queue, an account limit and a deadline; busy callers get
   a retry hint, and expired or disconnected waiters start no work (#42)
 
-
 ## v1.90.3
 
 - S3: file references and continued threads read and decoded their whole
