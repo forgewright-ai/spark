@@ -795,6 +795,17 @@ def patch_lane():
 def main():
     tests_named()
     tests_gated()
+    readme, inst, cheat, cli = (read(f) for f in
+                                ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "bin/spark"))
+    for name, body in (("README.md", readme), ("docs/INSTALL.md", inst),
+                       ("docs/CHEATSHEET.txt", cheat), ("bin/spark", cli)):
+        check("nothing leaves" not in body and
+              ("no telemetry" in body.lower() or "no account or telemetry" in body.lower()),
+              "%s has qualified privacy wording without a blanket claim" % name)
+    check("### HTTPS for the page" in inst and
+          "docs/INSTALL.md#https-for-the-page" in readme and
+          "only shows certificate status" in inst,
+          "README links to the HTTPS procedure and INSTALL distinguishes status")
     credits = read("CREDITS.md")
     # models: every row's license upstream is credited
     rows = [r for r in config.model_tables(ROOT) if r[6] == "repo"]

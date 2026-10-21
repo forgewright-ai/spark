@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# spark -- your own AI, on a machine you own: no account, no cloud, nothing leaves
+# spark -- your own AI: local model by default; configured servers get your text
 #
 #   spark chat                 a conversation; spark @FILE words asks about a file
 #   spark <words>              ask; a streamed answer
@@ -28,7 +28,8 @@ if _LIB not in sys.path:
 
 from spark import MARK, page, say  # noqa: E402
 
-USAGE_HEAD = """%s -- your own AI, on a machine you own: no account, no cloud, nothing leaves
+USAGE_HEAD = """%s -- your own AI: local model by default; no account or telemetry
+configured model servers receive the text you send (README.md has details)
 
 spark
  spark                        what answers now
