@@ -461,6 +461,102 @@ def test_apply_delete_retry():
               n == 2 and not problems and os.listdir(root) == ["new"] and gone(run))
 
 
+def test_apply_copy_missing():
+    """The run's copy does not open: refused in spark's own words, nothing
+    applied, and no path under the home in the refusal (Python's OSError
+    text would name the runs dir)."""
+    root, run, up = linux_run({"a": "a\n"}, {"a": "a2\n", "new": "new\n"})
+    sandbox._rmtree(up)
+    e = refused("apply failure: a copy that does not open is refused as a sandbox error",
+                lambda: sandbox.apply(run), "the run's copy does not open")
+    check("apply failure: the refusal names no path under the home",
+          e is not None and run["dir"] not in str(e) and HOME not in str(e) and "nothing applied" in str(e), e)
+    check("apply failure: the project is untouched when the copy does not open",
+          read(os.path.join(root, "a")) == "a\n" and not os.path.exists(os.path.join(root, "new")))
+    sandbox.discard(run)
+
+
+def _delete_mark(path):
+    """A whiteout at `path`: the overlay's char device 0/0, or the xattr
+    kind where a user cannot mknod. False where neither can be made."""
+    if whiteout(path):
+        return True
+    try:
+        open(path, "wb").close()
+        os.setxattr(path, sandbox.WHITEOUT_XATTR, b"")
+        return True
+    except OSError:
+        return False
+
+
+def test_apply_delete_retry_linux():
+    """The Linux retry reads the upper dir again (_upper_raw): a whiteout
+    whose lower file already went is no change, and an opaque dir names
+    only the lower children still there. Two partial applies, then the
+    rest lands."""
+    name = "apply retry on Linux: whiteouts and an opaque dir after a partial delete"
+    if not IS_LINUX:
+        skip(name, "a char device 0/0 and user.overlay.* xattrs are Linux's")
+        return
+    lower = {"gone.txt": "bye\n", "zap.txt": "zap\n", "tree/a": "a\n", "tree/b": "b\n", "tree/c": "c\n"}
+    root, run, up = linux_run(lower, {"tree/keep": "k\n", "new.txt": "new\n"})
+    if not (_delete_mark(os.path.join(up, "gone.txt")) and _delete_mark(os.path.join(up, "zap.txt"))):
+        skip(name, "no whiteout can be made here (mknod refused, user xattrs unsupported)")
+        return
+    try:
+        os.setxattr(os.path.join(up, "tree"), sandbox.OPAQUE_XATTR, sandbox.OPAQUE_VALUE)
+    except OSError as err:
+        skip(name, "user xattrs not supported here (%s)" % err.strerror)
+        return
+    delete = sandbox._delete
+    seen = []
+
+    def fail_second_in_tree(fd, rel):
+        if rel.startswith("tree/"):
+            seen.append(rel)
+            if len(seen) == 2:
+                raise OSError(errno.EACCES, "injected delete failure")
+        return delete(fd, rel)
+
+    with patch.object(sandbox, "_delete", side_effect=fail_second_in_tree):
+        e = refused("apply retry (Linux): a delete failure inside the opaque dir stops the apply",
+                    lambda: sandbox.apply(run), "delete")
+    if e is None:
+        return
+    left = sorted(os.listdir(os.path.join(root, "tree")))
+    paths = {x["path"]: x["status"] for x in sandbox._flatten(sandbox.changes(run))}
+    check("apply retry (Linux): one child of the opaque dir went, the review names the two left",
+          len(left) == 2 and all(paths.get("tree/" + n) == "deleted" for n in left)
+          and not any(p.startswith("tree/") and paths[p] == "deleted" and not os.path.exists(os.path.join(root, p))
+                      for p in paths), (left, paths))
+    seen_top = []
+
+    def fail_second_whiteout(fd, rel):
+        if "/" not in rel:
+            seen_top.append(rel)
+            if len(seen_top) == 2:
+                raise OSError(errno.EACCES, "injected delete failure")
+        return delete(fd, rel)
+
+    with patch.object(sandbox, "_delete", side_effect=fail_second_whiteout):
+        e = refused("apply retry (Linux): the second whiteout's delete fails after the first went",
+                    lambda: sandbox.apply(run, sandbox.changes(run)), "delete")
+    if e is None:
+        return
+    still = [n for n in ("gone.txt", "zap.txt") if os.path.exists(os.path.join(root, n))]
+    paths = {x["path"]: x["status"] for x in sandbox._flatten(sandbox.changes(run))}
+    check("apply retry (Linux): a whiteout whose lower went is no change; the other is still a delete",
+          len(still) == 1 and paths.get(still[0]) == "deleted"
+          and not any(n in paths for n in ("gone.txt", "zap.txt") if n != still[0])
+          and not os.path.exists(os.path.join(root, "tree/a")) and not os.path.exists(os.path.join(root, "tree/c")),
+          (still, paths))
+    n, problems = sandbox.apply(run, sandbox.changes(run))
+    check("apply retry (Linux): the rest lands, the run ends",
+          not problems and sorted(os.listdir(root)) == ["new.txt", "tree"]
+          and os.listdir(os.path.join(root, "tree")) == ["keep"] and read(os.path.join(root, "new.txt")) == "new\n"
+          and gone(run), (n, problems, sorted(os.listdir(root))))
+
+
 def test_apply_partial_delete_conflict():
     root, run, src = manifest_run({"tree/a": "a\n", "tree/b": "b\n"}, {"new": "new\n"}, ["tree"])
     rm = sandbox._rm
@@ -1456,7 +1552,7 @@ def main():
     args = parser.parse_args()
     tests = (test_required_capability, test_upper_walk, test_visible, test_whiteout_and_opaque, test_overlay_marks, test_review_max,
               test_apply, test_apply_stage_failure, test_apply_place_retry, test_apply_delete_retry,
-              test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output, test_unapplied_visible,
+              test_apply_copy_missing, test_apply_delete_retry_linux, test_apply_partial_delete_conflict, test_apply_retry_conflict, test_apply_exclusions_and_output, test_unapplied_visible,
               test_apply_create_and_mode_retry, test_apply_failure_record, test_apply_hash_failure,
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,

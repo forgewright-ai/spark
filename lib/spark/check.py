@@ -1682,10 +1682,12 @@ ALERT_REMEDY = 90           # a remedy longer than this is not said: `spark chec
 ALERT_QUIET = ("prompt", "failure")
 # Rows that are red for a moment whenever a server starts or a model
 # loads: after spark update, spark serve on, spark model NAME, a reboot.
-# Their turn for the worse is held, and said only if the row is still red
-# ALERT_SETTLE_SECONDS later. One that heals inside that time is never
-# said. The history records both changes at once, as for any row.
-ALERT_SETTLE = ("serve", "forge", "ember", "peer")
+# The sends and watchdog rows flap for 9 to 18 s at a restart the same
+# way. Their turn for the worse is held, and said only if the row is
+# still red ALERT_SETTLE_SECONDS later. One that heals inside that time
+# is never said. The history records both changes at once, as for any
+# row.
+ALERT_SETTLE = ("serve", "forge", "ember", "peer", "sends", "watchdog")
 ALERT_SETTLE_SECONDS = 180
 # A server bound at boot to the first address up (a Wi-Fi backup before a
 # slow wire) stays there when the machine's address moves. The timer's run

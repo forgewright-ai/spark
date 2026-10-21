@@ -76,6 +76,15 @@ out=$("$SPARK" update 2>&1) && ok "up to date exits 0" || bad "up to date: rc $?
 printf '%s\n' "$out" | grep -q 'up to date' && ok "up to date says so" || bad "up to date: $out"
 before=$(git -C "$T/work" rev-parse HEAD)
 
+# 1b. an origin that cannot be reached: refused in one line, git's own
+#     last line under it (the audit of 2026-09-19 asked for the why)
+git clone -q "$T/origin.git" "$T/lost"
+git -C "$T/lost" remote set-url origin "$T/nowhere.git"
+rc=0; out=$("$T/lost/bin/spark" update 2>&1) || rc=$?
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q 'could not reach origin (git fetch failed)' \
+    && printf '%s\n' "$out" | grep -q '^  fatal: ' \
+    && ok "origin unreachable: refused, git's own line under spark's" || bad "origin unreachable: rc $rc: $out"
+
 # 2. --dry-run with a new commit on origin: says so, changes nothing
 tip=$(git -C "$T/origin.git" rev-parse "refs/heads/$branch")
 otree=$(git -C "$T/origin.git" rev-parse "$tip^{tree}")

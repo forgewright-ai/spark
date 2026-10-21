@@ -1812,7 +1812,12 @@ def _apply(run, reviewed):
         return 1
 
     try:
-        src_fd = os.open(_src_root(run), _DIR_FLAGS)
+        try:
+            src_fd = os.open(_src_root(run), _DIR_FLAGS)
+        except OSError as err:
+            # spark's own words: Python's would name the runs dir under the home
+            raise SandboxError("the run's copy does not open (%s) -- nothing applied"
+                               % (err.strerror or err)) from err
         # every file's bytes first, hashed against the review: a copy that
         # changed since refuses here, before the project is touched
         files = [e for e in todo if e["status"] in ("added", "changed", "binary") and e["kind"] == "file"]

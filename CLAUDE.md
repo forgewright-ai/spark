@@ -1381,11 +1381,13 @@ and may change freely.
    hours after its change (`check.ALERT_HOURS`). The rows `prompt`
    and `failure` are recorded and never said (`check.ALERT_QUIET`):
    both turn warn when the last shell closes. The rows `serve`,
-   `forge`, `ember` and `peer` settle (`check.ALERT_SETTLE`): they
-   are red while a server starts or a model loads. Their turn for the
-   worse is held in the row's `held` key, and said only when the row
-   is still red 180 seconds later (`check.ALERT_SETTLE_SECONDS`). One
-   that heals before that is never said. The history records both
+   `forge`, `ember`, `peer`, `sends` and `watchdog` settle
+   (`check.ALERT_SETTLE`). They are red while a server starts or a
+   model loads. The last two flap for a few seconds at a restart.
+   Their turn for the worse is held in the row's `held` key, and said
+   only when the row is still red 180 seconds later
+   (`check.ALERT_SETTLE_SECONDS`). One that heals before that is never
+   said. The history records both
    changes at once. A server may come up on a Wi-Fi backup at boot,
    before a slow wire. When the `serve` or `forge` row says the
    machine's address moved under it, the timer fixes it

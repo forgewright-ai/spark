@@ -46,6 +46,18 @@ spark client follows, and trust is typed, never assumed.
   a week, its record kept as an artifact (#58).
 - `tests/land.sh` lands main even when the remote refuses to delete
   the try branch: it says the branch stays and prints where main is.
+- The `sends` and `watchdog` rows settle like the servers' rows: red
+  for a moment at a restart, said only when still red three minutes
+  later.
+- `spark update` says why a fetch failed: git's own last line under
+  spark's, with no credential in it.
+- The chat's map of spark's commands spells every form out, as the
+  prompt line's map does; the `a|b` shorthand is gone.
+- A sandboxed run whose copy does not open is refused in spark's own
+  words, with no path under the home. A refused apply writes the run's
+  record once. The Linux retry after a partial delete has its test: a
+  whiteout whose file already went is no change, and an opaque
+  directory names only the children still there.
 
 ## v1.90.4
 

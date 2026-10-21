@@ -40,6 +40,24 @@ def _git(args, timeout=15):
     return run(["git", "-C", REPO] + list(args), timeout=timeout)
 
 
+_USERINFO = re.compile(r"://[^/@\s]+@")    # a credential in a remote URL never reaches the terminal
+
+
+def _git_said(args, timeout=15):
+    """(rc, git's own last line) of `git ARGS`, for a refusal that says
+    why. rc is -1 when git hangs or is missing; the line is "" then."""
+    try:
+        p = subprocess.run(["git", "-C", REPO] + list(args), capture_output=True, text=True,
+                           errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return -1, ""
+    lines = [ln.strip() for ln in p.stderr.splitlines() if ln.strip()]
+    # git's own verdict is its last fatal: or error: line; the lines after
+    # it are advice ("and the repository exists.")
+    said = [ln for ln in lines if ln.startswith(("fatal:", "error:"))] or lines
+    return p.returncode, _USERINFO.sub("://", said[-1]) if said else ""
+
+
 NOT_SIGNED = "not signed by a known key"
 BEHIND = "behind this checkout"
 
@@ -267,9 +285,10 @@ def cmd_update(args):
         return 1
 
     with _pulse():
-        rc, _ = _git(["fetch", "-q", "--tags", "origin"], timeout=30)
+        rc, why = _git_said(["fetch", "-q", "--tags", "origin"], timeout=30)
     if rc != 0:
         say("%s update -- could not reach origin (git fetch failed)" % MARK)
+        say("  " + (why or "git fetch did not finish in 30 seconds"))
         return 1
     # a fetched tag can land on the sha already cached: drop the version
     # cache so `spark ver` says the release, not <old>+N (the box said
