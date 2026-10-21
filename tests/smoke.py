@@ -10776,7 +10776,7 @@ def main():
         # the pager: piped output never touches $PAGER -- a pager that would
         # fail (/bin/false) proves page() never ran it off a tty
         rc, out, _ = spark("help", extra={"PAGER": "/bin/false"})
-        t.ok(rc == 0 and "your own AI, on a machine you own" in out,
+        t.ok(rc == 0 and "local model by default" in out,
              "spark help piped with PAGER=/bin/false: rc 0, the usage prints", out)
         rc, out, _ = spark("check", "--all", extra={"PAGER": "/bin/false"})
         t.ok(rc in (0, 1) and out.startswith("spark check ") and "memory" in out,
