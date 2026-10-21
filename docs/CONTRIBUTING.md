@@ -103,8 +103,12 @@ a JSON object. It judges no words; GPU backends, other models and other
 platforms stay untested. Held-out quality remains the separate
 `line_audition.py` run, and the record says `not_run` for it.
 
-Neither command is a CI job yet: the workflows and `tests/gate.sh` are
-protected paths, so the jobs come with a major.
+Both run on GitHub's runners from `.github/workflows/validation.yml`.
+The isolation command runs on every push to main and to a try branch,
+on Linux with bubblewrap and on macOS. The harness runs once a week and
+on request against the pinned artifacts, fetched by their hashes and
+kept in the actions cache. Its record is an artifact, on failure too.
+A pull request never runs them.
 
 ## Branch model
 

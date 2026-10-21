@@ -40,7 +40,7 @@ jobs:
           done
       - name: collect
         run: python3 tests/line_audition.py collect --os debian --out help-debian.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-debian
           path: help-debian.json
@@ -65,7 +65,7 @@ jobs:
           ls /usr/share/man/man8/pacman.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os arch --out help-arch.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-arch
           path: help-arch.json
@@ -101,7 +101,7 @@ jobs:
         run: xbps-install -Sy mdocml && command -v mandoc && command -v man && man -w ls
       - name: collect
         run: python3 tests/line_audition.py collect --os void --out help-void.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-void
           path: help-void.json
@@ -133,7 +133,7 @@ jobs:
           ls /usr/share/man/man8/dnf*.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os fedora --out help-fedora.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-fedora
           path: help-fedora.json
@@ -162,7 +162,7 @@ jobs:
           ls /usr/share/man/man8/zypper.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os opensuse --out help-opensuse.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-opensuse
           path: help-opensuse.json
@@ -178,7 +178,7 @@ jobs:
           persist-credentials: false
       - name: collect
         run: /usr/bin/python3 tests/line_audition.py collect --os macos --out help-macos.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: help-macos
           path: help-macos.json

@@ -246,8 +246,8 @@ Two commands outside the gate keep their evidence apart;
 `tests/sandbox_test.py --real-only --require-real` fails without real
 isolation assertions. `tests/model_validation.py` runs the pinned engine
 and weights through synthetic requests; `bench_smoke.py` runs its
-selftest. Their CI jobs come with a major: the workflows are protected
-paths.
+selftest. `.github/workflows/validation.yml` runs them on GitHub's
+runners: isolation at every landing, the harness once a week.
 
 The audition is not in the gate: it needs a live model, and it is the
 one test that judges words. `tests/audition.py` runs 8 fixtures in

@@ -1,0 +1,101 @@
+# spark validation -- the two commands the gate keeps apart, on GitHub's
+# own runners (docs/CONTRIBUTING.md, "Validation boundaries").
+# isolation: `tests/sandbox_test.py --real-only --require-real`, the real
+# section alone, on Linux (bubblewrap from apt, the runner's non-root
+# user) and on macOS (sandbox-exec, APFS, the command line tools): the
+# job fails when the capability is missing, it never skips. Every push to
+# main and to a try/ branch, as ci.yml runs.
+# harness: `tests/model_validation.py` on a Linux CPU runner against the
+# engine archive engine.env pins and the qwen3-5-2b weights models.env
+# pins. The job fetches both by their pinned hashes and keeps them in the
+# actions cache under the hash of the two tables, so a later run finds
+# them there; the harness itself downloads nothing and verifies both
+# again. The JSON record is an artifact, on failure too. Once a week and
+# on request: the weights are 1.4 GB.
+# Never on a pull request: no untrusted pull request runs on these hosts.
+name: validation
+on:
+  push:
+    branches: [main, 'try/**']
+  schedule:
+    - cron: '41 5 * * 2'   # Tuesdays, 05:41 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  isolation:
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: python3
+          - os: macos-latest
+            python: /usr/bin/python3   # Apple's, as ci.yml's macos job
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - name: bubblewrap
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y -qq bubblewrap >/dev/null
+      - name: the real section alone, required
+        env:
+          PY: ${{ matrix.python }}
+        run: |
+          "$PY" tests/sandbox_test.py --real-only --require-real
+  harness:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the pinned artifacts, from the cache
+        id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830   # v4.3.0
+        with:
+          path: ~/spark-validation
+          key: validation-${{ hashFiles('engine.env', 'models.env') }}
+      - name: the pinned artifacts, fetched and verified
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          # data only: the tables are read, never sourced
+          ver=$(sed -n 's/^LLAMA_VERSION=//p' engine.env)
+          esha=$(sed -n 's/^LLAMA_SHA_LINUX_X64=//p' engine.env)
+          row=$(sed -n 's/^MODEL_QWEN3_5_2B="\(.*\)"$/\1/p' models.env)
+          url=$(printf '%s' "$row" | awk '{print $2}')
+          msha=$(printf '%s' "$row" | awk '{print $4}')
+          dir=$HOME/spark-validation
+          mkdir -p "$dir"
+          umask 077
+          curl -fsSL --retry 3 -o "$dir/engine.tar.gz" \
+            "https://github.com/ggml-org/llama.cpp/releases/download/$ver/llama-$ver-bin-ubuntu-x64.tar.gz"
+          curl -fsSL --retry 3 -o "$dir/model.gguf" "$url"
+          # a wrong byte is a deleted file: nothing unverified reaches the cache
+          printf '%s  %s\n' "$esha" "$dir/engine.tar.gz" | sha256sum -c - || { rm -rf "$dir"; exit 1; }
+          printf '%s  %s\n' "$msha" "$dir/model.gguf" | sha256sum -c - || { rm -rf "$dir"; exit 1; }
+      - name: the harness
+        run: |
+          umask 077
+          python3 tests/model_validation.py \
+            --engine-archive "$HOME/spark-validation/engine.tar.gz" \
+            --model-file "$HOME/spark-validation/model.gguf" > compatibility.json
+      - name: the record's verdict
+        if: always()
+        run: |
+          # the status, the stage that failed and the counts; the record holds no path or answer
+          python3 -c 'import json; r = json.load(open("compatibility.json")); print(r["status"], r.get("error", ""), r["passed"], "of", r["requested"])' || echo "no record"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
+        if: always()
+        with:
+          name: compatibility
+          path: compatibility.json
+          if-no-files-found: warn

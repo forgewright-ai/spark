@@ -38,6 +38,14 @@ spark client follows, and trust is typed, never assumed.
   leaves a traceback in the page's log.
 - LICENSE says the tale under `home/.config/spark/tale` is CC BY-NC-ND
   4.0, apart from the MIT grant; CREDITS said it alone.
+- The workflows follow their upstreams: `actions/upload-artifact`
+  7.0.2 and `github/codeql-action` 4.38.3, pinned by sha (#53, #54).
+- A validation workflow runs the two commands the gate keeps apart:
+  the real isolation section on Linux and macOS at every landing, and
+  the compatibility harness against the pinned engine and weights once
+  a week, its record kept as an artifact (#58).
+- `tests/land.sh` lands main even when the remote refuses to delete
+  the try branch: it says the branch stays and prints where main is.
 
 ## v1.90.4
 

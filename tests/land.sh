@@ -139,6 +139,9 @@ fi
 # a fast-forward only: no --force, and the hook asks the same check again
 git push origin "$sha:refs/heads/main"
 if git ls-remote --exit-code origin "refs/heads/$try" >/dev/null 2>&1; then
-    git push -q origin --delete "$try"
+    # a remote that refuses a delete (a proxy's git) keeps the branch:
+    # main has moved all the same, so say so and go on
+    git push -q origin --delete "$try" 2>/dev/null \
+        || say "$try stays: the remote refused the delete -- git push origin --delete $try"
 fi
 say "main is at $short"
