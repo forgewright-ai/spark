@@ -59,6 +59,18 @@ spark client follows, and trust is typed, never assumed.
   whiteout whose file already went is no change, and an opaque
   directory names only the children still there.
 
+- Over plain http an admin action (a verb run, the do console, the
+  soul written, the check refreshed) answers this machine and its own
+  networks alone; a peer routed in from farther is refused with the
+  remedy. Over https a valid session acts from anywhere. A reverse
+  proxy is the peer: spark reads no forwarded header (#27)
+- Four low findings of the 2026-10-03 audit closed. `spark user add` no
+  longer offers to claim older plaintext chats, and `spark user claim`
+  reads a file through its own inode, never a link in its place. A new
+  admin token lands in one atomic replace, the old one dead that
+  instant. Every private file the page's server and the vault write is
+  opened without following a link and comes back 0600. `GET /v1/models`
+  lists the served roles alone, nothing of the engine's own listing
 ## v1.90.4
 
 - S3: generation requests could wait without a deadline, and a client

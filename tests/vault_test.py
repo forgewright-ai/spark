@@ -835,6 +835,40 @@ def test_state_files_private():
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_private_writers():
+    """vault.open_private, the one opener of a private file: a symlink
+    where the file should be is refused and its target untouched (the
+    sealed appender goes through it), and a file left 0644 comes back
+    0600."""
+    d = tempfile.mkdtemp(dir=HOME)
+    target = os.path.join(d, "target")
+    with open(target, "w") as f:
+        f.write("keep\n")
+    link = os.path.join(d, "link")
+    os.symlink(target, link)
+    refuse("open_private refuses a symlink in the file's place",
+           lambda: vault.open_private(link, os.O_WRONLY | os.O_CREAT | os.O_APPEND), OSError)
+    check("the link's target is untouched", read_bytes(target), b"keep\n")
+    wide = os.path.join(d, "wide")
+    with open(wide, "w") as f:
+        f.write("x")
+    os.chmod(wide, 0o644)
+    os.close(vault.open_private(wide, os.O_WRONLY | os.O_APPEND))
+    check("a file left 0644 comes back 0600", oct(os.stat(wide).st_mode & 0o777), "0o600")
+    fresh = os.path.join(d, "fresh")
+    os.close(vault.open_private(fresh, os.O_WRONLY | os.O_CREAT))
+    check("a file made here is 0600", oct(os.stat(fresh).st_mode & 0o777), "0o600")
+    dk = vault.new_key()
+    sealed = os.path.join(d, "one.sealed")
+    vault.append_sealed(sealed, dk, "thread", "t1", b"one")
+    before = read_bytes(sealed)
+    link2 = os.path.join(d, "t1.sealed")
+    os.symlink(sealed, link2)
+    refuse("append_sealed refuses a symlink in the file's place",
+           lambda: vault.append_sealed(link2, dk, "thread", "t1", b"two"), OSError)
+    check("the linked sealed file took no record", read_bytes(sealed), before)
+
+
 def test_bounded_context():
     """Synthetic files and sealed turns: cap work before decoding or parsing."""
     import contextlib
@@ -1024,6 +1058,7 @@ def main():
     test_login_interleavings()
     test_claim_never_seals_over()
     test_state_files_private()
+    test_private_writers()
     test_fails_index_redacts()
     test_bounded_context()
     test_throughput_floor()

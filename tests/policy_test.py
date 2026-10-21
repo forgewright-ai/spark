@@ -187,6 +187,15 @@ def main():
 
             ok(len(forgeserve.ROUTES) >= 30 and set(forgeserve.ROUTES.values()) == {"none", "user", "admin"},
                "ROUTES: %d rows, the three roles" % len(forgeserve.ROUTES))
+            # the acting rows: every admin POST row and nothing else, each
+            # named in contract 9 (forge_smoke proves the boundary itself)
+            acting = {k for k, v in forgeserve.ROUTES.items() if v == "admin" and k[0] == "POST"}
+            ok(set(forgeserve.ACTS) == acting, "ACTS is every admin POST row of ROUTES, and nothing else",
+               sorted(acting ^ set(forgeserve.ACTS)))
+            with open(os.path.join(REPO, "CLAUDE.md"), encoding="utf-8") as f:
+                claude = f.read()
+            missing = ["%s %s" % k for k in forgeserve.ACTS if "`%s %s`" % k not in claude]
+            ok(not missing and "forgeserve.ACTS" in claude, "CLAUDE.md contract 9 names every acting row and the tuple", missing)
             bare_codes = {}             # what each row answers nobody: the pass over TLS must agree
             for (method, pattern), role in sorted(forgeserve.ROUTES.items()):
                 path = FILL.get(pattern, pattern)

@@ -44,7 +44,7 @@ from . import (BAR_CACHE, CHECK_JSON, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                bind_check, config, confirm, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
                wait_ready)
-from . import engine, mem_total_gb, qr, tls, wire
+from . import engine, mem_total_gb, qr, tls, vault, wire
 from . import version as _version
 
 # resolved once, at daemon import: `spark forge` is a long-running process,
@@ -144,9 +144,77 @@ ROUTES = {
     ("POST", "/api/soul"): "admin",
 }
 METHOD = re.compile(r"^[A-Z]{1,16}$")       # a method the log may name as sent
+# The admin rows that act on this machine: a verb run, the do console, the
+# soul written, the check refreshed. Over plain http they answer this
+# machine and a peer on one of its own networks alone (peer_is_local);
+# a routed peer is 403 `boundary` before any body is read. Over TLS a
+# valid session opens them from anywhere. Contract 9 names the five and
+# tests/policy_test.py holds it to this tuple.
+ACTS = (("POST", "/api/run"), ("POST", "/api/do/propose"), ("POST", "/api/do/run"),
+        ("POST", "/api/check/refresh"), ("POST", "/api/soul"))
+# where a peer is local when this machine's own prefixes cannot be read
+# (own_networks found no tool): one named line each, so it can be argued
+# with. The IPv4 blocks are written as their first octets, never as a
+# dotted address: the privacy gate reads a dotted private address as a
+# machine's
+PRIVATE = tuple(ipaddress.ip_network(n) for n in (
+    (10 << 24, 8),                       # RFC 1918, the first block
+    ((172 << 24) | (16 << 16), 12),      # RFC 1918, the second block
+    ((192 << 24) | (168 << 16), 16),     # RFC 1918, the third block
+    ((169 << 24) | (254 << 16), 16),     # IPv4 link-local
+    "fc00::/7",                          # IPv6 unique local
+    "fe80::/10",                         # IPv6 link-local
+))
+NETWORKS_TTL = 60               # own_networks is read again this often
 V1_ROLES = ("spark", "ember")             # the roles /v1/chat/completions serves
 SECRET_KEY = re.compile("KEY|TOKEN|SECRET")   # a config key /api/config never returns
 ID_HINT = "a thread id is 1 to 64 letters, digits, - and _"   # forge.valid_id, said to a client
+
+
+def _parse_networks(text):
+    """The networks in `ip -o addr` (addr/prefix) or `ifconfig` (netmask
+    0x.., prefixlen N) output, as ip_network objects; a line that does
+    not parse is skipped."""
+    nets = []
+    for m in re.finditer(r"\binet6? ([0-9A-Fa-f.:]+)(?:%\w+)?(?:/(\d+)| netmask (0x[0-9A-Fa-f]+)| prefixlen (\d+))", text):
+        addr, plen, mask, plen6 = m.groups()
+        try:
+            if mask:
+                mask = str(ipaddress.IPv4Address(int(mask, 16)))
+            nets.append(ipaddress.ip_network("%s/%s" % (addr, plen or plen6 or mask), strict=False))
+        except ValueError:
+            continue
+    return nets
+
+
+def own_networks():
+    """The networks this machine sits on, one per interface address:
+    `ip -o addr` on Linux, `ifconfig` elsewhere, parsed and never
+    resolved. [] when neither answers; peer_is_local then falls back to
+    PRIVATE."""
+    for argv in (["ip", "-o", "addr"], ["ifconfig"]):
+        try:
+            nets = _parse_networks(subprocess.run(argv, capture_output=True, text=True, timeout=5).stdout)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if nets:
+            return nets
+    return []
+
+
+def peer_is_local(ip, nets):
+    """Whether a peer address is this machine's own or on one of `nets`
+    (own_networks); with no networks known, whether it is in PRIVATE. A
+    name is never looked up, and what does not parse is not local."""
+    try:
+        a = ipaddress.ip_address(ip.split("%")[0])
+    except ValueError:
+        return False
+    if a.is_loopback:
+        return True
+    if a.version == 6 and a.ipv4_mapped:
+        a = a.ipv4_mapped
+    return any(a in n for n in (nets or PRIVATE))
 
 
 def route_role(method, path):
@@ -278,7 +346,7 @@ def log(line):
                     os.replace(FORGE_LOG, FORGE_LOG + ".1")
             except OSError:
                 pass
-            fd = os.open(FORGE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            fd = vault.open_private(FORGE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
             with os.fdopen(fd, "a", encoding="utf-8") as f:
                 f.write("%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), line))
         except OSError:
@@ -491,6 +559,7 @@ class ForgeServer(ThreadingHTTPServer):
         self._conns = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._refused_t = 0.0                   # the last "too many connections" log line
         self._streams = {}                      # (role, user) -> /api/events streams open
+        self._nets = (0.0, [])                  # (epoch, own_networks()): the boundary of the acting rows
         # the names the page answers to: its address, this machine's
         # names, the name in its links and every name its certificate
         # carries (a name the certificate names is a name the page is)
@@ -645,8 +714,11 @@ class ForgeServer(ThreadingHTTPServer):
             return None
         with self._auth_lock:
             hit = self._user_keys.get(h)
-        if hit and _hash_current(hit[0], h):
-            return hit
+        if hit:
+            if _hash_current(hit[0], h):
+                return hit
+            with self._auth_lock:           # a rotated token's key leaves memory with it
+                self._user_keys.pop(h, None)
         name = users.find_by_token(tok)
         if not name:
             return None
@@ -732,6 +804,16 @@ class ForgeServer(ThreadingHTTPServer):
         """{role: file stem} -- what the page's header and the chat's done
         event show; nothing about the pair is baked into the page."""
         return dict((a, st) for a, st, _l in self.models_list(url))
+
+    def local_peer(self, ip):
+        """peer_is_local over this machine's networks, read again every
+        NETWORKS_TTL seconds: an address a lease moved is seen within a
+        minute, and no request pays a subprocess."""
+        t, nets = self._nets
+        if time.time() - t > NETWORKS_TTL:
+            nets = own_networks()
+            self._nets = (time.time(), nets)
+        return peer_is_local(ip, nets)
 
     def failed(self, ip):
         with self._fails_lock:
@@ -985,6 +1067,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(401, "auth", "log in with your token (spark user add NAME on %s)" % srv.cfg.name)
         if role == "admin" and self.role != "admin":
             return self._error(403, "role", "this needs the admin token")
+        if (method, path) in ACTS and srv.scheme != "https" and not srv.local_peer(self._ip()):
+            # the boundary: over plain http an action answers this
+            # machine's own networks alone, and the body is never read
+            log("%s refused: %s %s over plain http from beyond this machine's networks" % (self._ip(), method, path))
+            return self._error(403, "boundary", "over plain http an admin action answers this machine and its own "
+                               "networks alone; from farther, spark serve https")
         if method == "GET":
             fn = {"/v1/models": self.v1_models, "/api/me": self.api_me, "/api/check": self.api_check,
                   "/api/stats": self.api_stats,
@@ -1113,22 +1201,20 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- the OpenAI-compatible face ----
     def v1_models(self):
-        cfg = self.server.cfg
-        try:
-            up = self.server.upstream.require()
-            req = urllib.request.Request(up + "/v1/models", headers=wire._headers(cfg))
-            with urllib.request.urlopen(req, timeout=cfg.timeout) as r:
-                data = r.read()
-        except wire.BrainError as e:
-            return self._error(502, e.kind, e.hint)
-        except urllib.error.HTTPError as e:
-            return self._error(502, "bad", "upstream answered HTTP %d" % e.code)
-        except (urllib.error.URLError, OSError) as e:
-            return self._error(502, "down", str(e))
-        self._start(200, "application/json", NO_STORE, len(data))
-        self.wfile.write(data)
-        self._status = 200
-        return None
+        """The models this page serves, in the shape the router lists and
+        wire.models reads: one entry a served role, its id the file's
+        stem, the role among its aliases, its status loaded or unloaded.
+        Nothing of the upstream's own listing passes through: a path on
+        this disk is no name, and a model the page does not serve is
+        not listed."""
+        url, _m, st = self.server.upstream.resolve()
+        if st != "ok":
+            return self._error(502, "down", "no model answers here now")
+        roles, status = self.server.role_models(url), self.server.models_status(url)
+        data = [{"id": wire._stem(roles[role]), "object": "model", "owned_by": "spark", "aliases": [role],
+                 "status": {"value": status.get(role, "loaded")}}
+                for role in V1_ROLES if roles.get(role)]
+        return self._json(200, {"object": "list", "data": data})
 
     def _v1_role(self, model):
         """The role a /v1 request's `model` names, or None: spark or ember
@@ -1989,7 +2075,7 @@ def _misconfigured(cfg):
 
 def _write_url(url):
     state_dir()
-    fd = os.open(FORGE_URL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(FORGE_URL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w") as f:
         f.write(url + "\n")
 
@@ -2100,7 +2186,7 @@ def cmd_start(args):
         if rc is not None:
             return rc
     state_dir()
-    lock = os.open(FORGE_LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
+    lock = vault.open_private(FORGE_LOCK, os.O_WRONLY | os.O_CREAT)
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -2111,7 +2197,7 @@ def cmd_start(args):
             os.replace(FORGE_LOG, FORGE_LOG + ".1")
     except OSError:
         pass
-    out = os.open(FORGE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    out = vault.open_private(FORGE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     cmd = [sys.executable, os.path.join(REPO, "bin", "spark"), "forge", "--foreground", "--host", host, "--port", str(port)]
     try:
         p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
@@ -2545,12 +2631,13 @@ def cmd_token(args):
     if sys.stdin.isatty() and sys.stdout.isatty() and not confirm(
             "make a new admin token -- every admin logs in again"):
         return 0
+    # one atomic replace, fsynced: the old token is dead the instant the
+    # new one is on disk, and no moment has none (the server re-reads
+    # the file on its mtime, admin_token)
     path = cfg.forge_token_file
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-    ensure_token(cfg)
+    state_dir()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    vault.write_private(path, (secrets.token_urlsafe(32) + "\n").encode(), durable=True)
     say("%s serve -- new admin token -- log in again: spark serve --login" % MARK)
     from . import audit
     why = audit.record("forge token")

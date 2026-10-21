@@ -551,6 +551,12 @@ URL` follow.
 3. `spark serve https` shows the certificate and who must trust it.
    `spark serve https off` is plain HTTP again.
 
+Over plain HTTP an admin action (a verb run, the do console, the soul,
+the check) answers this machine and its own networks alone. A request
+routed in from farther is refused and told to serve https. A reverse
+proxy in front of the page is the peer: spark reads no forwarded
+header, so put the proxy on this network or serve https.
+
 Another spark that does not trust the issuer pins the certificate:
 `spark client https://HOST:8081 --pin FINGERPRINT`, with the
 fingerprint `spark serve --login` prints there. `--ca FILE` trusts the
@@ -808,6 +814,10 @@ network is the trust boundary.
   included. A captured token works until it is rotated. Rotate with
   `spark user token --new`, or `spark serve --login --new` for the
   admin.
+- Over plain HTTP a captured admin token acts from this network alone:
+  a verb run or a command through the do console answers no peer
+  routed in from outside it. Over https it acts from anywhere a valid
+  session reaches.
 - Guessing a token is slow: 10 wrong tokens in a minute lock that
   address out for a minute.
 - The admin token can run any command on this machine. With

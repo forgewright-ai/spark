@@ -238,6 +238,27 @@ def sync_dir(path):
         os.close(fd)
 
 
+# every writer of a file that is the user's alone opens it here: made
+# 0600, never through a symlink standing where the file should be
+# (O_NOFOLLOW), never inherited by a child (O_CLOEXEC), and one an older
+# spark or an umask left wider is brought to 0600
+PRIVATE_FLAGS = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+
+
+def open_private(path, flags):
+    """os.open for a private file: `flags` plus PRIVATE_FLAGS, mode 0600
+    on creation and set on an existing file too. A symlink in the file's
+    place is an OSError, nothing opened and nothing written through it."""
+    fd = os.open(path, flags | PRIVATE_FLAGS, 0o600)
+    try:
+        if os.fstat(fd).st_mode & 0o077:
+            os.fchmod(fd, 0o600)
+    except OSError:
+        os.close(fd)
+        raise
+    return fd
+
+
 def write_private(path, data, durable=False):
     """A 0600 file that was never world-readable: private temp beside the
     target, then an atomic replace. The temp's name is mkstemp's, unique
@@ -278,10 +299,10 @@ def append_sealed(path, dk, kind, name, record):
     if os.path.exists(path):
         _expect(path, kind, name)
     else:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o600)
+        fd = open_private(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND)
         with os.fdopen(fd, "w") as f:
             f.write(hdr + "\n")
-    fd = os.open(path, os.O_RDWR | os.O_APPEND, 0o600)
+    fd = open_private(path, os.O_RDWR | os.O_APPEND)
     with os.fdopen(fd, "r+b") as f:
         # a write torn short (a crash, a full disk) leaves a line with no
         # end: the next record starts on a line of its own, so only the

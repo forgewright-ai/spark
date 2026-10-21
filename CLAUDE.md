@@ -1585,6 +1585,24 @@ and may change freely.
    POST    /api/soul                  admin
    ```
 
+   Five admin rows act on this machine: `POST /api/run`, `POST
+   /api/do/propose`, `POST /api/do/run`, `POST /api/check/refresh` and
+   `POST /api/soul`. They are every admin `POST` row
+   (`forgeserve.ACTS`). Over plain http they answer this machine and a
+   peer on one of its own networks alone. The networks are the interface
+   prefixes `own_networks` reads, or the private and link-local ranges
+   when it reads none. A routed peer is 403 `{error: {kind: boundary}}`
+   before any body is read, with the remedy, and one line in `forge.log`
+   says so. Over TLS a valid session acts from anywhere. spark reads no
+   `Forwarded` or `X-Forwarded-*` header: a reverse proxy is the peer,
+   and its address decides. `tests/policy_test.py` holds `ACTS` to the
+   table and to this paragraph; `tests/forge_smoke.py` proves the
+   boundary with synthetic peers. `GET /v1/models` lists one entry a
+   served role, in the shape the router lists: the file's stem as id,
+   the role among its aliases, its status. Nothing of the engine's own
+   listing passes, never a path. A `model` that is neither a role nor a
+   name `/api/health` shows is 400 `{error: {kind: model}}`.
+
    `POST /api/soul` takes `{text, core?}` and answers `{chars, cut,
    part}`, `part` the one written: `personality` after an unchanged
    core once awaken gave one, else `soul`. A changed core there is 409

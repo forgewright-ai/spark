@@ -7,6 +7,7 @@
 import hashlib
 import http.client
 import io
+import ipaddress
 import json
 import os
 import re
@@ -144,6 +145,73 @@ def sse(raw):
                 pass
             out.append((ev, d))
     return out
+
+
+def admin_boundary(ok):
+    """The acting admin rows over plain http: a routed peer is 403
+    boundary before any body is read; loopback and a peer on one of this
+    machine's networks answer, and over TLS the routed peer answers too.
+    A fake server, the real _route and the real bearer check."""
+    import email.message
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from spark import forgeserve as fs
+
+    nets = [ipaddress.ip_network("192.0.2.0/24"), ipaddress.ip_network("2001:db8::/64")]
+    cases = (("127.0.0.1", True), ("::1", True), ("192.0.2.7", True), ("2001:db8::9", True),
+             ("::ffff:192.0.2.7", True), ("203.0.113.9", False), ("2001:db8:1::9", False), ("nonsense", False))
+    got = [(ip, fs.peer_is_local(ip, nets)) for ip, _w in cases]
+    ok(got == list(cases), "peer_is_local: loopback and the own networks are local, a routed peer is not", got)
+    # the three RFC 1918 blocks, built from their numbers: a dotted
+    # private address is what the privacy gate refuses in the tree
+    blocks = [str(ipaddress.ip_address(n)) for n in ((10 << 24) + 66051, (172 << 24) + (31 << 16) + 7, (192 << 24) + (168 << 16) + 7)]
+    ok(all(fs.peer_is_local(ip, []) for ip in blocks) and fs.peer_is_local("fe80::1", []) and fs.peer_is_local("fd00::9", [])
+       and not fs.peer_is_local("203.0.113.9", []) and not fs.peer_is_local("2001:db8::9", []),
+       "with no networks read, the private and link-local ranges stand in", blocks)
+    linux = ("1: lo    inet 127.0.0.1/8 scope host lo\n2: enp2s0    inet 192.0.2.10/24 brd 192.0.2.255 scope global\n"
+             "2: enp2s0    inet6 2001:db8::10/64 scope global\n")
+    mac = ("lo0: flags=8049\n\tinet 127.0.0.1 netmask 0xff000000\n\tinet6 fe80::1%lo0 prefixlen 64 scopeid 0x1\n"
+           "en0: flags=8863\n\tinet 192.0.2.10 netmask 0xffffff00 broadcast 192.0.2.255\n")
+    got = [str(n) for n in fs._parse_networks(linux)]
+    ok(got == ["127.0.0.0/8", "192.0.2.0/24", "2001:db8::/64"], "ip -o addr parsed to this machine's networks", got)
+    got = [str(n) for n in fs._parse_networks(mac)]
+    ok(got == ["127.0.0.0/8", "fe80::/64", "192.0.2.0/24"], "ifconfig parsed to this machine's networks", got)
+
+    token = "fixture-admin-" + "x" * 40
+    logged = []
+
+    def ask(ip, scheme, method, path, as_admin=True):
+        server = SimpleNamespace(scheme=scheme, hosts={"127.0.0.1:1"}, cfg=SimpleNamespace(name="fixture"),
+                                 admin_token=lambda: token, locked_out=lambda ip: False, failed=lambda ip: None,
+                                 user_by_bearer=lambda t: None, session_of=lambda sid: None,
+                                 local_peer=lambda ip: fs.peer_is_local(ip, nets))
+        h = object.__new__(fs.Handler)
+        h.server, h.client_address, h.command = server, (ip, 1), method
+        h.headers = email.message.Message()
+        h.headers["Host"] = "127.0.0.1:1"
+        h.headers["X-Spark"] = "1"
+        if as_admin:
+            h.headers["Authorization"] = "Bearer " + token
+        answers = []
+        h._error = lambda code, kind, hint, extra=None: answers.append((code, kind))
+        h._body = lambda: {}
+        for name in ("api_run", "api_do_propose", "api_do_run", "api_check_refresh", "api_soul_write", "api_serve"):
+            setattr(h, name, lambda body=None, name=name: answers.append(name))
+        with patch.object(fs, "log", lambda line: logged.append(line)):
+            h._route(method, path)
+        return answers
+
+    for method, path in fs.ACTS:
+        a = ask("203.0.113.9", "http", method, path)
+        ok(a == [(403, "boundary")], "%s %s over plain http from a routed peer: 403 boundary, the body unread" % (method, path), a)
+        for ip, scheme in (("203.0.113.9", "https"), ("192.0.2.7", "http"), ("127.0.0.1", "http"), ("2001:db8::9", "http")):
+            a = ask(ip, scheme, method, path)
+            ok(len(a) == 1 and isinstance(a[0], str), "%s %s from %s over %s: the route runs" % (method, path, ip, scheme), a)
+    a = ask("203.0.113.9", "http", "GET", "/api/serve")
+    ok(a == ["api_serve"], "a view (GET /api/serve) is no act: it answers a routed peer over plain http", a)
+    a = ask("203.0.113.9", "http", "POST", "/api/run", as_admin=False)
+    ok(a == [(401, "auth")], "no bearer from a routed peer: the 401 comes first, nothing about the boundary", a)
+    ok(sum("refused: POST /api/run over plain http" in line for line in logged) == 1, "the refusal is one line in the log", logged)
 
 
 def generation_admission(ok):
@@ -789,6 +857,7 @@ def main():
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + str(extra)[:300]) if extra and not cond else ""))
         fails += not cond
 
+    admin_boundary(ok)
     generation_admission(ok)
     reply_interruptions(ok)
     verb_runner(ok)
@@ -1098,7 +1167,11 @@ def main():
             req(url, "POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "what"}], "stream": False, "n_predict": -1}, headers=bearer)
             ok(SEEN.get("body", {}).get("n_predict") == 8192, "n_predict -1 (no limit upstream) is capped too", SEEN.get("body", {}).get("n_predict"))
             st, _, raw = req(url, "GET", "/v1/models", headers=bearer)
-            ok(st == 200 and "stub-7b-q4" in raw.decode(), "/v1/models proxied", raw[:100])
+            models = (json.loads(raw) if st == 200 else {}).get("data", [])
+            ok(st == 200 and [(m.get("id"), m.get("aliases"), m.get("status")) for m in models]
+               == [("stub-7b-q4", ["spark"], {"value": "loaded"}), ("stub-ember-q4", ["ember"], {"value": "loaded"})]
+               and "/" not in raw.decode() and ".gguf" not in raw.decode(),
+               "/v1/models: one entry a served role, the file's stem as id, never a path or the engine's own listing", raw[:200])
 
             # the monitor
             st, _, raw = req(url, "GET", "/api/bar", headers=bearer, timeout=30)

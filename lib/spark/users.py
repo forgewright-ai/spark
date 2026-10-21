@@ -402,12 +402,29 @@ def cmd_add(args):
             pass
     _audit("user add", name)
     n = legacy_threads()
-    if n and account()[0] == name and os.isatty(0):
-        if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
-                   % (n, "" if n == 1 else "s", name)):
-            return cmd_claim()
-        say("* nothing changed -- spark user claim moves them later")
+    if n and account()[0] == name:
+        # minting is minting: the older plaintext chats move only on the
+        # explicit verb, never on a question asked in the middle of it
+        say("* %d older plaintext thread%s here -- spark user claim moves them" % (n, "" if n == 1 else "s"))
     return 0
+
+
+def _plain_lines(src):
+    """The lines of a pre-v1.4 plaintext file, read through its own
+    inode: a regular file, never a symlink or a FIFO standing in its
+    place (OSError), so a claim seals only what an older spark wrote."""
+    import stat
+    fd = os.open(src, os.O_RDONLY | os.O_NONBLOCK | vault.PRIVATE_FLAGS)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("not a regular file: %s" % src)
+        f = os.fdopen(fd, encoding="utf-8", errors="replace")
+        fd = None
+        with f:
+            return f.read().splitlines()
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def _claim_files(name, dk):
@@ -420,8 +437,7 @@ def _claim_files(name, dk):
         if not os.path.isfile(src):
             continue
         try:
-            with open(src, encoding="utf-8", errors="replace") as f:
-                legacy = [ln for ln in f.read().splitlines()]
+            legacy = _plain_lines(src)
             path = os.path.join(user_dir(name), fname)
             have = []
             if os.path.isfile(path):
