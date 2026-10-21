@@ -16,6 +16,21 @@ marked `!`.
 
 ## Install
 
+Use a computer you already use; installing spark does not reinstall its
+OS or erase a disk. It supports Debian/Ubuntu, Arch, Void (glibc),
+Fedora and openSUSE Tumbleweed Linux, macOS, and Windows through WSL 2
+with Ubuntu. Use zsh or bash 4 or newer (zsh on macOS), on an x86-64
+or ARM64 machine with a supported engine. You need `sudo`, `git`,
+`curl`, Python 3.9 or newer and `ssh-keygen`.
+
+Before starting, allow room for a model download: the listed files
+range from 1.3 to 17.4 GB and need a separate 3 to 21 GB model memory
+budget. That budget is not the whole machine's RAM. Leave more
+free disk space than the model file for the engine and setup. A CPU
+works without a GPU; download and setup time depend on your connection
+and machine. [Model sizes and choices](docs/INSTALL.md#4-models) has
+details.
+
 1. Install the basics:
 
    ```sh
@@ -42,8 +57,9 @@ marked `!`.
    curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
-   It asks three questions, then downloads a model. This takes about
-   10 minutes. To read the script first:
+   This is the signed-release installer. It asks setup questions and
+   downloads a model. Time varies with the download and your machine.
+   To read the script first:
 
    ```sh
    curl -fsSLO https://github.com/forgewright-ai/spark/releases/latest/download/get
@@ -92,32 +108,40 @@ Every command is in `docs/CHEATSHEET.txt`.
 
 ## A first hour
 
-Some of these need an app from the next section. `Alt-s` is Option-s
-on a Mac.
+No editor app, other service account or second device is needed:
 
-1. `? what is eating my disk`: a command lands in your line. `Enter`
-   runs it.
-2. Run a command with a typo, such as `git pushh`. Press `Esc s` on the
+1. `spark check` shows rows that need attention. A healthy check can
+   print nothing and exit successfully.
+2. `spark chat` and ask a harmless question, such as `What is 2 + 2?`.
+   Type `/q`, `Esc` or `Ctrl-D` to leave chat; `Ctrl-C` stops a reply.
+3. At the shell prompt, type `? how many files are here` and press
+   `Enter`. Read the proposed command in your line. Press `Ctrl-C` to
+   discard it, or press `Enter` again only if you want to run it.
+
+More to try later (some need an app from the next section; `Alt-s` is
+Option-s on a Mac):
+
+1. Run a command with a typo, such as `git pushh`. Press `Esc s` on the
    empty line for the reason, and again for the fix.
-3. `?? how do I change the model`: follow up on the last answer.
-4. In micro with spark-micro, open an empty file, press `Alt-s` and
+2. `?? how do I change the model`: follow up on the last answer.
+3. In micro with spark-micro, open an empty file, press `Alt-s` and
    type `a short poem about this machine`.
-5. Press `Alt-s`, then `?` alone: a review opens beside your text.
-6. Select a stanza, press `Alt-s` and type `make it rhyme`. `Ctrl-Z`
+4. Press `Alt-s`, then `?` alone: a review opens beside your text.
+5. Select a stanza, press `Alt-s` and type `make it rhyme`. `Ctrl-Z`
    undoes it.
-7. `spark edit --watch poem.md` in a second terminal comments on each
+6. `spark edit --watch poem.md` in a second terminal comments on each
    save.
-8. `man ls | spark read how do I sort by size`: an answer that quotes
+7. `man ls | spark read how do I sort by size`: an answer that quotes
    the page.
-9. `spark drill --name spark < ~/.spark/docs/CHEATSHEET.txt`: practise
+8. `spark drill --name spark < ~/.spark/docs/CHEATSHEET.txt`: practise
    the commands.
-10. `journalctl -f | spark watch anything that fails`, on Linux: one
+9. `journalctl -f | spark watch anything that fails`, on Linux: one
     line when a line matches.
-11. `spark awaken`: a personality, and a face that waits, answers and
+10. `spark awaken`: a personality, and a face that waits, answers and
     rests above your prompt. `spark look off` turns them off.
-12. `spark memory add "short answers"`, then `spark chat`. In the chat,
+11. `spark memory add "short answers"`, then `spark chat`. In the chat,
     `/read @notes.txt what is due` answers from the file.
-13. `spark serve --login`: open the address on your phone. The traffic
+12. `spark serve --login`: open the address on your phone. The traffic
     is plain HTTP, so use a network you trust, or give the page a
     certificate: `spark serve https`.
 

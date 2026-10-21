@@ -786,6 +786,19 @@ def main():
     credits = read("CREDITS.md")
     # models: every row's license upstream is credited
     rows = [r for r in config.model_tables(ROOT) if r[6] == "repo"]
+    sizes = [round(r[3] / 2**30, 1) for r in rows]
+    budgets = [r[5] for r in rows]
+    for doc in ("README.md", "docs/INSTALL.md"):
+        intro = read(doc).split("curl -fsSL", 1)[0]
+        check("%.1f to %.1f GB" % (min(sizes), max(sizes)) in intro and
+              "%d to %d GB" % (min(budgets), max(budgets)) in intro,
+              "%s gives model file sizes and memory budgets before install" % doc)
+    inst = read("docs/INSTALL.md")
+    check(inst.index("## Before you start") < inst.index("## Install on an existing computer") <
+          inst.index("## 1. A machine from zero"),
+          "INSTALL leads with requirements and a signed existing-computer path")
+    check("Developer-only alternative" in inst and "without signed-release verification" in inst,
+          "INSTALL states the clone-from-main tradeoff beside that path")
     seen = set()
     for r in rows:
         up = upstream(r[8].split()[-1])

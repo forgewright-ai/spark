@@ -1,12 +1,48 @@
 # Installing spark
 
-Section 1 sets up a bare machine. Section 2 installs spark. The rest is
-for later.
+Start with the signed installer on a computer you already use. It does
+not reinstall the OS or erase a disk. [Section 2](#2-install-spark) has
+the steps. Section 1 is optional OS provisioning for a bare machine;
+its disk choices can erase existing data. The rest is for later.
+
+## Before you start
+
+- Supported: Debian/Ubuntu, Arch, Void (glibc, not musl), Fedora and
+  openSUSE Tumbleweed Linux, macOS, or Windows with WSL 2 and Ubuntu.
+  Atomic Linux variants such as Fedora Silverblue and openSUSE Aeon
+  are not supported. Use x86-64 or ARM64 for the supplied engine.
+- Use zsh or bash 4 or newer for the prompt line. macOS's system bash
+  is 3.2, so use zsh there. Have `sudo`, `git`, `curl`, Python 3.9 or
+  newer and `ssh-keygen`. Section 2 checks these before installation.
+- A CPU can run a model without a GPU. Listed model files range from
+  1.3 to 17.4 GB and need a 3 to 21 GB *model memory budget*. The
+  budget defaults to 60 percent of RAM plus GPU memory; it is not a
+  whole-computer RAM minimum. For example, the 1.3 GB file needs a
+  3 GB model budget. [Section 4](#4-models) lists the choices.
+- Leave more free disk space than the model file for the engine and
+  setup. Spark downloads its code and engine from GitHub and model
+  weights from Hugging Face. Setup time depends on your connection,
+  disk and CPU; it is not a fixed ten minutes.
+
+## Install on an existing computer
+
+Use the signed-release installer in a terminal on the supported
+computer you already use:
+
+```sh
+curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
+```
+
+It checks the prerequisites and asks before setup changes anything.
+[Section 2](#2-install-spark) has prerequisite fixes, a way to read
+the script first, and the first check.
 
 ## 1. A machine from zero
 
-About 10 minutes, with `sudo` once. Most of it is one model download,
-2.3 to 17 GB.
+Optional: only follow this section if you intend to install an OS on a
+bare machine. Writing an installer USB stick or choosing a target disk
+can erase data. On a computer you already use, skip to [section
+2](#2-install-spark).
 
 Debian:
 
@@ -147,7 +183,9 @@ when asked. Open Ubuntu and run Debian's step 3.
    sh get
    ```
 
-   Or by hand:
+   Developer-only alternative: the following clone follows `main`,
+   without signed-release verification. Use the signed installer above
+   for a normal installation.
 
    ```sh
    git clone https://github.com/forgewright-ai/spark.git ~/.spark
@@ -161,7 +199,8 @@ when asked. Open Ubuntu and run Debian's step 3.
    spark check
    ```
 
-   `spark check` lists what needs you. It exits 0 when nothing fails.
+   `spark check` lists what needs you. A healthy check may print
+   nothing; it exits 0 when nothing fails.
 
 `get` checks the tools above, clones spark to `~/.spark`, moves to the
 newest signed release and runs `spark setup`. It never runs `sudo`.
@@ -189,6 +228,11 @@ then asks. `spark ver --credits` shows the notice again.
 
 You can run `spark setup` again at any time. `spark setup -h` lists its
 options.
+
+If a download is interrupted or fails its sha256 check, run the signed
+installer command again. It retries the download and checks the full
+file before keeping it; it does not resume a partial file. Check free
+disk space if it fails again. You do not need to wipe the installation.
 
 The rc line goes at the end of `~/.bashrc` or `~/.zshrc`. It loads the
 prompt line and `TAB` completion. If setup prints a `todo rc` row, run
