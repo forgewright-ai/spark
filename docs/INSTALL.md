@@ -268,15 +268,7 @@ The prompt line:
   line, with a hint above it. Press `Enter` again to run it.
 - A command that deletes is marked `!`.
 - `?? words` follows up on the last answer.
-- `Esc s` asks about the line you are on.
-- After a command fails, `Esc s` on the empty line explains it. Press
-  it again for the fix.
-- `Esc r` finds a past command from your own words. Press it again for
-  the next match.
-- `Esc k` moves the row spark writes in, for a prompt of two lines.
-  `spark height N` sets it, 1 to 5.
 - `spark off` turns the prompt line off. `spark on` turns it back on.
-- `spark keys` lists the keys spark added, and moves them.
 - `cmd 2>&1 | explain` says what went wrong, and the fix.
 - `spark <words>` answers in the terminal. `spark @FILE words` asks
   about a file.
@@ -285,9 +277,9 @@ The keys spark adds to your shell, each with a name:
 
 | name | key | what it does |
 |---|---|---|
-| `ask` | `Esc s` | asks about the line you are on |
-| `recall` | `Esc r` | finds a past command |
-| `height` | `Esc k` | moves the row spark writes in |
+| `ask` | `Esc s` | asks about the current line; after a failure, press it on an empty line for the reason, then again for the fix |
+| `recall` | `Esc r` | finds a past command from your words; press it again for the next match |
+| `height` | `Esc k` | moves spark's row for a two-line prompt; `spark height N` sets it from 1 to 5 |
 | `listen` | `Esc v` | listens, with the voice on |
 | `stop` | `Esc x` | stops the speaking, with the voice on |
 
