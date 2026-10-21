@@ -742,6 +742,18 @@ def patch_lane():
     check(form.count("required: true") >= 5 and "label: Steps to reproduce" in form,
           "the bug form requires at least five fields, steps to reproduce among them")
     check("labels: [bug, triage]" in form, "a bug report lands labelled bug and triage")
+    check("Paste freely" not in form and "GitHub issues are public" in form,
+          "the bug form says reports are public without a blanket paste claim")
+    for field in ("steps", "saw", "report"):
+        m = re.search(r"(?ms)^    id: %s\n(.*?)(?=^  - type:|\Z)" % field, form)
+        check(m is not None and "description:" in m.group(1),
+              "the bug form has guidance beside %s" % field)
+    check("spark check --report" in form and "login QR" in form,
+          "the bug form prefers a status report and protects login QR codes")
+    readme, inst = read("README.md"), read("docs/INSTALL.md")
+    check("## Bugs\n" in readme and "GitHub issues are public" in readme and
+          "spark check --report" in readme and re.search(r"README\.md says\s+the same under Bugs", inst),
+          "README and INSTALL lead reporters to the same public-report guidance")
     cfg = read(".github/ISSUE_TEMPLATE/config.yml")
     check("blank_issues_enabled: false" in cfg and "github.com/forgewright-ai/spark/discussions" in cfg,
           ".github/ISSUE_TEMPLATE/config.yml turns blank issues off and points questions to Discussions")
