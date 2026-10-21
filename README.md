@@ -178,11 +178,11 @@ Tasks:
 
 ## Documents
 
-- `docs/INSTALL.md`: install, models, other machines, updates.
-- `docs/CHEATSHEET.txt`: every command on one page.
-- `docs/CHANGELOG.md`: what each release changed.
-- `docs/ROADMAP.md`: what comes next.
-- `docs/CONTRIBUTING.md`: how to send a change.
+- [Install guide](docs/INSTALL.md): requirements, models and updates.
+- [Cheatsheet](docs/CHEATSHEET.txt): commands at a glance.
+- [Changelog](docs/CHANGELOG.md): changes in each release.
+- [Roadmap](docs/ROADMAP.md): planned work.
+- [Contributing](docs/CONTRIBUTING.md): how to send a change.
 
 ## Bugs
 
@@ -255,7 +255,8 @@ moves forward. A clone on `main` is not checked.
 
 ## License
 
-MIT, in `LICENSE`. spark comes with no warranty. A model can be wrong,
-so what you run or accept is at your own risk. What spark downloads, and
-each license, is in `CREDITS.md`. It also names the one file here
-under another license. Built with Claude.
+spark's code is free and open source under the [MIT license](LICENSE).
+The tale in this repository has a separate license. Downloaded models
+and other parts have their own licenses; see [Credits](CREDITS.md).
+spark comes with no warranty. A model can be wrong, so check what you
+run or accept. Built with Claude.
