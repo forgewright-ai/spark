@@ -42,9 +42,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
-      - name: bubblewrap
+      - name: bubblewrap 0.11.0, built from its pinned release
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y -qq bubblewrap >/dev/null
+        # apt's bubblewrap is 0.9.0 and the sandbox needs 0.11 (overlay);
+        # Ubuntu 24.04 also bars unprivileged user namespaces by AppArmor,
+        # and that bar is lifted for this job alone.
+        run: |
+          sudo apt-get install -y -qq meson ninja-build libcap-dev >/dev/null
+          d=$(mktemp -d)
+          curl -fsSL --retry 3 -o "$d/bwrap.tar.xz" \
+            https://github.com/containers/bubblewrap/releases/download/v0.11.0/bubblewrap-0.11.0.tar.xz
+          printf '%s  %s\n' 988fd6b232dafa04b8b8198723efeaccdb3c6aa9c1c7936219d5791a8b7a8646 "$d/bwrap.tar.xz" | sha256sum -c - >/dev/null
+          tar -xJf "$d/bwrap.tar.xz" -C "$d"
+          meson setup "$d/build" "$d/bubblewrap-0.11.0" --prefix=/usr/local \
+            -Dman=disabled -Dselinux=disabled -Dtests=false \
+            -Dbash_completion=disabled -Dzsh_completion=disabled >/dev/null
+          ninja -C "$d/build" >/dev/null
+          sudo ninja -C "$d/build" install >/dev/null
+          sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
+          bwrap --version
       - name: the real section alone, required
         env:
           PY: ${{ matrix.python }}
