@@ -5796,8 +5796,8 @@ def check_history_cases(t):
         t.ok(alert() == lines, "check alert: the next full run writes the file whole again, the bad lines gone", str(alert()))
         # ---- the settling rows: red while a server starts or a model loads
         _c.ALERT_SETTLE = settle
-        t.ok(settle == ("serve", "forge", "ember", "peer") and _c.ALERT_SETTLE_SECONDS == 180,
-             "check: the rows that settle are the servers' and the peer's, 3 minutes", str(settle))
+        t.ok(settle == ("serve", "forge", "ember", "peer", "sends", "watchdog") and _c.ALERT_SETTLE_SECONDS == 180,
+             "check: the rows that settle are the servers', the peer's, the sends' and the watchdog's, 3 minutes", str(settle))
         fresh()
         go([R("serve", "ok"), R("privacy", "ok")])
         clock.now += 300
