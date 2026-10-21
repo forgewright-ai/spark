@@ -269,7 +269,7 @@ The keys spark adds to your shell, each with a name:
 |---|---|---|
 | `ask` | `Esc s` | asks about the current line; after a failure, press it on an empty line for the reason, then again for the fix |
 | `recall` | `Esc r` | finds a past command from your words; press it again for the next match |
-| `height` | `Esc k` | moves spark's row; `spark height N` sets it from 1 to 5 |
+| `height` | `Esc k` | moves spark's row for a two-line prompt; `spark height N` sets it from 1 to 5 |
 | `listen` | `Esc v` | listens, with the voice on |
 | `stop` | `Esc x` | stops the speaking, with the voice on |
 
