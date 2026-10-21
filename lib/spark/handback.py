@@ -32,6 +32,7 @@ import sys
 import tempfile
 
 from . import CONFIG_DIR, IS_MAC, STATE_DIR, is_wsl, run, say
+from . import vault
 
 WHAT = "handback"
 
@@ -195,7 +196,7 @@ def palette(ctx, tmp):
     if not IS_MAC and not is_wsl():
         if not ctx.dry and os.environ.get("TERM") == "linux":
             try:
-                with open("/dev/tty", "w") as tty:
+                with open("/dev/tty", "w") as tty:   # a device, not a file of ours
                     tty.write("".join("\033]P%x%s" % (i, h[1:]) for i, h in enumerate(VGA)))
             except OSError:
                 pass
@@ -287,7 +288,7 @@ def _mark(kinds):
     """REBUILD_MARK holds kinds, or goes when there are none."""
     if kinds:
         os.makedirs(os.path.dirname(REBUILD_MARK), exist_ok=True)
-        with open(REBUILD_MARK, "w", encoding="utf-8") as f:
+        with os.fdopen(vault.open_private(REBUILD_MARK, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
             f.write("".join(k + "\n" for k in sorted(kinds)))
     else:
         try:
@@ -407,7 +408,7 @@ def terminal(ctx, tmp):
         for key in ("Default Window Settings", "Startup Window Settings"):
             if str(prefs.get(key, "")) in names:
                 prefs[key] = "Basic"
-        with open(path + ".prefs", "wb") as f:
+        with os.fdopen(vault.open_private(path + ".prefs", os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "wb") as f:
             plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
         rc, _ = run(["defaults", "import", TERMINAL_DOMAIN, path + ".prefs"], timeout=10)
         if rc != 0:

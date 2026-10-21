@@ -61,6 +61,7 @@ import tempfile
 import time
 
 from . import CONFIG_DIR, HOME, OS, STATE_DIR, state_dir
+from . import vault
 
 RUNS_DIR = os.path.join(STATE_DIR, "runs")
 RUNS_LOCK = os.path.join(RUNS_DIR, ".lock")     # new_run's count and mkdir, one process at a time
@@ -651,7 +652,7 @@ def new_run(cwd, thread, platform=None):
             # the start stamp on the filesystem's own clock, before the copy
             # exists: a project file newer than it changed during the run
             stamp = os.path.join(d, ".start")
-            os.close(os.open(stamp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+            os.close(vault.open_private(stamp, os.O_WRONLY | os.O_CREAT | os.O_EXCL))
             run["start"] = os.lstat(stamp).st_mtime_ns
             os.remove(stamp)
             _save(run)
@@ -1616,6 +1617,8 @@ def _stage(root_fd, src_fd, rel, mode, sha=None):
         os.close(spfd)
     tmp = ".spark-apply-%s.tmp" % secrets.token_hex(6)
     try:
+        # the copy keeps the project's own modes, so not open_private: a new
+        # file under the run's root fd, never through a link
         wfd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=root_fd)
     except BaseException:
         os.close(sfd)

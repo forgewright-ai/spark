@@ -114,7 +114,7 @@ def _written(path):
     alone is a thread made and not yet written: a first turn that
     failed, or a thread a program made over the API."""
     try:
-        with bounded.regular(path) as f:
+        with bounded.regular(path, nofollow=True) as f:
             head = f.readline(bounded.HEADER_BYTES)
             if not head.endswith(b"\n"):
                 return False
@@ -192,7 +192,7 @@ class Store:
             if os.path.exists(self._in(other, tid)):
                 continue
             try:
-                fd = os.open(self._in(d, tid), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                fd = vault.open_private(self._in(d, tid), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
                 with os.fdopen(fd, "w") as f:
                     f.write(vault.header("thread", tid) + "\n")
                 return tid
@@ -227,7 +227,7 @@ class Store:
             p = self._path(tid)
             self._dir()
             if not os.path.isfile(p):
-                fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                fd = vault.open_private(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
                 with os.fdopen(fd, "w") as f:
                     f.write(vault.header("thread", tid) + "\n")
             return tid
@@ -433,7 +433,7 @@ class Store:
                     # request is kept, gone is made anew below
                     if os.path.isfile(kp):
                         return tid, False
-            fd = os.open(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = vault.open_private(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
             with os.fdopen(fd, "w") as f:
                 f.write(vault.header("thread", tid) + "\n")
             return tid, True
@@ -891,17 +891,18 @@ def claim_legacy(name, dk):
         tid, src = fname[:-6], os.path.join(THREADS_DIR, fname)
         msgs = []
         try:
-            with open(src, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        d = json.loads(line)
-                    except ValueError:
-                        continue
-                    if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
-                        msgs.append(d)
+            with bounded.regular(src, nofollow=True) as raw:
+                data = raw.read()
+            for line in data.decode("utf-8", "replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
+                    msgs.append(d)
         except OSError:
             continue
         st._dir()
@@ -1873,7 +1874,7 @@ def transcript(msgs, name="spark"):
 def _create(path):
     """A new file at `path`, 0600, never over one that is there: a
     writable file object, or FileExistsError."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     os.fchmod(fd, 0o600)
     return os.fdopen(fd, "w", encoding="utf-8")
 

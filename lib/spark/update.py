@@ -24,6 +24,7 @@ import subprocess
 import sys
 
 from . import MARK, REPO, STATE_DIR, run, say, state_dir
+from . import vault
 from .text import pulse as _pulse   # the fetch, the pull, the move
 
 UPDATE_LOCK = os.path.join(STATE_DIR, "update.lock")
@@ -229,7 +230,7 @@ def _lock():
     move -- and is dropped before the converge exec: two bootstraps at
     once are idempotent, two checkouts of the same tree are not."""
     state_dir()
-    fd = os.open(UPDATE_LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
+    fd = vault.open_private(UPDATE_LOCK, os.O_WRONLY | os.O_CREAT)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:

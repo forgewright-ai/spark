@@ -7,6 +7,7 @@ import sys
 import time
 
 from . import TURNS_DIR, log_exc, state_dir
+from . import vault
 from . import forge, persona, wire
 from . import text as textmod
 
@@ -44,7 +45,7 @@ def record(cfg, **fields):
             fields.pop(k, None)
         fields["ts"] = time.strftime("%Y-%m-%d %H:%M:%S")
         path = os.path.join(_turns_dir(), time.strftime("%Y-%m-%d") + ".jsonl")
-        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = vault.open_private(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
         with os.fdopen(fd, "a", encoding="utf-8") as f:
             f.write(json.dumps(textmod.clean(fields), ensure_ascii=False) + "\n")
     except OSError:

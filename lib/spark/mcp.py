@@ -41,6 +41,7 @@ import threading
 import time
 
 from . import CONFIG_DIR, HOME, MARK, STATE_DIR, config, log_exc, page, say
+from . import vault
 from . import text as textmod
 
 PROTOCOL = "2025-06-18"           # the spec spark speaks, pinned: a server that answers another is closed
@@ -735,7 +736,7 @@ def _ask_room():
         ok = len(seen) < ELICIT_PER_MINUTE
         if ok:
             seen.append(now)
-        fd = os.open(ASKED_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = vault.open_private(ASKED_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("".join("%.3f\n" % t for t in seen))
         return ok
@@ -1173,7 +1174,7 @@ def write_tools(lines):
     from . import state_dir
     state_dir()
     tmp = TOOLS_FILE + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         for line in lines:
             f.write(line + "\n")
@@ -1327,7 +1328,7 @@ def _write(**kv):
         site.set_keys(_file=MCP_ENV, _quiet=True, **put)
         return
     os.makedirs(os.path.dirname(MCP_ENV), exist_ok=True)
-    fd = os.open(MCP_ENV, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(MCP_ENV, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + ("\n" if lines else ""))
     os.chmod(MCP_ENV, 0o600)

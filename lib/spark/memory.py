@@ -170,7 +170,7 @@ def _locked(st=None):
         return
     from . import users
     users.make_dirs(st[2])
-    fd = os.open(os.path.join(os.path.dirname(st[0]), "memory.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    fd = vault.open_private(os.path.join(os.path.dirname(st[0]), "memory.lock"), os.O_WRONLY | os.O_CREAT)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield

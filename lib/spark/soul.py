@@ -18,6 +18,7 @@ import shutil
 import subprocess
 
 from . import CONFIG_DIR, MARK, SOUL_FILE, config, say
+from . import vault
 
 SOUL_MAX = 4000
 PERSONALITY_FILE = os.path.join(CONFIG_DIR, "personality")
@@ -93,7 +94,7 @@ def write(cfg, t):
     """Write the soul file, 0600, no terminal needed (the page calls this
     too). cfg is unused for now; kept so callers read like read()."""
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    fd = os.open(SOUL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(SOUL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write((t or "").strip()[:SOUL_MAX] + "\n")
     os.chmod(SOUL_FILE, 0o600)
@@ -104,7 +105,7 @@ def write_personality(t):
     bare `spark soul edit` after it)."""
     os.makedirs(CONFIG_DIR, exist_ok=True)
     tmp = PERSONALITY_FILE + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(_paragraph(t) + "\n")
     os.chmod(tmp, 0o600)

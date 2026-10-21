@@ -24,6 +24,7 @@ import tempfile
 import time
 
 from . import IS_MAC, MARK, REPO, SPARK_ENV, STATE_DIR, config, glyph, say, state_dir
+from . import vault
 from . import engine, wire
 
 BENCH_LOG = os.path.join(STATE_DIR, "bench.jsonl")
@@ -71,7 +72,7 @@ def run_one(cfg, model, s, size):
 
 def record(cfg, model, s, size, pp, tg):
     state_dir()
-    fd = os.open(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    fd = vault.open_private(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     with os.fdopen(fd, "a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "model": os.path.basename(model),
                             "engine": engine.engine_dir(cfg), "settings": key_of(s), "size": size,
@@ -491,7 +492,7 @@ def cmd_line_bench(cfg, args):
             rec[name] = v
     rec.update(knowledge_fields([r["t"] for r in good]))
     state_dir()
-    fd = os.open(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    fd = vault.open_private(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     with os.fdopen(fd, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
     if porcelain:

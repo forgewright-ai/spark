@@ -11,6 +11,7 @@ import time
 
 from . import (CONFIG_DIR, HOME, IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, TOKEN_FILE, config,
                init_shape, is_musl, run, state_dir)
+from . import vault
 
 EX_CONFIG = 78          # sysexits: a missing engine, model or token -- not a crash
 
@@ -308,7 +309,7 @@ def write_router(cfg):
     if files["ember"]:
         ini += "\n" + _preset("ember", files["ember"], cfg.ctx, cfg, "")
     path = os.path.join(ROUTER_DIR, "presets.ini")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(ini)
     return ROUTER_DIR, path
@@ -439,7 +440,7 @@ def record_load(model_file, seconds):
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        with os.fdopen(vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
             json.dump(loads, f, sort_keys=True)
         os.replace(tmp, path)
     except OSError:
@@ -689,7 +690,7 @@ def pidfile_pid():
 def write_pid(path, pid):
     """A pid file, 0600 like every other file of spark's state."""
     state_dir()
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w") as f:
         f.write("%d\n" % pid)
     try:
@@ -704,7 +705,7 @@ def write_pidfile(pid):
 
 def write_serve_url(url):
     state_dir()
-    fd = os.open(SERVE_URL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(SERVE_URL_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w") as f:
         f.write(url + "\n")
 
@@ -823,7 +824,7 @@ def spawn(cfg, host):
     """Start llama-server detached, log to serve.log. Returns the pid.
     The lock keeps two `spark serve` from racing for the port."""
     state_dir()
-    lock = os.open(LOCK_FILE, os.O_WRONLY | os.O_CREAT, 0o600)
+    lock = vault.open_private(LOCK_FILE, os.O_WRONLY | os.O_CREAT)
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -832,7 +833,7 @@ def spawn(cfg, host):
         # caller (the grammar's exit codes; `spark update`'s lock the same)
         raise EngineError("another `spark serve` is starting right now", 2)
     _rotate_log()
-    log = os.open(SERVE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    log = vault.open_private(SERVE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     try:
         p = subprocess.Popen(render_wrap(server_cmd(cfg, host)), env=server_env(cfg), stdin=subprocess.DEVNULL,
                              stdout=log, stderr=log, start_new_session=True)
@@ -1106,8 +1107,7 @@ def service_stop(noreload, unit="serve"):
         undo = "rm %s/down; sv up %s" % (_tilde(d), _tilde(d))
         if noreload:
             try:
-                with open(os.path.join(d, "down"), "a"):
-                    pass
+                os.close(vault.open_private(os.path.join(d, "down"), os.O_WRONLY | os.O_CREAT | os.O_APPEND))
             except OSError:
                 pass
         svctl(["down", d], timeout=20)

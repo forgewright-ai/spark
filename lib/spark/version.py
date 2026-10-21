@@ -11,6 +11,7 @@ import os
 import re
 
 from . import REPO, STATE_DIR, run, state_dir
+from . import vault
 
 
 def _git_dir():
@@ -114,7 +115,7 @@ def version():
     v = _describe(sha)
     try:
         state_dir()
-        with open(path, "w", encoding="utf-8") as f:
+        with os.fdopen(vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
             json.dump({"sha": sha, "v": v}, f)
     except OSError:
         pass

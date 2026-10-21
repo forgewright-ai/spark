@@ -23,6 +23,7 @@ import tempfile
 import time
 
 from . import distro, init_shape, is_wsl, runit_live  # noqa: E402  (the OS facts, beside os_pretty)
+from . import vault
 from . import (ALERT_FILE, BIN_DIR, CACHE_DIR, CHECK_HISTORY, CHECK_JSON, CHECK_LOCK, HOME, IS_MAC, MARK, OS, REPO,
                STATE_DIR, config, glyph, log_exc, packages, page, run, say, state_dir, version)
 
@@ -114,7 +115,7 @@ class Ctx:
         v = fn()
         try:
             os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump({"t": time.time(), "v": v}, f)
         except OSError:
@@ -1931,9 +1932,8 @@ def _history_append(changes, now):
             recs.append(rec)
     if not recs:
         return
-    fd = os.open(CHECK_HISTORY, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
+    fd = vault.open_private(CHECK_HISTORY, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     try:
-        os.fchmod(fd, 0o600)
         os.write(fd, _history_lines(recs))
     finally:
         os.close(fd)

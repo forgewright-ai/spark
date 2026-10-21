@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 
 from . import CONFIG_DIR, STATE_DIR, debug, state_dir
+from . import vault
 
 OWN_DIR = os.path.join(STATE_DIR, "https")          # the pair spark minted (own mode) and its root
 TRUST_DIR = os.path.join(CONFIG_DIR, "trust")        # what `spark client URL --ca|--pin` saved, one file a host
@@ -291,7 +292,7 @@ def save_trust(host, pem_text):
     os.makedirs(TRUST_DIR, mode=0o700, exist_ok=True)
     os.chmod(TRUST_DIR, 0o700)
     path = trust_path(host)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(pem_text if pem_text.endswith("\n") else pem_text + "\n")
     return path
@@ -520,7 +521,7 @@ def mint_root(names, label="spark"):
               "-addext", "keyUsage=critical,keyCertSign,cRLSign",
               "-addext", constraint], OWN_DIR)
     os.chmod(p["root_key"], 0o600)
-    fd = os.open(os.path.join(OWN_DIR, "root.names"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(os.path.join(OWN_DIR, "root.names"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(names) + "\n")
     return read_cert(p["root"])
@@ -552,7 +553,7 @@ def mint_leaf(names, ips, label="spark"):
                   "-keyout", p["key"] + ".new", "-out", csr,
                   "-subj", "/CN=%s" % (names[0] if names else ips[0]).replace("/", " ")], OWN_DIR)
         san = ",".join(["DNS:" + n for n in names] + ["IP:" + i for i in ips])
-        with open(ext, "w", encoding="utf-8") as f:
+        with os.fdopen(vault.open_private(ext, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
             f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\n"
                     "extendedKeyUsage=serverAuth\n" % san)
         _openssl(["x509", "-req", "-in", csr, "-CA", p["root"], "-CAkey", p["root_key"], "-CAcreateserial",

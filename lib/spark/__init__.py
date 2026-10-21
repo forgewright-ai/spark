@@ -285,7 +285,8 @@ def log_exc(context):
         state_dir()
         if os.path.exists(DEBUG_LOG) and os.path.getsize(DEBUG_LOG) > 1_000_000:
             os.replace(DEBUG_LOG, DEBUG_LOG + ".1")
-        fd = os.open(DEBUG_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        from . import vault
+        fd = vault.open_private(DEBUG_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
         with os.fdopen(fd, "a") as f:
             f.write("%s %s\n%s" % (time.strftime("%Y-%m-%d %H:%M:%S"), context, traceback.format_exc()))
     except Exception:

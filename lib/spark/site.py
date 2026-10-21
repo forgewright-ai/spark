@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV,
                TOKEN_FILE, VAR_SERVICE, config, glyph, init_shape, is_wsl, runit_live, say)
+from . import vault
 
 # WSL 2 cannot stay on and answer (contract 8 line)
 WSL_NO_BRAIN = "WSL 2 stops with its last window: it cannot stay on and answer (a Linux machine can)"
@@ -47,9 +48,8 @@ def set_keys(_file=None, _quiet=False, **kv):
         if not _quiet:
             say("ok     %-12s %s=%s" % ("site" if path == SITE_ENV else "spark.env", key, val))
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    with os.fdopen(vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    os.chmod(path, 0o600)
 
 
 def apply(rows, stream=False):

@@ -8,6 +8,7 @@ import os
 import time
 
 from . import STATE_DIR, config, state_dir
+from . import vault
 
 VERIFY_JSON = os.path.join(STATE_DIR, "verify.json")
 CHUNK = 2**20        # 1 MiB
@@ -35,7 +36,7 @@ def _load_cache():
 
 def _save_cache(cache):
     state_dir()
-    fd = os.open(VERIFY_JSON, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(VERIFY_JSON, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(cache, f)
 

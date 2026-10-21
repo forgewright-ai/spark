@@ -42,6 +42,7 @@ import wave
 from datetime import date
 
 from . import ASCII, CONFIG_DIR, IS_MAC, MARK, REPO, STATE_DIR, say
+from . import vault
 
 STATE_FILE = os.path.join(STATE_DIR, "lua")
 SOUND_DIR = os.path.join(STATE_DIR, "cache", "lua")
@@ -169,9 +170,8 @@ def load_state():
 def save_state(st):
     os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
     tmp = STATE_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    with os.fdopen(vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
         json.dump(st, f)
-    os.chmod(tmp, 0o600)
     os.replace(tmp, STATE_FILE)
 
 
@@ -1061,7 +1061,7 @@ class Sound:
             os.makedirs(SOUND_DIR, mode=0o700, exist_ok=True)
             path = os.path.join(SOUND_DIR, name + ".wav")
             if not os.path.exists(path):
-                with open(path, "wb") as f:
+                with os.fdopen(vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "wb") as f:
                     f.write(synth(SOUNDS[name]))
             self.paths[name] = path
         return self.paths[name]

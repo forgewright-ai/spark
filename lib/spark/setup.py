@@ -18,6 +18,7 @@ import time
 
 from . import (HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV, TOKEN_FILE,
                STATE_DIR, config, mem_total_gb, say)
+from . import vault
 from . import engine, packages, session, site, wire
 from . import text as textmod
 from . import model as modeltab      # `model` is a local name here: the chosen row
@@ -346,8 +347,7 @@ def door(once=False):
     say(DOOR)
     try:
         os.makedirs(os.path.dirname(OFFERED), mode=0o700, exist_ok=True)
-        with open(OFFERED, "a", encoding="utf-8"):
-            pass
+        os.close(vault.open_private(OFFERED, os.O_WRONLY | os.O_CREAT | os.O_APPEND))
     except OSError:
         pass
     return True
@@ -388,8 +388,7 @@ def notice(ask=False, shown=False):
         say()
     try:
         os.makedirs(os.path.dirname(NOTICED), mode=0o700, exist_ok=True)
-        with open(NOTICED, "a", encoding="utf-8"):
-            pass
+        os.close(vault.open_private(NOTICED, os.O_WRONLY | os.O_CREAT | os.O_APPEND))
     except OSError:
         pass
     return True

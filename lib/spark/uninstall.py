@@ -25,6 +25,7 @@ import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
                VAR_SERVICE, config, init_shape, is_wsl, run, say)
+from . import vault
 from . import handback
 from . import packages as pkg
 
@@ -159,8 +160,7 @@ def step_services(ctx):
             d = engine.service_dir(unit)
             if not ctx.dry and os.path.isdir(d):
                 try:
-                    with open(os.path.join(d, "down"), "a"):
-                        pass
+                    os.close(vault.open_private(os.path.join(d, "down"), os.O_WRONLY | os.O_CREAT | os.O_APPEND))
                 except OSError:
                     pass
                 run(["sv", "down", d], timeout=20)
@@ -331,7 +331,8 @@ def strip_rc_line(path):
     try:
         fd, tmp = tempfile.mkstemp(prefix=".spark-rc-", dir=os.path.dirname(path))
     except OSError:
-        # a directory this user cannot write in: the file itself, in place
+        # a directory this user cannot write in: the file itself, in place;
+        # the user's own rc file keeps its modes
         with open(path, "wb") as f:
             f.write(data)
         return True

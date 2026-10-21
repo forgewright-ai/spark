@@ -95,6 +95,7 @@ import time
 import wave
 
 from . import CONFIG_DIR, DATA_DIR, IS_MAC, MARK, REPO, SPARK_ENV, STATE_DIR, config, is_musl, say
+from . import vault
 
 VOICE_USAGE = """%s voice -- read aloud and listen
 
@@ -414,6 +415,8 @@ def _write(tf, member, path):
     src = tf.extractfile(member)
     if src is None:
         raise VoiceError("the archive's %s has no data -- nothing kept" % member.name)
+    # the engine's own files keep the archive's modes (0755 or 0644): not a
+    # private file, so not open_private; a new file, never through a link
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
                  0o755 if member.mode & 0o111 else 0o644)
     with os.fdopen(fd, "wb") as f:
@@ -481,7 +484,7 @@ def _install(part, part_file):
         os.makedirs(os.path.dirname(target), mode=0o755, exist_ok=True)
         os.chmod(part_file, 0o644)
         os.replace(part_file, target)
-    fd = os.open(os.path.join(d, part["name"] + ".sha"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    fd = vault.open_private(os.path.join(d, part["name"] + ".sha"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w") as f:
         f.write(part["sha"] + "\n")
 
@@ -600,7 +603,7 @@ def write_recipe(recipe, path=None):
     path = path or RECIPE_FILE
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("".join("%s=%s\n" % (k, r[k]) for k in ("SID", "SID_PT")))
     os.chmod(tmp, 0o600)
@@ -625,7 +628,7 @@ def _pcm(x):
 
 def _write_pcm(path, pcm, rate):
     """16-bit mono PCM bytes as a wav, 0600."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "wb") as f:
         w = wave.open(f, "wb")
         w.setnchannels(1)
@@ -699,7 +702,7 @@ def lead_in(path, ms=None):
         return path
     n = int(params.framerate * ms / 1000.0) * params.nchannels
     quiet = (b"\x80" if params.sampwidth == 1 else b"\x00" * params.sampwidth) * n
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
     with os.fdopen(fd, "wb") as f:
         w = wave.open(f, "wb")
         w.setnchannels(params.nchannels)
@@ -1089,7 +1092,7 @@ def _track(h):
     _PLAYING.append(h)
     try:
         os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
-        fd = os.open(PLAYING_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = vault.open_private(PLAYING_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
         with os.fdopen(fd, "w") as f:
             f.write("%d %s\n" % (h.proc.pid, h.tmp))
     except OSError:
@@ -1599,6 +1602,7 @@ def _stubbed(text):
     """The tests' seam: the text say_aloud would speak, one line appended
     to SPARK_VOICE_STUB; nothing is synthesized or played."""
     try:
+        # the test's own file, named by the test
         with open(os.environ["SPARK_VOICE_STUB"], "a", encoding="utf-8") as f:
             f.write(_speakable(text) + "\n")
     except OSError:
@@ -2529,7 +2533,7 @@ def _flag(on):
     try:
         if on:
             os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
-            os.close(os.open(ANYWAY_FILE, os.O_WRONLY | os.O_CREAT, 0o600))
+            os.close(vault.open_private(ANYWAY_FILE, os.O_WRONLY | os.O_CREAT))
         elif os.path.exists(ANYWAY_FILE):
             os.remove(ANYWAY_FILE)
     except OSError:

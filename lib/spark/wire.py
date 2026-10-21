@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 
 from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, SHARE_TOKEN, STATE_DIR, debug, forge_url, run, state_dir
+from . import vault
 from . import text as textmod
 from . import tls
 
@@ -133,7 +134,7 @@ def ensure_token_file(path):
     state_dir()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tok = secrets.token_urlsafe(32)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = vault.open_private(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     with os.fdopen(fd, "w") as f:
         f.write(tok + "\n")
     return tok

@@ -473,6 +473,7 @@ class Busy:
         n = os.environ.get("SPARK_HINT_ROW", "")
         if len(n) == 1 and n in "12345":
             try:
+                # a device, not a file of ours
                 return cls(open("/dev/tty", "w"), above=True, close=True, row=int(n), kind=kind, mood=mood)
             except OSError:
                 pass

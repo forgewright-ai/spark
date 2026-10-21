@@ -11,6 +11,7 @@ import sys
 import time
 
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, WIDGETS_DIR, config, die, glyph, paged, paint, say, state_dir
+from . import vault
 from . import bar, engine, forge, ledger, persona, session, version, wire
 from . import text as textmod
 
@@ -1783,7 +1784,7 @@ def cmd_off(args):
         return 0
     state_dir()
     was = os.path.exists(OFF_FLAG)
-    open(OFF_FLAG, "a").close()
+    os.close(vault.open_private(OFF_FLAG, os.O_WRONLY | os.O_CREAT | os.O_APPEND))
     if not was:
         say("%s the prompt line is off -- spark on turns it back on" % glyph("hammer"))
     from . import check

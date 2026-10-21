@@ -76,8 +76,8 @@ spark client follows, and trust is typed, never assumed.
   longer offers to claim older plaintext chats, and `spark user claim`
   reads a file through its own inode, never a link in its place. A new
   admin token lands in one atomic replace, the old one dead that
-  instant. Every private file the page's server and the vault write is
-  opened without following a link and comes back 0600. `GET /v1/models`
+  instant. Every private file spark writes, a key, a token, a record, a log or a
+  lock, is opened without following a link and comes back 0600. `GET /v1/models`
   lists the served roles alone, nothing of the engine's own listing
 ## v1.90.4
 

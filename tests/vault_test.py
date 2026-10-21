@@ -901,8 +901,8 @@ def test_bounded_context():
             return out
 
     @contextlib.contextmanager
-    def measured(path):
-        with real_regular(path) as f:
+    def measured(path, **kw):
+        with real_regular(path, **kw) as f:
             yield Meter(f)
 
     with tempfile.TemporaryDirectory(dir=HOME) as d, mock.patch.object(bounded, "regular", measured):
@@ -1036,6 +1036,118 @@ def test_bounded_context():
         refuse("device refused", lambda: forge.read_file(os.devnull), forge.RefError)
 
 
+# the bare writers lib/spark may keep: "file: function -- why". Every
+# other os.open with O_CREAT and every open(path, "w"|"a") is a private
+# file and goes through vault.open_private; a new bare writer, or an
+# entry here that matches nothing, fails the suite.
+BARE_WRITERS = (
+    "chaos.py: * -- the drills write scratch homes of their own",
+    "check.py: make_fixture -- fixtures in a scratch home",
+    "check.py: _stub -- a stub program for the fixtures",
+    "check.py: knowledge_fixture -- a fixture",
+    "check.py: selftest -- the self test's scratch files",
+    "handback.py: palette -- /dev/tty, a device",
+    "text.py: hint_row -- /dev/tty, a device",
+    "sandbox.py: _probe_linux -- the probe's scratch files",
+    "sandbox.py: _probe_mac -- the probe's scratch files",
+    "sandbox.py: _stage -- the run's copy keeps the project's modes; O_EXCL and O_NOFOLLOW under the root",
+    "uninstall.py: strip_rc_line -- the user's own rc file, in place when its directory refuses a temp file",
+    "voice.py: _write -- the engine's files keep the archive's modes; O_EXCL and O_NOFOLLOW",
+    "voice.py: _stubbed -- the test's own file",
+)
+
+
+def bare_writers(root):
+    """(file, function, line, what) for every os.open with O_CREAT and
+    every open() with a writing mode under root, by the source."""
+    import ast
+    found = []
+    for name in sorted(os.listdir(root)):
+        if not name.endswith(".py"):
+            continue
+        path = os.path.join(root, name)
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), path)
+
+        def walk(node, func):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                func = node.name
+            if isinstance(node, ast.Call):
+                fn = node.func
+                if (isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name)
+                        and fn.value.id == "os" and fn.attr == "open" and len(node.args) > 1):
+                    flags = {n.attr for n in ast.walk(node.args[1]) if isinstance(n, ast.Attribute)}
+                    if "O_CREAT" in flags:
+                        found.append((name, func, node.lineno, "os.open O_CREAT"))
+                elif isinstance(fn, ast.Name) and fn.id == "open":
+                    mode = None
+                    for kw in node.keywords:
+                        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                            mode = kw.value.value
+                    if mode is None and len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+                        mode = node.args[1].value
+                    if isinstance(mode, str) and any(c in mode for c in "wax+"):
+                        found.append((name, func, node.lineno, "open %r" % mode))
+            for child in ast.iter_child_nodes(node):
+                walk(child, func)
+        walk(tree, "<module>")
+    return found
+
+
+def test_private_writers_source():
+    """Every writer of a private file in lib/spark goes through
+    vault.open_private: the source holds no other os.open with O_CREAT
+    and no open(path, "w"|"a"), apart from BARE_WRITERS, each with its
+    reason; and every reason names a writer that is still there."""
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib", "spark")
+    allowed = []
+    for line in BARE_WRITERS:
+        head = line.split(" -- ")[0]
+        f, func = head.split(": ")
+        allowed.append((f, func))
+    found = bare_writers(root)
+    check("the scan sees the sweep's size", len(found) > 40, True)
+    stray = [h for h in found if (h[0], h[1]) not in allowed and (h[0], "*") not in allowed]
+    check("no bare writer outside BARE_WRITERS%s" % ("" if not stray else
+          " (found %s)" % ", ".join("%s:%d %s" % (h[0], h[2], h[1]) for h in stray)), not stray, True)
+    seen = {(h[0], h[1]) for h in found} | {(h[0], "*") for h in found}
+    stale = [a for a in allowed if a not in seen]
+    check("every BARE_WRITERS entry names a writer still there%s" % ("" if not stale else
+          " (stale %s)" % ", ".join("%s: %s" % a for a in stale)), not stale, True)
+    check("vault.open_private is the one opener in vault.py",
+          not [h for h in found if h[0] == "vault.py"], True)
+
+
+def test_module_writers_refuse_links():
+    """The sweep, by behavior: a symlink where a module's private file
+    should be is refused and its target untouched, in three families
+    (the engine's state, the verify cache, the soul)."""
+    from spark import engine, soul, verify
+    d = tempfile.mkdtemp(dir=HOME)
+    target = os.path.join(d, "target")
+    with open(target, "w") as f:
+        f.write("keep\n")
+    for name, path, call in (
+            ("engine.write_pid", os.path.join(d, "pid"), lambda p: engine.write_pid(p, 1)),
+            ("engine.write_serve_url", engine.SERVE_URL_FILE, lambda p: engine.write_serve_url("http://127.0.0.1:9")),
+            ("verify cache", verify.VERIFY_JSON, lambda p: verify._save_cache({"a": 1})),
+            ("soul.write", soul.SOUL_FILE, lambda p: soul.write(None, "a soul"))):
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        if os.path.lexists(path):
+            os.remove(path)
+        os.symlink(target, path)
+        refuse("%s refuses a symlink in the file's place" % name, lambda: call(path), OSError)
+        with open(target) as f:
+            check("%s left the target untouched" % name, f.read(), "keep\n")
+        os.remove(path)
+    # and the same writer, with the link gone, writes a 0600 file
+    engine.write_pid(os.path.join(d, "pid"), 2)
+    check("engine.write_pid writes 0600", os.stat(os.path.join(d, "pid")).st_mode & 0o777, 0o600)
+    with open(os.path.join(d, "pid")) as f:
+        check("engine.write_pid wrote the pid", f.read(), "2\n")
+
+
+
 def main():
     test_block_2_3_2()
     test_stream_2_4_2()
@@ -1059,6 +1171,8 @@ def main():
     test_claim_never_seals_over()
     test_state_files_private()
     test_private_writers()
+    test_private_writers_source()
+    test_module_writers_refuse_links()
     test_fails_index_redacts()
     test_bounded_context()
     test_throughput_floor()

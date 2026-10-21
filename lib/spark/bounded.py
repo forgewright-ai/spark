@@ -11,9 +11,14 @@ HEADER_BYTES = 4096
 
 
 @contextmanager
-def regular(path):
-    """Open without waiting for a FIFO writer; check the opened inode too."""
-    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+def regular(path, nofollow=False):
+    """Open without waiting for a FIFO writer; check the opened inode too.
+    `nofollow` refuses a symlink in the file's place: for a record of
+    spark's own, never for a file the user named."""
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    if nofollow:
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise OSError(errno.EINVAL, "not a regular file")

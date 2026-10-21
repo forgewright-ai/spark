@@ -114,7 +114,7 @@ def _locked():
         yield
         return
     users.make_dirs(name)
-    fd = os.open(os.path.join(users.user_dir(name), "ledger.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    fd = vault.open_private(os.path.join(users.user_dir(name), "ledger.lock"), os.O_WRONLY | os.O_CREAT)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield
@@ -289,7 +289,7 @@ def fail_pending(command, rc, first_err):
         shape, head = fail_shape(command, rc, first_err)
         if not head:
             return
-        fd = os.open(FAIL_PENDING, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = vault.open_private(FAIL_PENDING, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("%s %s %s\n" % (shape, head, rc))
     except OSError:
@@ -358,7 +358,7 @@ def write_fails_index(entries=None, cfg=None):
     try:
         from . import state_dir
         state_dir()
-        fd = os.open(FAILS_INDEX, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = vault.open_private(FAILS_INDEX, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("".join(lines))
     except OSError:
