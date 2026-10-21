@@ -1017,7 +1017,9 @@ and may change freely.
    are read only before the
    command word, so `dnf search clean` stays plain. spark's own lines
    hold the verbs that destroy or end logins, and `spark serve off`,
-   which stops the engine and the page. They hold a sandboxed run
+   which stops the engine and the page. `spark client URL` stops them
+   too and answers from another machine from then on, so it is one;
+   `spark client off` is plain. They hold a sandboxed run
    applied unseen or dropped (`spark do --accept`, `--discard`) and a
    ledger cleared (`--ledger clear`) too. So `spark do` asks for the
    typed `yes` there, and the page for its confirm. On the prompt line

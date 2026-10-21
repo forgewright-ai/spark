@@ -58,6 +58,14 @@ spark client follows, and trust is typed, never assumed.
   record once. The Linux retry after a partial delete has its test: a
   whiteout whose file already went is no change, and an opaque
   directory names only the children still there.
+- `spark client URL` is a danger line: it stops this machine's engine
+  and page and answers from another machine from then on, so the
+  prompt line asks for the typed yes. `spark client off` stays plain.
+- The danger reading is linear on a separator-dense line. A pattern is
+  walked only when the words a match of it needs are on the text, a
+  stage read once is not read again, and the shell's operators are
+  found by their first character. 100 kB of `ls;` reads in a quarter
+  of the time.
 
 - Over plain http an admin action (a verb run, the do console, the
   soul written, the check refreshed) answers this machine and its own

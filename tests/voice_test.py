@@ -1487,8 +1487,11 @@ check("stream: the clips whole and in order, silence between them while the next
 log = jsonl("streams.jsonl")
 last_sound = max((x["t"] for x in log if x.get("sound")), default=0)
 closed = next((x["eof"] for x in log if "eof" in x), 0)
+# the lower bound is the truth: never closed before STREAM_IDLE. The upper
+# one is a loaded runner's lag on top of it: 3.6 s measured on CI
+# (2026-10-20), so eight seconds, not 3.5
 check("stream: closed (its end of input, not a kill) about %.1f s after the last clip (%.2f s)"
-      % (voice.STREAM_IDLE, closed - last_sound), eof and 1.0 < closed - last_sound < 3.5 and r.stream is None,
+      % (voice.STREAM_IDLE, closed - last_sound), eof and 1.0 < closed - last_sound < 8.0 and r.stream is None,
       (closed - last_sound, r.stream))
 check("stream: the stream's player is gone after its close", wait_for(lambda: not alive(pid), 5))
 r.put("four.")
@@ -1745,10 +1748,13 @@ with look.assume_awake():
     r.sounds = observed_sounds
     face.add([1])
     face.start()
-    sampled_wait = waiting.wait(2.0)
+    # ten seconds, not two: the conditions are the proof, the cap only
+    # a loaded runner's lag. CI drew two frames in two seconds once
+    # (2026-10-20), the thread starved, and the case went red for it
+    sampled_wait = waiting.wait(10.0)
     before = redraws(out)
     sound(r, 1, 0.0, float("inf"))
-    until(lambda: len(redraws(out)) >= 3)
+    until(lambda: len(redraws(out)) >= 3, 10.0)
     with face.lock:
         playing = redraws(out)
         face.close()

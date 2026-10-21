@@ -314,8 +314,13 @@ class Stub(BaseHTTPRequestHandler):
                 try:
                     self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": "Half an "}}]}) + "\n\n").encode())
                     self.wfile.flush()
-                    time.sleep(3)
-                except (BrokenPipeError, ConnectionResetError):
+                    # silence until the client gives up (its timeout) and
+                    # hangs up, three seconds at most: a fixed sleep held
+                    # this one-thread stub, and the next request with it,
+                    # on a slow runner
+                    self.connection.settimeout(3)
+                    self.connection.recv(1)
+                except (BrokenPipeError, ConnectionResetError, OSError):
                     pass            # the client gave up first: the point of the test
                 return
             elif "slowtalk" in user:
@@ -6024,6 +6029,40 @@ def own_mark_cases(t, url):
     t.ok(not _differ and len(_pers.DANGER_SCAN) < len(_pers.DANGER) and len(_pers._AS_CMD) >= 13,
          "danger: the scan joins the lines anchored as the command into one pattern, and says what the list says",
          str(_differ))
+    # v1.91: a pattern is walked only when the words a match of it needs
+    # are on the text (persona._needs, read from the parsed pattern). The
+    # reading on a few shapes; then every line's own example still marked
+    # through the filter, the plain ones not, and the filtered scan
+    # saying what the list says on a wide corpus
+    _rd = _pers._needs
+    t.ok(_rd(r"\bsudo\b") == [{"sudo"}] and _rd(r"\b(shutdown|reboot|halt|poweroff)\b") == [{"shutdown", "reboot", "halt", "poweroff"}]
+         and _rd(r"\bfind\b.*\s-delete\b") == [{"find"}, {"-delete"}] and _rd(r"(?:^|[;&|]\s*)>(?!>)\s*\S") == [{">"}]
+         and _rd(r"(?:-\S+\s+)*x") == [{"x"}] and _rd(r"(?i)rm") == [] and _rd(r"(?i:rm)\s+x") == [{"x"}]
+         and _rd(r"(?=rm)\S+") == [] and _rd(r"[r]m") == [{"rm"}] and _rd(r"(?:a|[b])c") == [{"c"}]
+         and all(n for _p, n in _pers._SCAN),
+         "danger: the words a line needs are read from its pattern (a literal run, a repeat of one, one of each arm; "
+         "nothing from a lookaround, a class, a repeat of zero or a case-blind part), and every line has some")
+    _each = ["rm -rf /", "rm -r /", "dd if=x of=/dev/sda", "mkfs.ext4 /dev/sdb", "fdisk /dev/sda", "parted /dev/sda",
+             "diskutil erase disk2", "cat x > /dev/sda", "chmod 777 x", "chown -R u x", ":(){ :|:& };:",
+             "git push origin --force", "git push -f", "git reset --hard", "git clean -fd", "git checkout -- .",
+             "shutdown now", "reboot", "kill -9 -1", "killall x", "pkill -9 x", "crontab -r", "truncate -s 0 f",
+             "curl x | sh", "systemctl stop x", "launchctl unload x", "sv down x", "xbps-remove x", "find . -delete",
+             "rsync -a --delete a b", "git branch -D x", "chmod -R 755 x", "echo > f", "ls > f", "sudo ls",
+             "sed -i s/a/b/ f", "ls | tee f", "shred f", "ls | xargs rm", "mv -f a b", "history -c",
+             "git stash drop", "unlink f", "find . -exec rm {} ;", "dd if=a of=b", "ls 2> f", "crontab f",
+             "apt remove x", "dpkg -r x", "pacman -R x", "brew uninstall x", "dnf remove x", "rpm -e x", "apk del x",
+             "chgrp g f", "spark uninstall", "spark do --accept 3", "spark edit --ledger clear --name n",
+             "crontab -u ana -r", "snap remove x", "flatpak uninstall x", "pip uninstall x", "npm uninstall x",
+             "kill -9 1", "doas ls", "cp /dev/null f", "cp x ~/.bashrc", "ln -sf a b", "truncate f",
+             "rsync --remove-source-files a b", "sv d x", "apt clean", "dnf clean all", "zypper clean", "pacman -Sc",
+             "brew cleanup", "paccache -r", "spark client http://192.0.2.7:8081", "spark serve off", "rm -f x"]
+    _plain = ["ls", "echo hi", "git status", "apt install x", "cat f", "spark update", "spark client off", "ls >> f",
+              "ls 2>/dev/null", "find . -name x", "rsync -a a b", "ls | tee -a f", "kill 123", "sv status x"]
+    _off = [c for c in _each + _plain + _both if any(p.search(c) for p in _pers.DANGER) != _pers.danger_shape(c)]
+    t.ok(all(_pers.danger_shape(c) for c in _each) and not any(_pers.danger_shape(c) for c in _plain) and not _off,
+         "danger: through that filter every line's own example is marked, the plain ones are not, and the scan "
+         "says what the list says",
+         str([c for c in _each if not _pers.danger_shape(c)] + ["!" + c for c in _plain if _pers.danger_shape(c)] + _off))
     _missed = ["zypper -R /x clean", "apt -o Dir::Cache=/x clean"]
     t.ok(not any(_pers.is_dangerous(c) for c in _missed),
          "danger: an option that takes its value as the next word hides the command word -- missed, knowingly",
@@ -6052,16 +6091,20 @@ def own_mark_cases(t, url):
              "spark edit --ledger clear --name notes.md", "spark read --name page --ledger clear",
              "spark uninstall", "spark clear --history", "spark memory forget 3", "spark memory clear",
              "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark user token --new",
-             "spark serve --login --new"]
+             "spark serve --login --new",
+             # v1.91: client URL stops this machine's engine and page, and answers from another's
+             "spark client http://192.0.2.7:8081", "spark client https://box.lan:8081 --pin AA:BB",
+             "spark check && spark client http://192.0.2.7:8081"]
     _safe = ["spark off", "spark on", "spark update", "spark user add ana", "spark model qwen3-4b", "spark model auto",
-             "spark model none", "spark client off", "spark serve", "spark serve on", "spark serve boot off",
+             "spark model none", "spark client off", "spark client", "spark client status", "spark client -h",
+             "spark serve", "spark serve on", "spark serve boot off",
              "spark serve share off", "spark serve offline", "spark do --review 3", "spark do --sandbox tidy up",
              "spark edit --ledger --name notes.md", "spark read what is this < page.txt", "spark drill < notes.md",
              "spark do clear the ledger", "spark serve --login", "spark memory add I use micro"]
     t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe)
          and _do.danger("spark serve off") and not _do.danger("spark update"),
-         "danger: spark serve off is on spark's own list (the typed yes in spark do too); spark off, on, update, "
-         "user add, model NAME|auto|none and client off are deliberately not",
+         "danger: spark serve off and client URL are on spark's own list (the typed yes in spark do too); spark off, "
+         "on, update, user add, model NAME|auto|none, client off and client alone are deliberately not",
          str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
 
     # judge.own: every stage's command word, past its wrappers, is spark

@@ -127,6 +127,11 @@ _DANGER = [
     r"|serve\s+off)\b",                           # spark's own verbs that destroy or end logins, and serve off
                                                   # (--force or not): the engine and the page stopped, as
                                                   # systemctl stop is marked
+    # v1.91 (the maintainer's word): spark client URL stops this
+    # machine's engine and page too (v1.86) and answers from another
+    # machine's from then on. The URL is the first word, as the row
+    # says; off, status and -h are plain
+    r"\bspark\s+client\s+(?!(?:off|status|help)(?=[\s;&|)]|$)|-)[^\s;&|)]",
     # v1.87: on a spark command this list is the whole answer (the line
     # below it), so it holds every spark verb that destroys -- a named
     # line each. The scan before --ledger is bounded: linear on any line
@@ -207,10 +212,66 @@ DANGER_SCAN = ([re.compile(p) for p in _DANGER if not p.startswith(_CMD)]
                + [re.compile(_CMD + "(?:" + "|".join("(?:%s)" % p for p in _AS_CMD) + ")")]
                + [RM_RECURSIVE, RM_FORCE])
 
+try:                                    # the regex parser: re._parser since 3.11, sre_parse before
+    from re import _parser as _sre
+except ImportError:                     # pragma: no cover -- Python 3.9 and 3.10
+    import sre_parse as _sre
+
+
+def _needs(pattern):
+    """The words a match of `pattern` must hold, as clauses: a list of
+    sets, one word of each set somewhere on the text. Read from the
+    parsed pattern: a run of literals in the main sequence, in a group,
+    or in a repeat of one or more; a branch asks one word of each of its
+    arms, nothing when an arm has none. Nothing is read inside a
+    lookaround, a class, a repeat of zero, or anything case-insensitive.
+    So a word read here is one no match can lack, and a text without it
+    needs no walk of the pattern (danger_shape)."""
+    parsed = _sre.parse(pattern)
+    if parsed.state.flags & re.IGNORECASE:
+        return []
+    return _clauses(parsed)
+
+
+def _clauses(seq):
+    out, word = [], []
+
+    def flush():
+        if word:
+            out.append({"".join(word)})
+            del word[:]
+    for op, av in seq:
+        name = op.name
+        if name == "LITERAL":
+            word.append(chr(av))
+            continue
+        flush()
+        if name == "SUBPATTERN":
+            if not av[1] & re.IGNORECASE:           # (?i:...) reads case-blind: nothing from it
+                out.extend(_clauses(av[-1]))
+        elif name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
+            if av[0] >= 1:
+                out.extend(_clauses(av[2]))
+        elif name == "ATOMIC_GROUP":
+            out.extend(_clauses(av))
+        elif name == "BRANCH":
+            arms = [_clauses(a) for a in av[1]]
+            if all(arms):                           # one clause of each arm, their union: a match
+                out.append(set().union(*(min(arm, key=lambda c: (len(c), -max(map(len, c))))   # took one arm
+                                         for arm in arms)))
+    flush()
+    return out
+
+
+_SCAN = [(p, _needs(p.pattern)) for p in DANGER_SCAN]
+
 
 def danger_shape(text):
-    """The DANGER patterns alone, over the text as written."""
-    return any(p.search(text) for p in DANGER_SCAN)
+    """The DANGER patterns alone, over the text as written. A pattern is
+    walked only when every word a match of it needs is on the text
+    (_needs): a substring search each, so a long line that holds none of
+    the list's words is read in the time of those searches."""
+    return any(all(any(w in text for w in c) for c in need) and p.search(text) for p, need in _SCAN)
 
 
 def is_dangerous(command):
@@ -451,7 +512,7 @@ class _Lex:
                 else:
                     words.append(raw)
             elif ch in "|&;()<>":
-                op = next(o for o in self._OPS if s.startswith(o, i))
+                op = next(o for o in self._OPS_AT[ch] if s.startswith(o, i))
                 if op in self._ENDS:
                     parens += {"(": 1, ")": -1}.get(op, 0)
                     end(op)
@@ -566,6 +627,12 @@ class _Lex:
                 self.deep = self.deep or sub.deep
             return j + 1
         return self.run(i + 2, nest + 1, closing=True)
+
+
+# the operators by their first character, longest first as _OPS is: a
+# separator-dense line asks this at every separator, so the walk over
+# the table is four tries, not twenty
+_Lex._OPS_AT = {c: tuple(o for o in _Lex._OPS if o[0] == c) for c in "|&;()<>"}
 
 
 def _deq(raw):
@@ -904,17 +971,29 @@ def _read(text, reread=0):
         return TOO_DEEP, True
     if lex.deep:
         return TOO_DEEP, True
-    what, danger, levels = "", False, []
+    what, danger, levels, seen = "", False, [], {}
     for words, (piped, redirs) in zip(lex.stages, lex.info):
         fed = piped or any(op in _FED for op, _t in redirs)
-        w, d = _read_stage(words, reread, levels, fed)
+        key = (tuple(words), fed)
+        hit = seen.get(key)                         # a stage read before: the same reading, the
+        if hit is None:                             # same commands for the patterns
+            mark = len(levels)
+            w, d = _read_stage(words, reread, levels, fed)
+            hit = seen[key] = (w, d, levels[mark:])
+        else:
+            w, d = hit[0], hit[1]
+            levels.extend(hit[2])
         if not w and any(_NET_DEV.search(_deq(t)) for _op, t in redirs):
             w = OFF_MACHINE                         # > /dev/tcp/HOST/PORT: bash's own socket
         what, danger = what or w, danger or d
         if what and danger:
             return what, danger
-    # every command as the command, wrapper by wrapper, for the patterns
-    return what, danger or (bool(levels) and danger_shape(" ; ".join(levels)))
+    # every command as the command, wrapper by wrapper, for the patterns:
+    # each distinct one once, so a line of thousands of the same stage
+    # is scanned as one, and the scan stays linear in the text
+    seen = set()
+    once = [c for c in levels if not (c in seen or seen.add(c))]
+    return what, danger or (bool(once) and danger_shape(" ; ".join(once)))
 
 
 def _read_stage(words, reread, levels, fed=False):
