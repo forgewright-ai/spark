@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.91.1
+
+- S4: INSTALL led with a bare machine and README gave no requirements;
+  both now open with the signed installer on a computer in use, and the
+  first hour starts with a check, a question and a proposed command
+  read before it runs (#60)
+- S4: model sizes and memory budgets came after the install line, and
+  the download range and the ten minutes were stale; both docs now say
+  the supported systems, the tools, the sizes and the budget before it,
+  and how to retry a download (#61)
+
 ## v1.91
 
 The page over https. A certificate pair you were given, or one spark

@@ -20,7 +20,7 @@ its disk choices can erase existing data. The rest is for later.
   whole-computer RAM minimum. For example, the 1.3 GB file needs a
   3 GB model budget. [Section 4](#4-models) lists the choices.
 - Leave more free disk space than the model file for the engine and
-  setup. Spark downloads its code and engine from GitHub and model
+  setup. spark downloads its code and engine from GitHub and model
   weights from Hugging Face. Setup time depends on your connection,
   disk and CPU; it is not a fixed ten minutes.
 
@@ -199,8 +199,8 @@ when asked. Open Ubuntu and run Debian's step 3.
    spark check
    ```
 
-   `spark check` lists what needs you. A healthy check may print
-   nothing; it exits 0 when nothing fails.
+   `spark check` lists what needs you. A healthy check prints the
+   totals line alone. It exits 0 when nothing fails.
 
 `get` checks the tools above, clones spark to `~/.spark`, moves to the
 newest signed release and runs `spark setup`. It never runs `sudo`.

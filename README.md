@@ -110,8 +110,8 @@ Every command is in `docs/CHEATSHEET.txt`.
 
 No editor app, other service account or second device is needed:
 
-1. `spark check` shows rows that need attention. A healthy check can
-   print nothing and exit successfully.
+1. `spark check` shows rows that need attention. A healthy check
+   prints its totals line alone and exits 0.
 2. `spark chat` and ask a harmless question, such as `What is 2 + 2?`.
    Type `/q`, `Esc` or `Ctrl-D` to leave chat; `Ctrl-C` stops a reply.
 3. At the shell prompt, type `? how many files are here` and press
