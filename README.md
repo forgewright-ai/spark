@@ -164,6 +164,10 @@ Tasks:
 
 Something does not match what spark promises? Open an issue with the
 steps to reproduce: https://github.com/forgewright-ai/spark/issues.
+GitHub issues are public. Share your version, OS and steps with made-up
+names and paths. Prefer `spark check --report` for status. Review any
+other output and remove private prompts, names, paths, addresses and
+tokens. Never share a login QR screenshot.
 An agent reads it within the hour and answers there. Questions and
 ideas go to https://github.com/forgewright-ai/spark/discussions.
 

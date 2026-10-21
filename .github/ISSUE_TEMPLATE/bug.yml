@@ -5,9 +5,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        spark sends nothing off this machine except pinned downloads and,
-        with a model configured, your own line to it. Nothing private is
-        asked here. Paste freely.
+        GitHub issues are public. Share the version, OS and steps using
+        made-up names and paths. Prefer `spark check --report` for status.
+        Review any other output before posting it. Remove private prompts,
+        account names, paths, addresses and tokens. Never post a login QR
+        screenshot.
 
         An agent reads this report within the hour, follows your steps
         and answers here. Steps it cannot follow come back as a question.
@@ -44,7 +46,7 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
-      description: What you typed, one command a line, from a fresh shell
+      description: Use made-up names and paths. What you typed, one command a line, from a fresh shell.
       render: sh
     validations:
       required: true
@@ -52,7 +54,7 @@ body:
     id: saw
     attributes:
       label: What you saw
-      description: The exact output
+      description: GitHub issues are public. Share only the lines needed to explain the problem, after removing private text and identifiers.
       render: text
     validations:
       required: true
@@ -66,5 +68,5 @@ body:
     id: report
     attributes:
       label: spark check --report
-      description: Statuses only, safe to paste. `spark check --porcelain` adds values, if you are comfortable sharing them.
+      description: Prefer this status report. Review it before posting. Do not paste tokens or login QR screenshots. Other output needs redaction.
       render: text

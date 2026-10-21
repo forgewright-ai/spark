@@ -788,6 +788,11 @@ row. They are kept `SPARK_HISTORY` days.
 
 When something stops working:
 
+GitHub bug reports are public. Use `spark check --report`, then review
+what you share. Use made-up names and paths in your steps, and do not
+post private prompts, tokens or login QR screenshots. See
+[Bugs](../README.md#bugs) for the same guidance.
+
 1. `spark check` names the row and the fix.
 2. `spark` says which model answers now. `spark status` is the full
    report, with what the last check found.
