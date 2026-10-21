@@ -2,8 +2,10 @@
 
 <img src="assets/banner.svg" alt="spark" width="400">
 
-A local AI for your shell. It runs on your own machine, with no account
-and no cloud.
+A local AI for your shell. It runs a model on your own machine by
+default, with no account or telemetry. If you configure another model
+server, it receives the text you send. [What leaves this
+machine](#what-leaves-this-machine) has details.
 
 ```
 ~ > files bigger than 1G modified this week?          <- type it, press Enter
@@ -97,7 +99,7 @@ spark chat                      talk with the model
 - `spark mcp`: the tools of the MCP servers you put on its list, such
   as the parts of a desktop. A tool that can destroy asks you first.
 - `spark serve on`: use this machine's model from a browser or another
-  machine.
+  machine. [Read about network access](#on-this-machine) before sharing.
 - `spark voice on`: spark reads aloud.
 - `spark awaken`: give spark a personality and a look.
 - `spark check`: is spark ok, and what to fix. Your prompt says when
@@ -141,9 +143,10 @@ Option-s on a Mac):
     rests above your prompt. `spark look off` turns them off.
 11. `spark memory add "short answers"`, then `spark chat`. In the chat,
     `/read @notes.txt what is due` answers from the file.
-12. `spark serve --login`: open the address on your phone. The traffic
-    is plain HTTP, so use a network you trust, or give the page a
-    certificate: `spark serve https`.
+12. See [Phone use](docs/INSTALL.md#5-other-machines-and-your-phone)
+    before using `spark serve --login` on a phone. The QR holds an admin
+    token. The page uses plain HTTP until you configure HTTPS there;
+    `spark serve https` only reports certificate status.
 
 ## Apps
 
@@ -228,9 +231,12 @@ and an API key. They also catch a credential line, a long base64 run, a
 one-time code and a link token. The other commands send the text as it
 is.
 
-Between machines, the traffic is plain HTTP unless you give the page a
-certificate (`spark serve https`). Anyone on your network can read
-plain HTTP.
+Setup starts the model engine, the page server and a health check. The
+page listens on one LAN address with a token. Between machines, traffic
+is plain HTTP until you [configure
+HTTPS](docs/INSTALL.md#https-for-the-page). Anyone on your
+network can read plain HTTP, including tokens. `spark serve https`
+only reports certificate status.
 
 spark downloads itself, the llama.cpp engine and the voice from
 github.com, and your model from huggingface.co. The engine, the voice
@@ -244,8 +250,9 @@ moves forward. A clone on `main` is not checked.
 ## On this machine
 
 - The server listens on one LAN address and needs a token.
-- The admin token can run commands on this machine. With passwordless
-  sudo, that means root.
+- An ordinary user's token opens that user's chat and store. The admin
+  token can run commands on this machine. With passwordless sudo, that
+  means root. Keep tokens and login QR codes private.
 - Conversations are kept for 30 days in `~/.local/state/spark/`.
   `SPARK_HISTORY=off` keeps none, and none of the check's changes.
 - Each user (`spark user add NAME`) has an encrypted store that only

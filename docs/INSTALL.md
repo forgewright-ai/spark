@@ -24,6 +24,18 @@ its disk choices can erase existing data. The rest is for later.
   weights from Hugging Face. Setup time depends on your connection,
   disk and CPU; it is not a fixed ten minutes.
 
+Spark runs a model here by default, with no telemetry. If you
+configure a model server elsewhere, it receives the text you send;
+[What leaves this machine](../README.md#what-leaves-this-machine)
+explains what each command sends. Setup starts the model engine, a page
+server on one LAN address, and a health check. The page needs a token
+but uses plain HTTP until you [configure
+HTTPS](#https-for-the-page). Anyone on that network can
+read plain HTTP. Conversations are kept locally for 30 days by default;
+`SPARK_HISTORY=off` keeps none. [Section
+5](#5-other-machines-and-your-phone) covers sharing. The [threat
+model](#8-what-an-attacker-can-and-cannot-do) covers access and storage.
+
 ## Install on an existing computer
 
 Use the signed-release installer in a terminal on the supported
@@ -565,15 +577,23 @@ from your own, so it treats both the same way.
 
 A browser or a phone:
 
+Use a trusted network for plain HTTP, or follow [HTTPS for the
+page](#https-for-the-page) before sharing. An ordinary
+user's token opens only that user's chat and store. The admin token
+can run commands here; with passwordless `sudo`, it can run as root.
+The login QR holds that admin token. Keep it private and never put a
+token or login QR screenshot in a public issue.
+
 1. `spark serve --login` prints the page's address, the admin token and
    a QR code. Scan the QR with a phone and the page signs in.
 2. Or type a token. A user's token opens their own chat. The admin
    token opens the whole machine.
 3. On iOS, add the page to the home screen.
 
-The QR holds the token. Show it only to the person it is for.
+For someone else, create an ordinary user with `spark user add NAME`
+and give that person only their own token.
 
-HTTPS for the page:
+### HTTPS for the page
 
 The page is plain HTTP until you give it a certificate. Then it serves
 https on the same port, and the login link, the QR and `spark client
@@ -592,7 +612,8 @@ URL` follow.
    Certificate Trust Settings. Android says the network may be
    monitored: that is the root. The root signs for this machine's
    names and no other.
-3. `spark serve https` shows the certificate and who must trust it.
+3. `spark serve https` only shows certificate status and who must trust
+   it; it does not turn on HTTPS. Follow step 1 or 2 to configure it.
    `spark serve https off` is plain HTTP again.
 
 Over plain HTTP an admin action (a verb run, the do console, the soul,
@@ -851,7 +872,7 @@ When something stops working:
 ## 8. What an attacker can and cannot do
 
 spark serves plain HTTP on one address of your network, or https with
-a certificate you gave it (`spark serve https`). Without one, your
+a certificate you configured above. Without one, your
 network is the trust boundary.
 
 - Over plain HTTP, anyone on your network can read the traffic, tokens

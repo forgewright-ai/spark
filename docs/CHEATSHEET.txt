@@ -1,6 +1,8 @@
 SPARK CHEATSHEET                                 lp ~/.spark/docs/CHEATSHEET.txt
 
 Every command has -h.
+Local model by default; configured servers receive text you send.
+No telemetry. See README.md#what-leaves-this-machine before sharing.
 
 AT THE PROMPT
   ? words   or   words?   Enter   the command lands in your line
