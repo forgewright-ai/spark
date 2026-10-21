@@ -5,6 +5,8 @@
 The page over https. A certificate pair you were given, or one spark
 mints for your home, and the page serves TLS on the same port. Every
 spark client follows, and trust is typed, never assumed.
+With it, what waited for a major: the admin boundary over plain http,
+four audit findings, the danger reading, the workflows and small fixes.
 
 - `spark serve https CERT KEY`: your pair, PEM files, the key private;
   `--name HOST` puts the name in the links. The listener is TLS 1.2 or
@@ -36,16 +38,26 @@ spark client follows, and trust is typed, never assumed.
 - The page's code for the retired desktop app is gone: the browser is
   its one host. A connection that dies between requests no longer
   leaves a traceback in the page's log.
-- LICENSE says the tale under `home/.config/spark/tale` is CC BY-NC-ND
-  4.0, apart from the MIT grant; CREDITS said it alone.
-- The workflows follow their upstreams: `actions/upload-artifact`
-  7.0.2 and `github/codeql-action` 4.38.3, pinned by sha (#53, #54).
-- A validation workflow runs the two commands the gate keeps apart:
-  the real isolation section on Linux and macOS at every landing, and
-  the compatibility harness against the pinned engine and weights once
-  a week, its record kept as an artifact (#58).
-- `tests/land.sh` lands main even when the remote refuses to delete
-  the try branch: it says the branch stays and prints where main is.
+- Over plain http an admin action (a verb run, the do console, the
+  soul written, the check refreshed) answers this machine and its own
+  networks alone; a peer routed in from farther is refused with the
+  remedy. Over https a valid session acts from anywhere. A reverse
+  proxy is the peer: spark reads no forwarded header (#27)
+- Four low findings of the 2026-10-03 audit closed. `spark user add` no
+  longer offers to claim older plaintext chats, and `spark user claim`
+  reads a file through its own inode, never a link in its place. A new
+  admin token lands in one atomic replace, the old one dead that
+  instant. Every private file spark writes, a key, a token, a record, a log or a
+  lock, is opened without following a link and comes back 0600. `GET /v1/models`
+  lists the served roles alone, nothing of the engine's own listing- `spark client URL` is a danger line: it stops this machine's engine
+  and page and answers from another machine from then on, so the
+  prompt line asks for the typed yes. `spark client off` stays plain.
+- The danger reading is linear on a separator-dense line. A pattern is
+  walked only when the words a match of it needs are on the text, a
+  stage read once is not read again, and the shell's operators are
+  found by their first character. 100 kB of `ls;` reads in a quarter
+  of the time.
+
 - The `sends` and `watchdog` rows settle like the servers' rows: red
   for a moment at a restart, said only when still red three minutes
   later.
@@ -58,27 +70,17 @@ spark client follows, and trust is typed, never assumed.
   record once. The Linux retry after a partial delete has its test: a
   whiteout whose file already went is no change, and an opaque
   directory names only the children still there.
-- `spark client URL` is a danger line: it stops this machine's engine
-  and page and answers from another machine from then on, so the
-  prompt line asks for the typed yes. `spark client off` stays plain.
-- The danger reading is linear on a separator-dense line. A pattern is
-  walked only when the words a match of it needs are on the text, a
-  stage read once is not read again, and the shell's operators are
-  found by their first character. 100 kB of `ls;` reads in a quarter
-  of the time.
+- The workflows follow their upstreams: `actions/upload-artifact`
+  7.0.2 and `github/codeql-action` 4.38.3, pinned by sha (#53, #54).
+- A validation workflow runs the two commands the gate keeps apart:
+  the real isolation section on Linux and macOS at every landing, and
+  the compatibility harness against the pinned engine and weights once
+  a week, its record kept as an artifact (#58).
+- `tests/land.sh` lands main even when the remote refuses to delete
+  the try branch: it says the branch stays and prints where main is.
+- LICENSE says the tale under `home/.config/spark/tale` is CC BY-NC-ND
+  4.0, apart from the MIT grant; CREDITS said it alone.
 
-- Over plain http an admin action (a verb run, the do console, the
-  soul written, the check refreshed) answers this machine and its own
-  networks alone; a peer routed in from farther is refused with the
-  remedy. Over https a valid session acts from anywhere. A reverse
-  proxy is the peer: spark reads no forwarded header (#27)
-- Four low findings of the 2026-10-03 audit closed. `spark user add` no
-  longer offers to claim older plaintext chats, and `spark user claim`
-  reads a file through its own inode, never a link in its place. A new
-  admin token lands in one atomic replace, the old one dead that
-  instant. Every private file spark writes, a key, a token, a record, a log or a
-  lock, is opened without following a link and comes back 0600. `GET /v1/models`
-  lists the served roles alone, nothing of the engine's own listing
 ## v1.90.4
 
 - S3: generation requests could wait without a deadline, and a client
