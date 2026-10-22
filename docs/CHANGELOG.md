@@ -6,6 +6,10 @@
   wider than the screen came apart, and on a phone the copy button sat
   on its first line. A block keeps its lines whole and scrolls
   sideways, and on a touch screen the button has its own room (#74)
+- S3: on a phone the return key sent the message, so a prompt could not
+  have a second line. On a touch screen return makes a new line and
+  the button sends; with a keyboard Enter sends and Shift+Enter is the
+  new line, as before (#75)
 - S3: the page pulled a reader back to the end of the chat at every
   word of a streamed answer, so the start could not be read while it
   came. The chat and a verb's output now follow the end only while the
