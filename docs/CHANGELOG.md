@@ -10,6 +10,11 @@
   have a second line. On a touch screen return makes a new line and
   the button sends; with a keyboard Enter sends and Shift+Enter is the
   new line, as before (#75)
+- S3: the page focused the message box by itself after + new chat and
+  after an answer, which opened a phone's keyboard unasked, and + new
+  chat left the chat list open over the new chat. On a touch screen
+  the box waits for a tap and the list closes; with a keyboard the
+  cursor is ready as before (#77)
 - S3: the page pulled a reader back to the end of the chat at every
   word of a streamed answer, so the start could not be read while it
   came. The chat and a verb's output now follow the end only while the
