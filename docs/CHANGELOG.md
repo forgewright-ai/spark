@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.96
+
+- Monaspace Neon and Xenon are the v1.400 release's own web fonts,
+  regular and bold, with their whole coverage (box drawing, Greek,
+  Cyrillic), in place of the Latin subsets of v1.101 that Fontsource
+  packaged. The site takes the same four files at the tag
+- The tree's privacy grep reads text alone: a compressed font's bytes
+  matched the e-mail shape once
+
 ## v1.95
 
 One look, one voice. The page in the browser wears the look of

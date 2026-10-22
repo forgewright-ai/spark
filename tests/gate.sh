@@ -121,10 +121,12 @@ tree_privacy() {
     [ -z "${SPARK_PRIVACY_TERMS_SECRET:-}" ] || rm -f "$list"
     if [ -z "$terms" ]; then
         notice "no privacy word list -- generic patterns only"
-    elif git grep -l -i -w -E "$terms" -- . ':(exclude).privacy-terms'; then
+    elif git grep -I -l -i -w -E "$terms" -- . ':(exclude).privacy-terms'; then
         bad "privacy: a listed word is in the tree"
     fi
-    hits=$(git grep -n -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . | grep -v 'you@example.com' || true)
+    # -I: text alone. A binary (a compressed font under lib/spark/forge/fonts)
+    # is not read by anyone, and its bytes matched the e-mail shape once (v1.96)
+    hits=$(git grep -I -n -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . | grep -v 'you@example.com' || true)
     if [ -n "$hits" ]; then
         printf '%s\n' "$hits"
         bad "privacy: an e-mail address is in the tree"

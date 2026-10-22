@@ -126,8 +126,10 @@ maintainer's.
 The page in the browser, and spark.forgewright.ai with it, set their
 text in three fonts. Each is under the SIL Open Font License 1.1: free
 to use and to ship with the software, the license kept alongside, and
-never sold on its own. The six woff2 files in `lib/spark/forge/fonts/`
-are the Latin subsets as Fontsource packages them.
+never sold on its own. In `lib/spark/forge/fonts/`, Monaspace Neon and
+Xenon are the v1.400 release's own web fonts, regular and bold, with
+their whole coverage. Atkinson Hyperlegible Next is the Latin subset
+as Fontsource packages it.
 
 - Atkinson Hyperlegible Next -- https://www.brailleinstitute.org/freefont
   -- SIL OFL 1.1 (c) Braille Institute of America. The prose.
