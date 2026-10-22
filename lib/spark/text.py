@@ -887,8 +887,14 @@ class FaceLead:
             return not must
         if frame != self.shown:
             up = "\033[%dA" % self.rows if self.rows else ""
-            self.stream.write("\x1b7" + up + "\r" + self._paint(frame) + "\x1b8")
-            self.stream.flush()
+            try:
+                self.stream.write("\x1b7" + up + "\r" + self._paint(frame) + "\x1b8")
+                self.stream.flush()
+            except (OSError, ValueError):
+                # the terminal is gone (a closed pipe, a closed stream):
+                # the face is lost and moves no more, nothing is said
+                self.halt = self.lost = True
+                return False
             self.shown = frame
         self.open = frame == self.anim.talk(True) and frame != self.anim.talk(False)
         return True

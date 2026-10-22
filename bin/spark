@@ -18,9 +18,6 @@ import os
 import signal
 import sys
 
-# `spark ... | head` must end quietly: default SIGPIPE, not a traceback.
-signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-
 _HERE = os.path.dirname(os.path.realpath(__file__))
 _LIB = os.path.join(os.path.dirname(_HERE), "lib")
 if _LIB not in sys.path:
@@ -238,6 +235,23 @@ if __name__ == "__main__":
     if os.path.basename(sys.argv[0]) == "explain":
         argv = ["explain"] + argv
     try:
-        sys.exit(main(argv))
+        rc = main(argv)
+        # what the verb buffered goes out here, inside the try: a pipe
+        # that closed meanwhile is caught below, never at the exit
+        sys.stdout.flush()
     except KeyboardInterrupt:
         sys.exit(130)
+    except BrokenPipeError:
+        # `spark ... | head` closed its end: end quietly, as a process
+        # killed by SIGPIPE does (status 141), with nothing more written.
+        # SIGPIPE itself stays ignored, Python's default, so a write into
+        # any closed pipe -- a pager, a player, a reader -- is this error
+        # and never a signal that ends spark before its handlers run.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGPIPE)
+        sys.exit(141)
+    sys.exit(rc)

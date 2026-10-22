@@ -305,6 +305,25 @@ class Stub(BaseHTTPRequestHandler):
             # `wraptest` streams a long plain answer to prove the 80-col wrap
             if "count" in user:
                 pieces = (str(len(messages)),)
+            elif "trickle" in user:
+                # #70: six chunks 0.15 s apart, nothing held: a reader that
+                # closes after the first ones makes the next write fail
+                # mid-reply. A client gone mid-way ends the trickle, so
+                # this single-threaded stub is free again at once
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                try:
+                    for piece in ("Rain on the roof, ", "rain on the road, ", "rain on the river, ",
+                                  "rain on the ridge, ", "rain on the reeds, ", "rain at rest."):
+                        self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": piece}}]}) + "\n\n").encode())
+                        self.wfile.flush()
+                        time.sleep(0.15)
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
+                    self.wfile.write(b"data: [DONE]\n\n")
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    pass
+                return
             elif "stall" in user:
                 # half an answer, then silence past the client's timeout
                 # (a model that hangs, a server restarted under the reply)
@@ -2517,6 +2536,75 @@ def empty_answer_cases(t, spark, home, url, env):
                  (0, "CAPABILITY", "ok", "every question answered (7 days)", "")],
          "check answers: na with no question, ok when all were answered, a warn from 2 empty and 2 % of them "
          "with the larger-model remedy -- and a model no longer served is not counted", repr(got))
+
+
+def pipe_cases(t, env, home):
+    """A closed pipe is an error spark handles, never a signal that ends
+    it (#70): SIGPIPE stays ignored, and bin/spark ends quietly on a
+    BrokenPipeError with the status a process killed by SIGPIPE has
+    (-13 to a parent), nothing on stderr. The reader closes its end
+    before the verb writes (help, read), or after the first bytes of a
+    reply that streams on (chat), so the write must fail."""
+    def closed_reader(args, first=0, extra=None, stdin=None):
+        e = dict(env)
+        e.update(extra or {})
+        p = subprocess.Popen([sys.executable, SPARK] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL, env=e, cwd=home)
+        if stdin is not None:
+            p.stdin.write(stdin.encode())
+            p.stdin.close()
+        got = p.stdout.read(first) if first else b""
+        p.stdout.close()
+        try:
+            err = p.stderr.read().decode("utf-8", "replace")
+            rc = p.wait(40)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            rc, err = "hung", ""
+        return rc, got, err
+
+    rc, _got, err = closed_reader(["help"])
+    t.ok(rc == -13 and "Traceback" not in err and "Exception" not in err,
+         "pipe: spark help into a closed pipe ends as a SIGPIPE death would, no traceback", repr((rc, err[-300:])))
+    rc, _got, err = closed_reader(["read", "when", "does", "it", "open"], stdin=READ_TEXT)
+    t.ok(rc == -13 and "Traceback" not in err and "mid-reply" not in err,
+         "pipe: spark read into a closed pipe ends quietly, the reading line aside", repr((rc, err[-300:])))
+    # unbuffered, so the chunks reach the pipe as they stream and the
+    # one after the reader's close is the write that fails, mid-reply
+    rc, got, err = closed_reader(["chat", "trickle"], first=8, extra={"PYTHONUNBUFFERED": "1"})
+    t.ok(rc == -13 and got and "Traceback" not in err and "mid-reply" not in err and "dropped" not in err,
+         "pipe: a chat reply whose reader closes mid-stream ends quietly, never 'dropped mid-reply'",
+         repr((rc, got, err[-300:])))
+
+    # the face's thread on a terminal that is gone: lost, silent, over
+    from spark import text as textmod
+
+    class Gone:
+        def isatty(self):
+            return True
+
+        def fileno(self):
+            raise OSError("no fd")
+
+        def flush(self):
+            pass
+
+        def write(self, s):
+            raise BrokenPipeError(32, "Broken pipe")
+
+    face = textmod.FaceLead(Gone())
+    try:
+        face.write("hello\n")
+        raised = False
+    except BrokenPipeError:
+        raised = True          # the reply's own write fails up to bin/spark, as it should
+    face.start()
+    end = time.time() + 3
+    while time.time() < end and (not face.lost or face.thread.is_alive()):
+        time.sleep(0.05)
+    t.ok(raised and face.lost and not face.thread.is_alive(),
+         "pipe: the face on a terminal that is gone is lost and its thread ends, nothing said",
+         repr((raised, face.lost, face.thread.is_alive())))
 
 
 def continuing_tag_cases(t):
@@ -7276,6 +7364,7 @@ def main():
         redirect_cases(t)
         engine_wire_cases(t, spark, home, url)
         empty_answer_cases(t, spark, home, url, env)
+        pipe_cases(t, env, home)
 
         # ask / explain / the explain symlink
         rc, out, _ = spark("what", "does", "this", "mean")

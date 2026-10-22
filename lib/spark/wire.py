@@ -1028,6 +1028,10 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
             # under the answer, a model that stalled past the timeout):
             # _send's try covers the connect only, so this is the read's
             # own one-line answer -- never a traceback in a chat
+            if isinstance(e, BrokenPipeError):
+                # on_delta's own write failed: the reader's pipe closed
+                # (`spark ... | head`), not the brain. bin/spark ends it
+                raise
             if "timed out" in str(e):
                 raise BrainError("timeout", "%s went quiet for %ss mid-reply -- the answer above is incomplete" % (url, timeout or cfg.timeout))
             raise BrainError("cut", "%s dropped mid-reply (%s) -- the answer above is incomplete" % (url, e))

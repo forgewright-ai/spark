@@ -78,7 +78,6 @@
 
 import array
 import atexit
-import fcntl
 import hashlib
 import json
 import os
@@ -1191,7 +1190,6 @@ class Stream(Playing):
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, bufsize=0,
                                 start_new_session=True)
         Playing.__init__(self, proc, "")
-        _no_sigpipe_fd(proc.stdin.fileno())
         self.rate = int(rate)
         self.opened = self.until = time.monotonic()
         _track(self)
@@ -1620,33 +1618,6 @@ def plain(text):
     return _speakable(_MARKS.sub(" ", text or ""))
 
 
-def _own_sigpipe():
-    """(a reader's thread, as it starts) A write into a player that is
-    gone fails here as BrokenPipeError, which Stream.write expects,
-    never as the process's SIGPIPE: bin/spark keeps that signal at its
-    default so `spark ... | head` ends quietly, and at its default it
-    would end the whole chat at the first sentence a gone player drops.
-    Linux sends that signal to the thread that wrote, so the thread's
-    own mask holds it; macOS sends it to the process, so the pipe asks
-    for none (_no_sigpipe_fd)."""
-    try:
-        signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGPIPE})
-    except (AttributeError, OSError, ValueError):
-        pass
-
-
-def _no_sigpipe_fd(fd):
-    """The pipe into a player raises no SIGPIPE, where the OS has that
-    flag (F_SETNOSIGPIPE, macOS): a write to a gone player is EPIPE."""
-    cmd = getattr(fcntl, "F_SETNOSIGPIPE", 73 if IS_MAC else None)
-    if cmd is None:
-        return
-    try:
-        fcntl.fcntl(fd, cmd, 1)
-    except (OSError, ValueError):
-        pass
-
-
 class Reader:
     """The lines a surface reads aloud, in threads of their own: put()
     returns at once, so a prompt never waits for a voice. Two stages, so
@@ -1827,7 +1798,6 @@ class Reader:
         return stop() or had
 
     def _engine(self):
-        _own_sigpipe()
         while True:
             with self.cv:
                 while not self.lines or len(self.ready) >= AHEAD:
@@ -1875,7 +1845,6 @@ class Reader:
             return None
 
     def _player(self):
-        _own_sigpipe()
         while True:
             act = self._next()
             if act[0] == "silence":

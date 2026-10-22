@@ -72,8 +72,13 @@ for it, and no verb carries the word.
 - **Text-first.** Plain text that pipes, `--porcelain` for programs, no
   curses, keyboard only. Long output pages at a terminal (`$PAGER`, else
   `less`) and is plain when piped: `page()` and `paged()` in
-  `lib/spark/__init__.py`. Every character spark prints draws on the
-  Linux console. The mark is the word `spark`. A line spark says
+  `lib/spark/__init__.py`. A closed pipe is an error, never a signal.
+  `SIGPIPE` stays ignored, Python's default. A write into a closed
+  stdout, pager or child's stdin raises `BrokenPipeError` where the
+  code can handle it. `bin/spark` ends quietly on one that reaches the
+  top, with the status a process killed by `SIGPIPE` has. Every
+  character spark prints draws on the Linux console. The mark is the
+  word `spark`. A line spark says
   starts with one mark, on every OS and terminal: `* ` when spark
   speaks, `! ` for a warning or a failure. No `spark:` prefix and no
   other glyph starts a line. Where the look draws the face, it comes

@@ -1558,14 +1558,11 @@ check("Reader at exit (stream): drain waits until the clip is written whole; the
 
 # a player gone at once (no sound server, a device that is not there):
 # the clip is longer than the pipe's buffer, so the write is blocked in
-# it when the player exits, and gets SIGPIPE. bin/spark keeps that
-# signal at its default so `spark ... | head` ends quietly; the reader's
-# threads block it for themselves, and the pipe asks for none on macOS:
-# the write fails, the clip ends, it is said once, the process lives
-# and the reply goes on
+# it when the player exits. SIGPIPE is ignored, Python's default and
+# spark's (bin/spark): the write fails as an error, the clip ends, it
+# is said once, the process lives and the reply goes on
 DEAD = stub("spark-test-dead-player", "#!/bin/sh\nexit 1\n")
-code = ("import signal, sys; sys.path.insert(0, %r); from spark import voice\n"
-        "signal.signal(signal.SIGPIPE, signal.SIG_DFL)\n"
+code = ("import sys; sys.path.insert(0, %r); from spark import voice\n"
         "voice.stream_argv = lambda cfg, rate: [%r, '-r', str(rate)]\n"
         "r = voice.Reader(None)\n"
         "for t in sys.stdin.read().split():\n"       # the lines on stdin, never on an argv
@@ -1574,7 +1571,7 @@ code = ("import signal, sys; sys.path.insert(0, %r); from spark import voice\n"
         "print('alive', r.player_told)\n" % (os.path.join(REPO, "lib"), DEAD))
 p = subprocess.run([PY, "-c", code], input="alpha. beta. gamma.\n", capture_output=True, text=True, timeout=60,
                    env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.1", STUB_CLIP="3", **FAKE_ENV))
-check("stream: a player gone at once ends the clip, said once, never the process (SIGPIPE at its default)",
+check("stream: a player gone at once ends the clip, said once, never the process",
       p.returncode == 0 and p.stdout.split() == ["alive", "True"], (p.returncode, p.stdout, p.stderr[-400:]))
 
 # the runtime's warnings (fprintf to the C library's stderr) go nowhere

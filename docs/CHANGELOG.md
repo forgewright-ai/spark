@@ -8,6 +8,12 @@
   packaged. The site takes the same four files at the tag
 - The tree's privacy grep reads text alone: a compressed font's bytes
   matched the e-mail shape once
+- A closed pipe is an error spark handles, never a signal that ends
+  it: SIGPIPE stays ignored, Python's default, and `spark ... | head`
+  ends quietly at the top of bin/spark with the status it always had.
+  The v1.94.1 guards in the voice come out, a terminal that closes
+  under the face ends its drawing without a word, and a closed stdout
+  mid-reply is no longer reported as the model dropping (#70)
 
 ## v1.95
 
