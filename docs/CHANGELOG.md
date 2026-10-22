@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.94.1
+
+- S1: a reply read aloud ended the whole chat at its first sentence
+  whenever the voice's player exited at once: no sound server at the
+  console, a device that is not there. The write into the gone
+  player's pipe raised SIGPIPE, which spark keeps at its default so
+  `spark ... | head` ends quietly. The voice's threads block it for
+  themselves now, and the player's pipe asks for none on macOS: the
+  clip ends, the reply goes on, and a player that stops taking sound
+  is said once, after the reply (#67)
+
 ## v1.94
 
 `spark help` opens with what spark is, more exactly: a local model by

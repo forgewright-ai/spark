@@ -1233,6 +1233,15 @@ def _aloud(text, cut=False):
         VOICE["reader"].put(text, cut=cut)
 
 
+def _voice_notice():
+    """The one line a lost player owes (voice.Reader.notice), said once
+    between replies, never inside one."""
+    from . import voice
+    n = VOICE["reader"].notice() if VOICE["reader"] is not None else None
+    if n is not None:
+        voice._complain(n)
+
+
 # The text follows the voice (a reply read aloud, the reveal on, at a
 # terminal of this machine): a sentence's text is shown as its sound
 # starts, spread over FOLLOW_SHARE of its length -- FOLLOW_EARLY seconds
@@ -2401,6 +2410,7 @@ def cmd_chat(args):
                         _aloud_reply(SAID[-1]["text"])
                 else:
                     _refuse("no command %s -- /help lists them" % verb)
+                _voice_notice()
                 if verb == "/clear":
                     pass       # /clear starts clean
                 elif FACE[0] is not None:
@@ -2426,6 +2436,7 @@ def cmd_chat(args):
                 thread = getattr(e, "thread", thread)
                 say()
                 _tell("stopped")
+            _voice_notice()
             if FACE[0] is not None:
                 FACE[0].line()  # the blank line, counted: the face still finds its row
             else:
