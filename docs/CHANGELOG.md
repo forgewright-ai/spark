@@ -2,6 +2,10 @@
 
 ## v1.97.1
 
+- S3: a code block on the page wrapped its long lines, so a drawing
+  wider than the screen came apart, and on a phone the copy button sat
+  on its first line. A block keeps its lines whole and scrolls
+  sideways, and on a touch screen the button has its own room (#74)
 - S3: the page pulled a reader back to the end of the chat at every
   word of a streamed answer, so the start could not be read while it
   came. The chat and a verb's output now follow the end only while the

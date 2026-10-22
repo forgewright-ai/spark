@@ -196,7 +196,9 @@ tr.chosen td:first-child { color: var(--spark-text); }
 /* inline code and fenced blocks */
 code { background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 0.05em 0.35em; }
 kbd, .fence code, .block code, .cmd code { background: none; border: 0; padding: 0; }
-pre.fence { position: relative; overflow-x: auto; margin: 0.4rem 0; }
+/* a code block keeps its lines whole, a drawing or a table among them,
+   and scrolls sideways when the screen is narrower (#74) */
+pre.fence { position: relative; overflow-x: auto; margin: 0.4rem 0; white-space: pre; }
 .fence .copy { position: absolute; top: 0.3rem; right: 0.3rem; }
 @media (hover: hover) and (pointer: fine) {
   .fence .copy { opacity: 0; }
@@ -282,7 +284,7 @@ pre.fence { position: relative; overflow-x: auto; margin: 0.4rem 0; }
 .step .hint { color: var(--soft); }
 .step .ctl { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.4rem; flex-wrap: wrap; }
 .step .log { margin-top: 0.4rem; }
-pre.block { margin: 0.4rem 0 0; overflow-x: auto; }
+pre.block { margin: 0.4rem 0 0; overflow-x: auto; white-space: pre; }
 
 /* a new user's QR: dark on white whatever the theme, a phone's camera reads it */
 .qr { display: inline-block; padding: 0.75rem; background: #ffffff; border-radius: var(--radius); margin: 0.6rem 0; }
@@ -321,6 +323,7 @@ pre.block { margin: 0.4rem 0 0; overflow-x: auto; }
   .tabs a { display: inline-flex; align-items: center; }
   .list .x, .keys .x, .fence .copy { min-height: 44px; min-width: 44px; }
   .fence .copy { opacity: 1; }
+  pre.fence { padding-top: 3.4rem; }   /* the copy button's own room, above the first line */
 }
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
