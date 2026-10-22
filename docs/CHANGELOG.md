@@ -15,6 +15,11 @@
   chat left the chat list open over the new chat. On a touch screen
   the box waits for a tap and the list closes; with a keyboard the
   cursor is ready as before (#77)
+- S3: on a phone the keyboard scrolled the page past its end, a band of
+  nothing under the message box, and the page stayed there after the
+  keyboard closed. While the box has focus the chat panel is sized to
+  the visible part of the screen and the page is held at its top; when
+  the keyboard goes, both are back where they were (#72)
 - S3: the page pulled a reader back to the end of the chat at every
   word of a streamed answer, so the start could not be read while it
   came. The chat and a verb's output now follow the end only while the
