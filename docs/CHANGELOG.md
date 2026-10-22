@@ -20,6 +20,9 @@
   keyboard closed. While the box has focus the chat panel is sized to
   the visible part of the screen and the page is held at its top; when
   the keyboard goes, both are back where they were (#72)
+- S3: + new chat and a chat pick did nothing while an answer streamed,
+  and said nothing. They stop the answer first, keep it in its chat
+  marked stopped, then do what was asked (#76)
 - S3: the page pulled a reader back to the end of the chat at every
   word of a streamed answer, so the start could not be read while it
   came. The chat and a verb's output now follow the end only while the
