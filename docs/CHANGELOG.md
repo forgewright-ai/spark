@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.97.1
+
+- S3: the page pulled a reader back to the end of the chat at every
+  word of a streamed answer, so the start could not be read while it
+  came. The chat and a verb's output now follow the end only while the
+  reader is at the end (#73)
+
 ## v1.97
 
 The page catches up with core (#71). Five things the terminal could do

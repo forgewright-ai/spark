@@ -2346,6 +2346,11 @@ def main():
             ok("confirmed: !!r.danger" in body, "spark.js: do/run carries confirmed after the second click")
             ok('el("pre", "block")' in body and 'r.command.indexOf("\\n") >= 0' in body,
                "spark.js: a block's command is shown in a <pre>, a line stays <code>")
+            # a streamed answer follows the end only while the reader is at
+            # the end: a reader who scrolled up is not pulled back (#73)
+            ok("scrollTop = 1e9" not in body and "function atEnd(" in body
+               and body.count("atEnd(") >= 4,
+               "spark.js: the transcript and the output follow the end only from the end")
             rc, out, _ = spark("forge", "--print-url", "--user", "--show-token")
             ok(rc == 2 and "spark user add" in out, "--print-url --user: gone, names spark user add", out)
             rc, out, _ = spark("forge", "--print-client")
