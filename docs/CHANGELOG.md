@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.95
+
+One look, one voice. The page in the browser wears the look of
+spark.forgewright.ai, and says what the README says. A newcomer meets
+one first question everywhere, and a second person joins from the
+admin's phone.
+
+- The page takes the site's colors and type: an ink-blue night, a grey
+  paper day, Atkinson Hyperlegible Next for the text, Monaspace Xenon
+  for the headings and Monaspace Neon for the code, the wordmark with
+  its cursor, the night/day switch in the bar. `lib/spark/forge/tokens.css`
+  and the six font files (SIL OFL 1.1) are the one source of the look;
+  the site copies them at the tag. The palette menu is gone (#68)
+- The page's words are the README's and INSTALL's, word for word, held
+  there by docs_test: the login card, the chat's first screen, do and
+  help. One noun for a conversation, chat. A user's help lists the
+  three pages a user has. spark's face sits in the bar: asleep, awake,
+  thinking while an answer streams, pleased when it lands (#68)
+- One first question: `? how many files are here` on the site, as
+  setup's own live question, in the README and in `spark setup`'s
+  closing lines, which are now the README's first three steps (#69)
+- The admin adds a user from the page: `POST /api/users` mints one as
+  `spark user add NAME` does, and the page shows the token once with its
+  QR for that person's phone. A sixth acting row, audited (#69)
+- The admin's first screen says that the admin token opens the whole
+  machine; a user's bar line names the machine and the version, not
+  the models (#69)
+
 ## v1.94.1
 
 - S1: a reply read aloud ended the whole chat at its first sentence
@@ -10,6 +38,7 @@
   themselves now, and the player's pipe asks for none on macOS: the
   clip ends, the reply goes on, and a player that stops taking sound
   is said once, after the reply (#67)
+
 
 ## v1.94
 

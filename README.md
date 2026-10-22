@@ -87,7 +87,7 @@ non-empty value wins. See `docs/INSTALL.md` for quoting and comments.
 ## Use it
 
 ```
-? how big is this dir           a command for your line
+? how many files are here       a command for your line
 cmd 2>&1 | explain              what went wrong, and the fix
 spark chat                      talk with the model
 ```

@@ -581,7 +581,9 @@ token or login QR screenshot in a public issue.
 3. On iOS, add the page to the home screen.
 
 For someone else, create an ordinary user with `spark user add NAME`
-and give that person only their own token.
+and give that person only their own token. On the page, the admin adds
+a user under settings: the token shows once, with a QR for that
+person's phone.
 
 ### HTTPS for the page
 

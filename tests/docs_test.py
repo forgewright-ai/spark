@@ -349,6 +349,60 @@ def help_voice():
                       % (f, attr, " (found '%s')" % m.group(0) if m else ""))
 
 
+
+def page_words():
+    """The page in the browser speaks the README's words, says chat where
+    a person reads, keeps the retired nouns out, serves every file in
+    its folder and no other, and its tokens.css defines night and day
+    alike (spark.forgewright.ai copies that file at the tag)."""
+    import html as html_mod
+    from spark import forgeserve
+    page = read("lib/spark/forge/index.html")
+
+    def plain(s):
+        s = html_mod.unescape(re.sub(r"<[^>]+>", "", s))
+        return re.sub(r"\s+", " ", s.replace("`", "")).strip()
+    docs = {name: re.sub(r"\s+", " ", read(name).replace("`", "")).lower() for name in ("README.md", "docs/INSTALL.md")}
+    found = re.findall(r'<(p|span)([^>]*)data-doc="([^"]+)"[^>]*>(.*?)</\1>', page, re.S)
+    check(len(found) >= 7, "index.html marks its spark sentences data-doc (%d)" % len(found))
+    for _tag, _attrs, src, body in found:
+        text = plain(body)
+        check(text.lower() in docs.get(src, ""), "index.html: a data-doc sentence is in %s, word for word: %s" % (src, text[:50]))
+    # one noun for a conversation where a person reads: chat (the API keeps thread)
+    visible = re.sub(r"<!--.*?-->", "", page, flags=re.S)
+    visible = re.sub(r"<[^>]+>", " ", visible)
+    check("thread" not in visible.lower(), "index.html says chat, never thread, where a person reads")
+    js = read("lib/spark/forge/spark.js")
+    strings = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', js)
+    shown = [x for x in strings if re.search(r"\bthreads?\b", x) and "/api/" not in x and " " in x
+             and not x.startswith(("#", "."))]   # a selector is not a word a person reads
+    check(not shown, "spark.js shows chat, never thread, in its strings%s" % ("" if not shown else ": " + shown[0][:40]))
+    # the retired nouns stay out of the page (the site holds the same rule)
+    for name in ("lib/spark/forge/index.html", "lib/spark/forge/spark.js"):
+        txt = re.sub(r"/\*.*?\*/", "", read(name), flags=re.S)
+        txt = re.sub(r"<!--.*?-->", "", txt, flags=re.S)
+        m = re.search(r"\b(the|a) forge\b|\b(the|an) ember\b|\bthe brain\b|\bsmart (app|apps|os)\b|\bthe seed\b", txt, re.I)
+        check(m is None, "%s: no retired noun where a person reads%s" % (name, " (found '%s')" % m.group(0) if m else ""))
+    # every file under lib/spark/forge is served: STATIC names it (the
+    # font files included), and nothing served is missing from the tree
+    forge = os.path.join(ROOT, "lib", "spark", "forge")
+    on_disk = set()
+    for root, _dirs, files in os.walk(forge):
+        for f in files:
+            if not f.startswith("."):
+                on_disk.add(os.path.relpath(os.path.join(root, f), forge))
+    off = sorted(on_disk ^ set(forgeserve.STATIC))
+    check(not off, "forgeserve.STATIC names every file under lib/spark/forge and nothing else%s" % ("" if not off else " (%s)" % off[:3]))
+    # tokens.css: the one source of the look; night defines every token,
+    # the two day blocks (data-theme, the system's) the same set as each other
+    tokens = read("lib/spark/forge/tokens.css")
+    blocks = re.findall(r"\{([^{}]*)\}", tokens)
+    roots = [set(re.findall(r"(--[a-z0-9-]+):", b)) for b in blocks if "--page:" in b]
+    check(len(roots) == 3 and roots[0] >= roots[1] and roots[1] == roots[2],
+          "tokens.css: a night block with every token, two day blocks alike")
+    check("@font-face" in tokens and tokens.count("url(fonts/") == 6, "tokens.css: six font faces by relative path")
+    check(read("lib/spark/forge/theme.js").strip() != "", "theme.js is there (the chosen theme before first paint)")
+
 def living():
     """The living prompt (v1.59) as the tree holds it: every verb of `spark
     help`'s interface block, and `Esc k`, in the cheatsheet and INSTALL;
@@ -1138,6 +1192,10 @@ def main():
           "get's embedded release key is allowed-signers, byte for byte")
     # the living prompt: its verbs, keys and temperaments in the docs
     living()
+    # the page's words: a paragraph marked data-doc in index.html is a
+    # sentence of README.md or docs/INSTALL.md, word for word (whitespace
+    # and backticks aside) -- the page says nothing of its own about spark
+    page_words()
     # the patch lane: the form, the labels, the weekly day, the fence
     patch_lane()
     # one server: the old spellings nowhere, the group in the cheatsheet

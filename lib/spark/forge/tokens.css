@@ -1,0 +1,91 @@
+/* spark's design tokens: the one source of its look. The page in the
+   browser links this file first; spark.forgewright.ai copies it, and the
+   fonts beside it, from this tree at the newest release tag. Change a
+   color or a font here knowing both follow. ASCII only.
+   night: deep ink blue, warm paper text, the spark's yellow and ember.
+   day: cool grey paper, the same yellow as a fill, a deeper gold for text.
+   The theme follows the system; theme.js sets data-theme when a viewer
+   chose one. */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(fonts/atkinson-hyperlegible-next-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(fonts/atkinson-hyperlegible-next-latin-ext.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Monaspace Neon";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url(fonts/monaspace-neon-400.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Monaspace Neon";
+  font-style: normal; font-weight: 700; font-display: swap;
+  src: url(fonts/monaspace-neon-700.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Monaspace Xenon";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url(fonts/monaspace-xenon-400.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Monaspace Xenon";
+  font-style: normal; font-weight: 700; font-display: swap;
+  src: url(fonts/monaspace-xenon-700.woff2) format("woff2");
+}
+
+:root {
+  --page: #161a25;
+  --raised: #1d2230;
+  --screen: #10131c;
+  --line: #2b3244;
+  --ink: #ece6da;
+  --soft: #9ba3b4;
+  --spark: #ffcd45;
+  --spark-text: #ffcd45;
+  --ember: #ff6f42;
+  --on-spark: #1b1606;
+  --t0: #2a3040; --t2: #7cc47f; --t4: #7fa7e6; --t5: #c79be8; --t6: #6fc4c4; --t15: #ffffff;
+  --t7: var(--ink);
+  --shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.55);
+  --prose: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --slab: "Monaspace Xenon", ui-monospace, Menlo, monospace;
+  --mono: "Monaspace Neon", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --page: #eceef2;
+  --raised: #f7f8fa;
+  --screen: #fdfdfc;
+  --line: #d3d8e1;
+  --ink: #171c28;
+  --soft: #555e70;
+  --spark-text: #8a5a00;
+  --ember: #c2431d;
+  --t0: #171c28; --t2: #2f7a34; --t4: #2b5fae; --t5: #7d3fa8; --t6: #1d7373; --t15: #e3e6ec;
+  --t7: #c9ced8;
+  --shadow: 0 24px 50px -28px rgba(23, 28, 40, 0.35);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --page: #eceef2;
+    --raised: #f7f8fa;
+    --screen: #fdfdfc;
+    --line: #d3d8e1;
+    --ink: #171c28;
+    --soft: #555e70;
+    --spark-text: #8a5a00;
+    --ember: #c2431d;
+    --t0: #171c28; --t2: #2f7a34; --t4: #2b5fae; --t5: #7d3fa8; --t6: #1d7373; --t15: #e3e6ec;
+    --t7: #c9ced8;
+    --shadow: 0 24px 50px -28px rgba(23, 28, 40, 0.35);
+    color-scheme: light;
+  }
+}

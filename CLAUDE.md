@@ -422,7 +422,12 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 spoken in two threads of their own, the next made while one
                 plays; Sentences, a streamed reply cut into sentences)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
-                  mark.svg -- the page, ASCII, no inline script
+                  mark.svg -- the page, ASCII, no inline script; tokens.css
+                  (the colors and the fonts, the one source of spark's look,
+                  which spark.forgewright.ai copies at the tag), theme.js
+                  (the chosen theme before first paint), fonts/ (six woff2:
+                  Atkinson Hyperlegible Next, Monaspace Neon and Xenon,
+                  SIL OFL 1.1, CREDITS.md)
 home/           the shared $HOME mirror, linked. .config/spark/ holds the two
                 widgets (widget.bash widget.zsh), the two rc hooks (hook.bash
                 hook.zsh: PATH, the widget, the blank row, completion), the
@@ -1550,6 +1555,7 @@ and may change freely.
    GET     /                          none
    GET     /login                     none
    GET     /static/*                  none
+   GET     /static/fonts/*            none
    GET     /manifest.webmanifest      none
    GET     /apple-touch-icon.png      none
    GET     /api/health                none
@@ -1580,6 +1586,7 @@ and may change freely.
    GET     /api/config                admin
    GET     /api/log                   admin
    GET     /api/users                 admin
+   POST    /api/users                 admin
    POST    /api/run                   admin
    POST    /api/do/propose            admin
    POST    /api/do/run                admin
@@ -1587,11 +1594,12 @@ and may change freely.
    POST    /api/soul                  admin
    ```
 
-   Five admin rows act on this machine: `POST /api/run`, `POST
-   /api/do/propose`, `POST /api/do/run`, `POST /api/check/refresh` and
-   `POST /api/soul`. They are every admin `POST` row
-   (`forgeserve.ACTS`). Over plain http they answer this machine and a
-   peer on one of its own networks alone. The networks are the interface
+   Six admin rows act on this machine: `POST /api/run`, `POST
+   /api/do/propose`, `POST /api/do/run`, `POST /api/check/refresh`,
+   `POST /api/soul` and `POST /api/users`. They are every admin
+   `POST` row (`forgeserve.ACTS`). Over plain http they answer this
+   machine and a peer on one of its own networks alone. The networks
+   are the interface
    prefixes `own_networks` reads, or the private and link-local ranges
    when it reads none. A routed peer is 403 `{error: {kind: boundary}}`
    before any body is read, with the remedy, and one line in `forge.log`
@@ -1609,8 +1617,10 @@ and may change freely.
    part}`, `part` the one written: `personality` after an unchanged
    core once awaken gave one, else `soul`. A changed core there is 409
    `{error: {kind: core}}` unless `core` is true.
-   `GET /api/me` answers `{role, user, name, version}`: how the page
-   decides which console to draw and whom to greet. `GET /api/models`
+   `GET /api/me` answers `{role, user, name, version, faces, blink}`:
+   how the page decides which console to draw and whom to greet. The
+   faces are the machine's own (`look.faces`), with their blink rate,
+   for the face in the page's bar. `GET /api/models`
    answers this machine's model table `{name, total_gb, budget_gb,
    budget_pct, backend, cap_note, models: model.model_rows}`, what
    `spark model` on a client prints instead of its own numbers. The
@@ -1624,7 +1634,13 @@ and may change freely.
    threads, kept, last}]}`: counts and stamps, never a title, a body or
    a token. `kept` counts the kept threads among `threads`, read from
    the plaintext headers without a key. That is the whole of admin
-   visibility. `POST /api/user/token` (user) rotates the requester's own
+   visibility. `POST /api/users` (admin) takes `{name}` and mints a
+   user as `spark user add NAME` does. It answers `{name, token, link,
+   qr}` once: the token, its login link and the link's QR as a matrix
+   the page draws for that person's phone. Nothing is stored; a name
+   the verb refuses is 400, one in use 409; it acts, with an audit
+   record `user add`. `POST /api/user/token` (user) rotates the
+   requester's own
    token, returned once, never stored. `DELETE /api/threads` clears the
    requester's own regular threads and answers `{cleared, kept}`: the
    kept threads stay, and `kept` says how many. `GET /api/threads` rows
@@ -2336,10 +2352,11 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   `docs/CHANGELOG.md`, `docs/ROADMAP.md`, `docs/CONTRIBUTING.md`,
   and `CREDITS.md`. A change here reaches it with the
   next release, nothing to do, and nothing in this tree builds or
-  publishes it (Releasing, step 3). Its look mirrors the colour tokens
-  of `lib/spark/forge/spark.css`. That lockstep is checked where the
-  site is rendered, against this tree. `tests/docs_test.py` keeps the
-  docs true (pre-commit, CI). Every package and every model upstream is
+  publishes it (Releasing, step 3). Its look is this tree's: its build
+  copies `lib/spark/forge/tokens.css`, `theme.js` and `fonts/` from the
+  checkout at the tag, and its test holds its own copy equal to them.
+  `tests/docs_test.py` keeps the docs true (pre-commit, CI). Every
+  package and every model upstream is
   in `CREDITS.md`, the check-row and model counts the docs state are the
   tree's, and no retired word survives. A new fact a doc states that the
   tree can derive goes there as one more check: the test is the

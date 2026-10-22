@@ -1,20 +1,24 @@
 <!doctype html>
-<!-- spark FORGE page: the one static document. Every view is a section here;
+<!-- spark's page: the one static document. Every view is a section here;
      spark.js shows one at a time by hash route and fills it from /api/*.
      Chat is the front door for both roles; the admin's cards live under
      activity and settings. No inline script, no inline style, no inline
      handler (CSP: default-src 'self'). ASCII only: this file is read on
-     the Linux console too. -->
+     the Linux console too. A paragraph marked data-doc is a sentence of
+     README.md or docs/INSTALL.md, word for word: tests/docs_test.py holds
+     it there, so the page never says a thing of its own about spark. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#100e0c">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#161a25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="spark">
 <title>spark</title>
+<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/spark.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -24,10 +28,14 @@
 <a class="skip" href="#main">skip to content</a>
 
 <header class="top">
-  <a class="mark" href="#/chat"><img src="/static/mark.svg" alt="" width="26" height="26"><span>spark</span></a>
+  <a class="mark" href="#/chat"><img src="/static/mark.svg" alt="" width="26" height="26"><span>spark<span class="prompt" aria-hidden="true">&gt;</span></span></a>
   <span id="site" class="site"></span>
-  <button id="nav-btn" type="button" class="quiet" aria-expanded="false"
-    aria-controls="menu" hidden>menu</button>
+  <div class="side">
+    <span id="face" class="face asleep" aria-hidden="true"></span>
+    <button id="theme" type="button" class="quiet" aria-label="switch between the dark and the light theme">light</button>
+    <button id="nav-btn" type="button" class="quiet" aria-expanded="false"
+      aria-controls="menu" hidden>menu</button>
+  </div>
 </header>
 
 <nav class="tabs" id="menu" aria-label="pages" hidden>
@@ -44,10 +52,10 @@
   <div class="login-card">
     <img class="s-mark" src="/static/mark.svg" alt="" width="72" height="72">
     <h1>spark</h1>
-    <p id="login-hello" class="muted">your own AI, on a machine you own</p>
-    <p class="muted small">Ask the machine's admin for a token
-      (<code>spark user add NAME</code> mints one and shows a QR to scan);
-      the admin's is at <code>spark serve --login</code>.</p>
+    <p class="lede" data-doc="README.md">A local AI for your shell. It runs a model on your own
+      machine by default, with no account or telemetry.</p>
+    <p class="muted small">Your token came from <code>spark user add NAME</code>, shown
+      once or as a QR. The admin's came from <code>spark serve --login</code>.</p>
     <form id="login-form">
       <label for="token" class="vh">token</label>
       <div class="token-row">
@@ -81,12 +89,10 @@
     <div id="hello" class="hello" hidden>
       <img src="/static/mark.svg" alt="" width="56" height="56">
       <h2 id="hello-hi">hi</h2>
-      <p class="muted">this is your own AI -- ask it anything.</p>
+      <p class="lede" data-doc="README.md">Ask a harmless question, such as <code>What is 2 + 2?</code>.</p>
+      <p class="note adm"><b>admin</b> <span data-doc="docs/INSTALL.md">The admin token opens the whole machine.</span> Keep it private.</p>
       <div class="chips">
-        <button type="button" class="chip" data-chip="what can you do?">what can you do?</button>
-        <button type="button" class="chip" data-chip="tell me something interesting about this machine">about this machine</button>
-        <button type="button" class="chip" data-chip="help me write a short note">help me write</button>
-        <button type="button" class="chip" data-chip="explain something to me like I am five">explain like I'm five</button>
+        <button type="button" class="chip" data-chip="What is 2 + 2?">What is 2 + 2?</button>
       </div>
     </div>
     <div id="transcript" class="transcript" tabindex="0" aria-live="polite" aria-label="conversation"></div>
@@ -102,11 +108,11 @@
   <div class="card">
     <div class="head">
       <h2>health</h2>
-      <span id="check-tally" class="mono"></span>
-      <span id="check-age" class="muted"></span>
+      <span id="check-tally" class="mono small"></span>
+      <span id="check-age" class="muted small"></span>
       <button id="check-refresh" type="button" class="quiet adm">refresh</button>
     </div>
-    <div id="check-table" class="check mono"></div>
+    <div id="check-table" class="check"></div>
   </div>
   <div class="card">
     <div class="head">
@@ -144,7 +150,7 @@
 <section id="view-do" class="view" hidden>
   <div class="card">
     <h2>do</h2>
-    <p class="muted">A task, one command at a time. Nothing runs without a click.</p>
+    <p class="muted"><span data-doc="README.md">A task, one confirmed command at a time.</span> Nothing runs without a click.</p>
     <form id="do-form" class="ask">
       <input id="do-goal" type="text" data-main placeholder="goal" aria-label="goal" autocomplete="off">
       <button type="submit">propose</button>
@@ -161,16 +167,9 @@
       <span id="role" class="role" hidden></span>
     </div>
     <div class="actions">
-      <button id="logout" type="button" class="quiet" hidden>log out</button>
+      <button id="logout" type="button" hidden>log out</button>
     </div>
     <p class="muted small usr"><a href="#/help">what is this page?</a></p>
-  </div>
-  <div class="card" id="pal-card">
-    <h2>look</h2>
-    <label class="pal">palette
-      <select id="palette2" aria-label="palette (your view only)"></select>
-    </label>
-    <p class="muted small">your view only -- this browser, not the machine</p>
   </div>
   <div class="card usr" id="account-card" hidden>
     <div class="head">
@@ -183,7 +182,7 @@
       <span id="account-note" class="muted small"></span>
     </div>
     <p id="account-status" class="muted small mono"></p>
-    <p class="muted small">your token is the only key to your history -- rotating logs your other devices out</p>
+    <p class="muted small">your token is the only key to your chats; rotating logs your other devices out</p>
   </div>
   <div class="two">
     <div class="card adm">
@@ -208,7 +207,7 @@
       <h2>model</h2>
       <button type="button" class="quiet" data-run="model" data-args="auto">auto</button>
       <button type="button" class="quiet" data-run="model" data-args="none">none</button>
-      <label class="pal">chat model
+      <label class="row">chat model
         <select id="ember-pick" aria-label="chat model"></select>
       </label>
     </div>
@@ -227,6 +226,25 @@
     </div>
     <dl id="config-facts" class="facts"></dl>
   </div>
+  <div class="card adm" id="users-card">
+    <div class="head">
+      <h2>users</h2>
+      <span class="muted small">counts only; the chats are sealed, there is no key here</span>
+    </div>
+    <table class="keys" id="users-table"></table>
+    <form id="user-add-form" class="row">
+      <input id="user-add-name" type="text" placeholder="name" aria-label="a new user's name"
+        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+        pattern="[a-z][a-z0-9-]{0,31}" maxlength="32">
+      <button type="submit" class="primary">add user</button>
+      <span id="user-add-note" class="muted small"></span>
+    </form>
+    <div id="user-new" hidden>
+      <p class="muted small">the token, shown once, never stored; it is the only key. Scan the QR on that person's phone, or give them the token.</p>
+      <div id="user-qr" class="qr" aria-label="the login QR"></div>
+      <p id="user-token" class="token-line"></p>
+    </div>
+  </div>
   <div class="card adm" id="tokens-card">
     <div class="head">
       <h2>tokens</h2>
@@ -236,14 +254,6 @@
       <button type="button" class="danger" data-run="serve" data-args="--login --new">rotate admin token</button>
     </div>
     <p class="muted small">rotating logs the admin out everywhere; a user rotates their own above</p>
-  </div>
-  <div class="card adm" id="users-card">
-    <div class="head">
-      <h2>users</h2>
-      <span class="muted small">counts only -- the messages are sealed, there is no key here</span>
-    </div>
-    <table class="keys" id="users-table"></table>
-    <p class="muted small">spark user add NAME on the machine mints an account; the token and its QR show once</p>
   </div>
   <div class="card adm">
     <div class="head">
@@ -258,7 +268,7 @@
   <div class="card">
     <h2>keys</h2>
     <table class="keys">
-      <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>chat, activity, do, settings, help</td></tr>
+      <tr><td id="keys-pages-k"><kbd>1</kbd> .. <kbd>5</kbd></td><td id="keys-pages">chat, activity, do, settings, help</td></tr>
       <tr><td><kbd>/</kbd></td><td>focus the page's main input</td></tr>
       <tr><td><kbd>n</kbd></td><td>new chat</td></tr>
       <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous chat</td></tr>
@@ -271,12 +281,17 @@
   </div>
   <div class="card">
     <h2>what this is</h2>
-    <p>Your own AI, in the browser. Chat is yours alone -- your
-      messages live in a sealed store only your token opens. What this
-      page can do is what your shell can do: every button is a
-      <code>spark</code> verb run on the machine, and the page never runs a
-      command you did not click.</p>
-    <p>The palette under settings changes this browser only.</p>
+    <p data-doc="README.md">A local AI for your shell. It runs a model on your own machine by
+      default, with no account or telemetry.</p>
+    <p data-doc="README.md">Your words go to the model's server. It runs on this machine, or on
+      another machine of yours (<code>spark client URL</code>).</p>
+    <p data-doc="docs/INSTALL.md">An ordinary user's token opens only that user's chat and store. The
+      admin token can run commands here; with passwordless <code>sudo</code>, it can
+      run as root.</p>
+    <p data-doc="README.md">Anyone on your network can read plain HTTP, including tokens.</p>
+    <p>Every button on this page is a <code>spark</code> verb run on the machine, and the
+      page never runs a command you did not click. The theme at the top changes
+      this browser only.</p>
     <p>API health: <code id="help-health"></code> (no token needed; everything
       else under <code>/api/</code> takes your token as a cookie or bearer).</p>
   </div>

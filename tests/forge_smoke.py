@@ -195,7 +195,7 @@ def admin_boundary(ok):
         answers = []
         h._error = lambda code, kind, hint, extra=None: answers.append((code, kind))
         h._body = lambda: {}
-        for name in ("api_run", "api_do_propose", "api_do_run", "api_check_refresh", "api_soul_write", "api_serve"):
+        for name in ("api_run", "api_do_propose", "api_do_run", "api_check_refresh", "api_soul_write", "api_users_add", "api_serve"):
             setattr(h, name, lambda body=None, name=name: answers.append(name))
         with patch.object(fs, "log", lambda line: logged.append(line)):
             h._route(method, path)
@@ -1926,6 +1926,44 @@ def main():
             st, _, _ = req(url, "GET", "/api/users", headers=ubearer)
             ok(st == 403, "a user cannot list the users", st)
 
+            # a user minted from the page: the admin's POST /api/users, the
+            # token once with its login link and the link's QR as a matrix
+            from spark import qr as _qr
+            xs = {"X-Spark": "1"}
+            st, _, raw = req(url, "POST", "/api/users", {"name": "upage"}, headers=dict(bearer, **xs))
+            dn = json.loads(raw) if st == 200 else {}
+            ok(st == 200 and set(dn) == {"name", "token", "link", "qr"} and dn["name"] == "upage"
+               and len(dn["token"]) >= 40 and dn["link"].endswith("#t=" + dn["token"]),
+               "POST /api/users: a user minted, the token and its link once", raw[:120] if st != 200 else "")
+            nq = len(dn.get("qr") or [])
+            ok(nq >= 21 and all(len(r) == nq and set(r) <= {0, 1} for r in dn["qr"]) and dn["qr"] == _qr.encode(dn["link"]),
+               "POST /api/users: the QR is qr.encode of the login link, a square 0/1 matrix", nq)
+            st, _, raw = req(url, "GET", "/api/me", headers={"Authorization": "Bearer " + dn.get("token", "x")})
+            ok(st == 200 and json.loads(raw).get("user") == "upage", "the minted token opens /api/me as that user", raw[:100])
+            st, _, _ = req(url, "POST", "/api/users", {"name": "upage"}, headers=dict(bearer, **xs))
+            ok(st == 409, "POST /api/users: a name in use is 409", st)
+            st, _, _ = req(url, "POST", "/api/users", {"name": "Bad Name"}, headers=dict(bearer, **xs))
+            ok(st == 400, "POST /api/users: a name the verb refuses is 400", st)
+            st, _, _ = req(url, "POST", "/api/users", {"name": "uother"}, headers=dict(ubearer, **xs))
+            ok(st == 403, "a user cannot mint a user", st)
+            st, _, raw = req(url, "GET", "/api/users", headers=bearer)
+            ok(st == 200 and any(u["name"] == "upage" for u in json.loads(raw)["users"]), "the minted user is listed", raw[:120])
+            # the look's files: the tokens, the theme script and a font
+            st, hd, raw = req(url, "GET", "/static/tokens.css")
+            ok(st == 200 and b"--page:" in raw and b"@font-face" in raw, "tokens.css is served", st)
+            st, hd, raw = req(url, "GET", "/static/theme.js")
+            ok(st == 200 and b"spark-theme" in raw, "theme.js is served", st)
+            st, hd, raw = req(url, "GET", "/static/fonts/monaspace-neon-400.woff2")
+            ok(st == 200 and hd.get("Content-Type") == "font/woff2" and raw[:4] == b"wOF2", "a font is served as font/woff2", st)
+            st, _, _ = req(url, "GET", "/static/fonts/monaspace-neon-400.woff2", headers={"If-None-Match": hd.get("ETag", "")})
+            ok(st == 304, "a font comes back 304 on its ETag", st)
+            st, _, _ = req(url, "GET", "/static/fonts/../spark.js")
+            ok(st in (400, 404), "a path outside the static map is refused", st)
+            st, _, raw = req(url, "GET", "/api/me", headers=bearer)
+            dm = json.loads(raw)
+            ok(st == 200 and isinstance(dm.get("faces"), dict) and dm["faces"].get("idle") and isinstance(dm.get("blink"), int),
+               "/api/me carries the machine's faces and the blink rate", raw[:160])
+
             # kept threads: a program keeps a thread with no model turn, in
             # its OWN store (kept/ beside threads/); SPARK_HISTORY and a
             # clear never reach it, and an append says whether it was kept.
@@ -2204,7 +2242,7 @@ def main():
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
             ok(rc == 0 and ("page     " + url + "/login") in out and "stub-7b-q4" in out
-               and "admin token" in out and "4 users" in out,   # alice, bob, the box account, qrguy
+               and "admin token" in out and "5 users" in out,   # alice, bob, the box account, qrguy, upage
                "spark forge (bare, the serve view): the page, the model, the admin token, the user count", out)
             rc, out2, _ = spark("serve")
             ok(rc == 0 and out2 == out, "bare spark serve is the same view", out2)

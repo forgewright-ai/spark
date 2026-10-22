@@ -182,6 +182,7 @@ ascii() {
              docs/INSTALL.md docs/CHEATSHEET.txt docs/CHANGELOG.md docs/ROADMAP.md docs/CONTRIBUTING.md \
              docs/*.md \
              lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
+             lib/spark/forge/tokens.css lib/spark/forge/theme.js \
              lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg; do
         case $f in 'docs/*.md') continue ;; esac
         [ -f "$f" ] || { bad "$f is missing (the ASCII gate names it)"; continue; }

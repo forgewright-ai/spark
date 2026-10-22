@@ -11063,7 +11063,7 @@ def main():
         # a model chosen: the first question goes to the brain (the stub) and
         # is shown as the widget shows it, with the speed the server reported
         rc, out, _ = spark("setup", "--yes", "--model", "qwen3-5-2b", extra=off)
-        t.ok(rc == 0 and "? how big is this dir\n* Files over 1G changed this week.\n  find . -type f -size +1G -mtime -7\n" in out,
+        t.ok(rc == 0 and "? how many files are here\n* Files over 1G changed this week.\n  find . -type f -size +1G -mtime -7\n" in out,
              "setup asks the first question and shows the hint above the command", out)
         t.ok("12.3 tok/s on your first question\n" in out,
              "setup prints the measured tok/s of that question", out)
@@ -11319,8 +11319,9 @@ def main():
              "setup at a terminal lists the keys and asks; a no writes KEYS=off in keys.env, one line", out + senv + skeys)
         # the closing block is the same after a no: the rc line gives the
         # next shell its PATH and the ? line whatever the keys are
-        t.ok("* open a new shell (exec $SHELL), then try:\n  spark chat               talk with the model\n"
-             "  ? how big is this dir    get a command for it\n  cmd 2>&1 | explain       why it failed, and the fix\n" in out
+        t.ok("* open a new shell (exec $SHELL), then try:\n  spark check                 what needs attention\n"
+             "  spark chat                  ask a harmless question, such as What is 2 + 2?\n"
+             "  ? how many files are here   a command lands in your line; Enter runs it\n" in out
              and ".local/bin/spark" not in out and "* try:" not in out,
              "setup, the keys declined: the closing block is the one with the keys on, the ? row included", out[-500:])
         # a no, then setup interrupted at the model question: nothing is
@@ -12297,16 +12298,14 @@ site.cmd_headless([])
             t.ok(have == want and len(want) > 1, "%s completes every option of spark %s (its usage)" % (cf, verb),
                  "have %s, want %s" % (sorted(have), sorted(want)))
 
-    # the page's own palettes: theme.builtin is the page's alone (the
-    # viewer's picker) -- every row is a name and 20 #rrggbb values, bg fg
-    # accent muted then ansi 0..15, and nothing asks the machine for one
+    # v1.95: the page's look is tokens.css's night and day, nothing of the
+    # page's own -- no palette table in spark.js, no picker, no /api/theme
+    # call; the switch keeps one word in this browser (spark-theme), and
+    # nothing asks the machine for a palette
     js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
-    block = re.search(r"builtin: \{(.*?)\n    \}", js, re.S).group(1)
-    rows = re.findall(r'"([a-z0-9-]+)":\s*\[([^\]]*)\]', block)
-    bad = [n for n, vals in rows if not re.fullmatch(r'\s*"#[0-9a-fA-F]{6}"(?:,\s*"#[0-9a-fA-F]{6}"){19}\s*', vals)]
-    t.ok(len(rows) == 9 and not bad and len({n for n, _ in rows}) == 9 and "/api/theme" not in js,
-         "spark.js theme.builtin: the page's own nine, 20 colours each; no /api/theme call",
-         "rows %d, malformed: %s" % (len(rows), bad))
+    t.ok("builtin:" not in js and "spark.palette" not in js and "/api/theme" not in js
+         and '"spark-theme"' in js and "data-theme" in js,
+         "spark.js: no palette of the page's own; the night/day switch alone, kept as spark-theme")
 
     # the guard (v1.48): spark's core is decoupled from any shell layer.
     # Nothing a user installs or runs names one -- not a message, a check

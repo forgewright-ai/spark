@@ -40,7 +40,7 @@ USAGE = SIGN + """
 CORE_ROWS = ["site", r"spark\.env", "name", "hostname", "model", "ember", "packages", "engine", "token", "dir",
              "configs", "rc", "spark", "explain", "PATH", "hooks", "linger", "render", "systemd", "runit", "supervisor", "launchd",
              r"spark[-.]serve", r"spark[-.]forge", r"spark[-.]check"]
-QUESTION = "how big is this dir"
+QUESTION = "how many files are here"    # the one first question: the site, the README and the page say the same
 VALUE = re.compile(r"^[^;`$()|&<>]*$")     # what a KEY=value line may hold (contract 3)
 
 
@@ -251,7 +251,7 @@ def _serve(cfg):
 
 
 def _first_question(cfg):
-    """`? how big is this dir` through `spark line`, shown as the widget
+    """`? how many files are here` through `spark line`, shown as the widget
     would show it; then the speed the server reported for it."""
     say()
     say("? " + QUESTION)
@@ -319,10 +319,11 @@ def _account(user):
 
 def _closing():
     say()
+    # the README's first hour, its first three steps, word for word
     say("* open a new shell (exec $SHELL), then try:")
-    say("  spark chat               talk with the model")
-    say("  ? how big is this dir    get a command for it")
-    say("  cmd 2>&1 | explain       why it failed, and the fix")
+    say("  spark check                 what needs attention")
+    say("  spark chat                  ask a harmless question, such as What is 2 + 2?")
+    say("  ? how many files are here   a command lands in your line; Enter runs it")
     door()
 
 

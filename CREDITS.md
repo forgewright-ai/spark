@@ -1,12 +1,13 @@
 # spark -- credits and licenses
 
-spark vendors none of the projects below. `bootstrap.sh` downloads each
-one, pinned by version and sha256, from its own upstream to your
-machine at install time. `spark voice` downloads the voice the same
-way, only when you turn it on. apt, pacman, xbps, dnf and zypper
-install the rest from their own repositories. spark's own code is MIT
-(`LICENSE`). The banner in `home/.config/spark/banner` is spark's own
-artwork.
+spark vendors none of the projects below but the three fonts, which
+sit in `lib/spark/forge/fonts/` for the page. `bootstrap.sh` downloads
+each of the others, pinned by version and sha256, from its own
+upstream to your machine at install time. `spark voice` downloads the
+voice the same way, only when you turn it on. apt, pacman, xbps, dnf
+and zypper install the rest from their own repositories. spark's own
+code is MIT (`LICENSE`). The banner in `home/.config/spark/banner` is
+spark's own artwork.
 
 ## The engine
 
@@ -119,6 +120,20 @@ these docs. Every
 such commit carries a `Co-Authored-By: Claude` trailer, so `git log`
 tells the same story as this paragraph. The mistakes are the
 maintainer's.
+
+## The fonts
+
+The page in the browser, and spark.forgewright.ai with it, set their
+text in three fonts. Each is under the SIL Open Font License 1.1: free
+to use and to ship with the software, the license kept alongside, and
+never sold on its own. The six woff2 files in `lib/spark/forge/fonts/`
+are the Latin subsets as Fontsource packages them.
+
+- Atkinson Hyperlegible Next -- https://www.brailleinstitute.org/freefont
+  -- SIL OFL 1.1 (c) Braille Institute of America. The prose.
+- Monaspace Neon and Monaspace Xenon --
+  https://github.com/githubnext/monaspace -- SIL OFL 1.1 (c) GitHub.
+  The code and the headings.
 
 ## The site's glyphs
 

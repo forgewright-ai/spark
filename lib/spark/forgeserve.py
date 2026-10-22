@@ -74,7 +74,14 @@ STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; char
           "spark.js": "text/javascript; charset=utf-8",
           "manifest.webmanifest": "application/manifest+json; charset=utf-8",
           "favicon.svg": "image/svg+xml; charset=utf-8",
-          "mark.svg": "image/svg+xml; charset=utf-8"}
+          "mark.svg": "image/svg+xml; charset=utf-8",
+          # the look spark.forgewright.ai shares: the tokens, the theme script
+          # before first paint, and the three fonts (SIL OFL 1.1, CREDITS.md)
+          "tokens.css": "text/css; charset=utf-8", "theme.js": "text/javascript; charset=utf-8",
+          "fonts/atkinson-hyperlegible-next-latin.woff2": "font/woff2",
+          "fonts/atkinson-hyperlegible-next-latin-ext.woff2": "font/woff2",
+          "fonts/monaspace-neon-400.woff2": "font/woff2", "fonts/monaspace-neon-700.woff2": "font/woff2",
+          "fonts/monaspace-xenon-400.woff2": "font/woff2", "fonts/monaspace-xenon-700.woff2": "font/woff2"}
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forge")
 UPSTREAM_TTL = 60               # a resolved upstream is trusted this long
 UPSTREAM_MISS_TTL = 5           # a failed resolution is not retried sooner
@@ -107,6 +114,7 @@ ROUTES = {
     ("GET", "/"): "none",
     ("GET", "/login"): "none",
     ("GET", "/static/*"): "none",
+    ("GET", "/static/fonts/*"): "none",
     ("GET", "/manifest.webmanifest"): "none",
     ("GET", "/apple-touch-icon.png"): "none",
     ("GET", "/api/health"): "none",
@@ -137,6 +145,7 @@ ROUTES = {
     ("GET", "/api/config"): "admin",
     ("GET", "/api/log"): "admin",
     ("GET", "/api/users"): "admin",
+    ("POST", "/api/users"): "admin",
     ("POST", "/api/run"): "admin",
     ("POST", "/api/do/propose"): "admin",
     ("POST", "/api/do/run"): "admin",
@@ -151,7 +160,7 @@ METHOD = re.compile(r"^[A-Z]{1,16}$")       # a method the log may name as sent
 # valid session opens them from anywhere. Contract 9 names the five and
 # tests/policy_test.py holds it to this tuple.
 ACTS = (("POST", "/api/run"), ("POST", "/api/do/propose"), ("POST", "/api/do/run"),
-        ("POST", "/api/check/refresh"), ("POST", "/api/soul"))
+        ("POST", "/api/check/refresh"), ("POST", "/api/soul"), ("POST", "/api/users"))
 # where a peer is local when this machine's own prefixes cannot be read
 # (own_networks found no tool): one named line each, so it can be argued
 # with. The IPv4 blocks are written as their first octets, never as a
@@ -1114,7 +1123,8 @@ class Handler(BaseHTTPRequestHandler):
               ("POST", "/api/memory"): self.api_memory_add, ("POST", "/api/threads"): self.api_threads_create,
               ("POST", "/api/do/propose"): self.api_do_propose,
               ("POST", "/api/do/run"): self.api_do_run, ("POST", "/api/run"): self.api_run,
-              ("POST", "/api/user/token"): self.api_user_token}.get((method, path))
+              ("POST", "/api/user/token"): self.api_user_token,
+              ("POST", "/api/users"): self.api_users_add}.get((method, path))
         if not fn:
             return self._error(404, "missing", "no such route")
         body = self._body()
@@ -1305,8 +1315,10 @@ class Handler(BaseHTTPRequestHandler):
         """Who the presented token makes this client (class U): the page
         renders the admin or the user console from this, and greets the
         user by name."""
+        from . import look
         self._json(200, {"role": self.role, "user": self.user,
-                         "name": self.server.cfg.name, "version": VERSION})
+                         "name": self.server.cfg.name, "version": VERSION,
+                         "faces": look.faces(), "blink": look.blink()})
 
     def api_check(self):
         """check.json plus its age: whole to the admin; to a named user the
@@ -1592,6 +1604,25 @@ class Handler(BaseHTTPRequestHandler):
             out.append({"name": n, "threads": count, "kept": kept,
                         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else ""})
         self._json(200, {"users": out})
+
+    def api_users_add(self, body):
+        """POST /api/users {name}: mint a user from the page, as `spark user
+        add NAME` does at the terminal. The token comes back once, with
+        its login link and the link's QR as a matrix the page draws, and
+        is never stored: the terminal's custody rule, on the admin's own
+        screen. A name the verb refuses is 400, a name in use 409."""
+        from . import users
+        name = body.get("name")
+        if not isinstance(name, str) or not users.valid_name(name):
+            return self._error(400, "bad", "a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
+        if users.exists(name):
+            return self._error(409, "exists", "%s already exists" % name)
+        token = users.add(name)
+        link = page_url(self.server.cfg) + "#t=" + token
+        matrix = qr.encode(link) if "<" not in link else None
+        log("%s user add %s" % (self._ip(), name))
+        self._audit("user add", name=name)
+        return self._json(200, {"name": name, "token": token, "link": link, "qr": matrix or []})
 
     def api_user_token(self, body):
         """POST /api/user/token: rotate the requesting user's own token.
