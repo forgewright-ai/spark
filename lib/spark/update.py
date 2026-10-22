@@ -253,11 +253,7 @@ def cmd_update(args):
             from . import config
             rc = _converge()
             if rc == 0:
-                # the tree moved under the running units: without a
-                # restart the API keeps serving the OLD code with every
-                # row green
                 cfg = config.load()
-                _restart_units(cfg)
                 _voice_pins(cfg)
                 # the look file follows the new tree (an awakened machine only)
                 try:
@@ -267,6 +263,13 @@ def cmd_update(args):
                     pass
                 _notice()
                 _door()
+                # the tree moved under the running units: without a
+                # restart the API keeps serving the OLD code with every
+                # row green. Last, because the page may be this run's own
+                # parent (update under machine): systemd stops the unit's
+                # whole cgroup, this process in it, and the restart it
+                # was asked for happens all the same
+                _restart_units(cfg)
             return rc
         say("%s update -- no word %s; spark update -h lists them" % (MARK, a))
         return 2
@@ -375,14 +378,13 @@ def cmd_update(args):
         # version it runs, and a stale one is restarted like a move
         from . import config, engine
         _voice_pins(config.load())
+        _notice()
+        _door()
         if _page_is_stale():
             cfg = config.load()
-            _restart_units(cfg)
             if engine.service_state(cfg, "forge") != "loaded":
                 # a page started by hand is nobody's to restart here
                 say("%s update -- the page runs an older spark, started by hand: "
                     "spark serve off; spark serve on" % MARK)
-
-        _notice()
-        _door()
+            _restart_units(cfg)         # last: the page may be this run's parent
     return rc

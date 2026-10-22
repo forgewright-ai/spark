@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.97
+
+The page catches up with core (#71). Five things the terminal could do
+reach the page, and two cards nobody read leave it.
+
+- https from the page: `https` under machine runs `spark serve https
+  own`. In own mode the root's link and its QR show under machine and
+  beside a new user's login QR, so a phone installs the root first
+- update from the page: `update` under machine runs `spark update`.
+  The header says `newest vX.Y` when a newer release is out: `GET
+  /api/me` carries `newest` for the admin
+- What left this machine: `GET /api/stats` carries `sends`, the rows
+  of `spark stats --sends` for the window, and a card shows them
+  under activity, and under a user's settings
+- A user's rotated token comes back with its login link and QR (`POST
+  /api/user/token`), drawn as the add-user card draws them
+- Remove a user from the page: `DELETE /api/users/NAME` (admin, acts,
+  audited), a remove button on each row, armed by a second click. The
+  box account is refused there
+- A verb that restarts the page (`update`, `serve https own`) restarts
+  it through its unit in one command, last. So the restart happens
+  where the manager kills the verb with the page: systemd stops the
+  unit's whole cgroup
+- Gone: the status line card and `GET /api/bar`, the serve card's log
+  tail, `GET /api/log` and the `log` event. Nothing read them
+- The page rule in CLAUDE.md loses "no new page features": a page
+  change is the client side of a contract change
+
 ## v1.96
 
 - Monaspace Neon and Xenon are the v1.400 release's own web fonts,

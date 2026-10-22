@@ -113,7 +113,6 @@ main { grid-area: main; min-width: 0; max-width: 68rem; width: 100%; margin: 0 a
 .actions .lbl { color: var(--soft); margin-left: 0.6rem; }
 .actions .lbl:first-child { margin-left: 0; }
 .role { border: 1px solid var(--line); border-radius: 999px; padding: 0.05rem 0.6em; font-size: 0.85em; color: var(--soft); font-family: var(--mono); }
-.bar { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--soft); margin: 0; }
 
 /* controls: inputs on the screen glass, buttons as pills, one yellow primary */
 input, select, textarea {
@@ -223,7 +222,8 @@ pre.fence { position: relative; overflow-x: auto; margin: 0.4rem 0; }
 .list button.pick { flex: 1; text-align: left; border: 0; padding: 0.3rem 0.4rem; background: none; border-radius: var(--radius-s); color: var(--ink); font-size: 0.95rem; }
 .list button.pick[aria-current=true] { color: var(--spark-text); background: var(--screen); font-weight: 600; }
 .list .meta { color: var(--soft); font-size: 0.8em; white-space: nowrap; font-family: var(--mono); }
-.list .x { border: 0; background: none; color: var(--err); padding: 0 0.3rem; }
+.list .x, .keys .x { border: 0; background: none; color: var(--err); padding: 0 0.3rem; }
+.keys .x.confirm { color: var(--t15); background: var(--err); border-radius: 999px; padding: 0.1rem 0.6rem; }
 #thread-list li { display: block; padding: 0.15rem 0.1rem; }
 #thread-list .pick { display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #thread-list .meta { display: block; padding: 0 0.4rem 0.2rem; }
@@ -319,7 +319,7 @@ pre.block { margin: 0.4rem 0 0; overflow-x: auto; }
   input, select, textarea { font-size: 16px; }
   button, .tabs a { min-height: 44px; }
   .tabs a { display: inline-flex; align-items: center; }
-  .list .x, .fence .copy { min-height: 44px; min-width: 44px; }
+  .list .x, .keys .x, .fence .copy { min-height: 44px; min-width: 44px; }
   .fence .copy { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {

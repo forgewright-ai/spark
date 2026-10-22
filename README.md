@@ -228,6 +228,10 @@ it on a new install. What each command sends:
   like a secret is not sent.
 - `awaken`: the temperament you chose, once.
 
+`spark stats --sends` counts what left this machine, by destination
+and day. The page shows the same under activity, and under a user's
+settings.
+
 `read`, `do`, `recall` and `edit ? --source` replace secrets with
 `[held]`. They
 catch a private key, an AWS access key, a GitHub token, a Slack token

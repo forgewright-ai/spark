@@ -40,7 +40,7 @@ import urllib.request
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (BAR_CACHE, CHECK_JSON, FORGE_LOCK, FORGE_LOG, FORGE_PID,
+from . import (CHECK_JSON, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                bind_check, config, confirm, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
                wait_ready)
@@ -88,7 +88,6 @@ UPSTREAM_MISS_TTL = 5           # a failed resolution is not retried sooner
 MODELS_TTL = 5                  # /api/health's models field is re-read this often
 EVENTS_POLL = 2
 EVENTS_KEEPALIVE = 15
-TMUX_SEQ = re.compile(r"#\[[^\]]*\]")
 QUEUE_WAIT = 0.2                # a chat that waits longer than this for the model says `queued`
 RUN_CAP = 1800                  # seconds a verb may run through /api/run
 LEASH_GRACE = 0.5               # seconds a verb's pipe is still read once it ended or its cap killed it
@@ -99,10 +98,13 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # button only: the page never switches the server (off, boot, share, the
 # token on show).
 RUN_VERBS = {"model": None, "ember": None, "bench": None, "on": None, "off": None,
-             "serve": lambda a: a in ([], ["--login", "--new"]),
-             "stop": None, "remember": None, "forget": None,
+             "serve": lambda a: a in ([], ["--login", "--new"], ["https", "own"]),
+             "stop": None, "remember": None, "forget": None, "update": None,
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
+# the verbs that end with the page's own restart: their stream stops
+# with the server, and the page says so (update, serve https own)
+RESTARTS = {"update": lambda a: True, "serve": lambda a: a[:1] == ["https"]}
 # Every route the server answers, and who may: none (open -- /api/login
 # still goes through the write gate, /v1/chat/completions takes a bearer
 # only), user (a named user or the admin), admin (the forge-token). A `*`
@@ -122,7 +124,6 @@ ROUTES = {
     ("GET", "/api/me"): "user",
     ("GET", "/api/check"): "user",
     ("GET", "/api/stats"): "user",
-    ("GET", "/api/bar"): "user",
     ("GET", "/api/events"): "user",
     ("GET", "/api/soul"): "user",
     ("GET", "/api/memory"): "user",
@@ -143,9 +144,9 @@ ROUTES = {
     ("GET", "/api/gpu"): "admin",
     ("GET", "/api/bench"): "admin",
     ("GET", "/api/config"): "admin",
-    ("GET", "/api/log"): "admin",
     ("GET", "/api/users"): "admin",
     ("POST", "/api/users"): "admin",
+    ("DELETE", "/api/users/*"): "admin",
     ("POST", "/api/run"): "admin",
     ("POST", "/api/do/propose"): "admin",
     ("POST", "/api/do/run"): "admin",
@@ -157,10 +158,12 @@ METHOD = re.compile(r"^[A-Z]{1,16}$")       # a method the log may name as sent
 # soul written, the check refreshed. Over plain http they answer this
 # machine and a peer on one of its own networks alone (peer_is_local);
 # a routed peer is 403 `boundary` before any body is read. Over TLS a
-# valid session opens them from anywhere. Contract 9 names the five and
-# tests/policy_test.py holds it to this tuple.
+# valid session opens them from anywhere. Contract 9 names the seven and
+# tests/policy_test.py holds it to this tuple: every admin POST and
+# DELETE row, and acts() reads a `*` as route_role does.
 ACTS = (("POST", "/api/run"), ("POST", "/api/do/propose"), ("POST", "/api/do/run"),
-        ("POST", "/api/check/refresh"), ("POST", "/api/soul"), ("POST", "/api/users"))
+        ("POST", "/api/check/refresh"), ("POST", "/api/soul"), ("POST", "/api/users"),
+        ("DELETE", "/api/users/*"))
 # where a peer is local when this machine's own prefixes cannot be read
 # (own_networks found no tool): one named line each, so it can be argued
 # with. The IPv4 blocks are written as their first octets, never as a
@@ -226,19 +229,33 @@ def peer_is_local(ip, nets):
     return any(a in n for n in (nets or PRIVATE))
 
 
+def _matches(pat, path):
+    """Whether one path is one pattern's: a `*` stands for one path
+    segment, and nothing else is special."""
+    if pat == path:
+        return True
+    if "*" not in pat:
+        return False
+    ps, segs = pat.split("/"), path.split("/")
+    return len(ps) == len(segs) and all(a == "*" or a == b for a, b in zip(ps, segs))
+
+
 def route_role(method, path):
     """ROUTES' role for one request, or None: no such route. A `*` in a
     pattern stands for one path segment."""
     role = ROUTES.get((method, path))
     if role is not None:
         return role
-    segs = path.split("/")
     for (m, pat), role in ROUTES.items():
-        if m == method and "*" in pat:
-            ps = pat.split("/")
-            if len(ps) == len(segs) and all(a == "*" or a == b for a, b in zip(ps, segs)):
-                return role
+        if m == method and "*" in pat and _matches(pat, path):
+            return role
     return None
+
+
+def acts(method, path):
+    """Whether one request is an acting row (ACTS), read as route_role
+    reads the table."""
+    return any(m == method and _matches(pat, path) for m, pat in ACTS)
 
 USAGE = """%s forge -- run the page's server
 
@@ -1076,7 +1093,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(401, "auth", "log in with your token (spark user add NAME on %s)" % srv.cfg.name)
         if role == "admin" and self.role != "admin":
             return self._error(403, "role", "this needs the admin token")
-        if (method, path) in ACTS and srv.scheme != "https" and not srv.local_peer(self._ip()):
+        if acts(method, path) and srv.scheme != "https" and not srv.local_peer(self._ip()):
             # the boundary: over plain http an action answers this
             # machine's own networks alone, and the body is never read
             log("%s refused: %s %s over plain http from beyond this machine's networks" % (self._ip(), method, path))
@@ -1085,9 +1102,9 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET":
             fn = {"/v1/models": self.v1_models, "/api/me": self.api_me, "/api/check": self.api_check,
                   "/api/stats": self.api_stats,
-                  "/api/bar": self.api_bar, "/api/serve": self.api_serve, "/api/gpu": self.api_gpu,
+                  "/api/serve": self.api_serve, "/api/gpu": self.api_gpu,
                   "/api/bench": self.api_bench, "/api/config": self.api_config,
-                  "/api/log": self.api_log, "/api/events": self.api_events, "/api/threads": self.api_threads,
+                  "/api/events": self.api_events, "/api/threads": self.api_threads,
                   "/api/soul": self.api_soul, "/api/memory": self.api_memory,
                   "/api/users": self.api_users, "/api/models": self.api_models}.get(path)
             if fn:
@@ -1112,6 +1129,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.api_memory_delete(path[12:])
             if path == "/api/threads":
                 return self.api_threads_clear()
+            if path.startswith("/api/users/"):
+                return self.api_users_remove(path[11:])
             return self._error(404, "missing", "no such route")
         if method == "POST" and path.startswith("/api/threads/") and path.endswith("/append"):
             body = self._body()
@@ -1316,9 +1335,14 @@ class Handler(BaseHTTPRequestHandler):
         renders the admin or the user console from this, and greets the
         user by name."""
         from . import look
-        self._json(200, {"role": self.role, "user": self.user,
-                         "name": self.server.cfg.name, "version": VERSION,
-                         "faces": look.faces(), "blink": look.blink()})
+        d = {"role": self.role, "user": self.user,
+             "name": self.server.cfg.name, "version": VERSION,
+             "faces": look.faces(), "blink": look.blink()}
+        if self.role == "admin":
+            # the newest release tag the checkout knows (the check's git
+            # row fetches): the page's header says it when it is newer
+            d["newest"] = _version.newest()
+        self._json(200, d)
 
     def api_check(self):
         """check.json plus its age: whole to the admin; to a named user the
@@ -1352,22 +1376,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, "bad", "days must be 1, 7 or 3650")
         rows = stats.turns(days)
         d = stats.summarise(rows)
-        d.update({"days": days, "baseline": bench.baseline(cfg) or None, "running": stats.running_settings(cfg)})
+        d.update({"days": days, "baseline": bench.baseline(cfg) or None, "running": stats.running_settings(cfg),
+                  "sends": [{"day": day, "dest": dest, "bytes": b, "turns": c} for day, dest, b, c in stats.sends(rows)]})
         return self._json(200, d)
-
-    def api_bar(self):
-        from . import bar
-        cfg = self.server.cfg
-        d = {}
-        try:
-            with open(BAR_CACHE, encoding="utf-8") as f:
-                d = json.load(f)
-        except (OSError, ValueError):
-            pass
-        line, t = d.get("line", ""), d.get("t", 0)
-        if not line or time.time() - t > 2 * bar.INTERVAL:
-            line, t = bar.line(cfg), time.time()
-        self._json(200, {"t": t, "line": TMUX_SEQ.sub("", line).strip()})
 
     def api_serve(self):
         cfg = self.server.cfg
@@ -1380,8 +1391,7 @@ class Handler(BaseHTTPRequestHandler):
             except wire.BrainError:
                 model = "?"
         self._json(200, {"url": url, "health": health, "model": model, "service": engine.service_state(cfg),
-                         "pids": engine.server_pids(cfg.port), "mem_free_gb": round(engine.mem_available_gb(), 1),
-                         "log": engine.log_tail(40).splitlines()})
+                         "pids": engine.server_pids(cfg.port), "mem_free_gb": round(engine.mem_available_gb(), 1)})
 
     def api_gpu(self):
         self._json(200, engine.gpu_info() or {})
@@ -1415,20 +1425,14 @@ class Handler(BaseHTTPRequestHandler):
                          "effective": clean({k: cfg.get(k, "") for k in config.KEYS}),
                          "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st)),
                          "off": os.path.exists(OFF_FLAG), "service": engine.service_state(cfg),
-                         "forge": {"url": self.server.url, "service": engine.forge_service_state(cfg), "mode": cfg.forge}})
-
-    def api_log(self):
-        try:
-            n = max(1, min(1000, int((self.query.get("n") or ["40"])[0])))
-        except ValueError:
-            n = 40
-        self._json(200, {"lines": log_tail(n)})
+                         "forge": {"url": self.server.url, "service": engine.forge_service_state(cfg), "mode": cfg.forge},
+                         "https": https_facts(cfg)})
 
     def api_events(self):
-        """SSE until the client goes: check / bar / serve on change -- and
-        the log line too for an admin, never for a user -- plus a comment
-        every 15 s so proxies and phones keep the line open. One requester
-        holds EVENTS_PER_USER streams at most: one more is 429 busy."""
+        """SSE until the client goes: check and serve on change, plus a
+        comment every 15 s so proxies and phones keep the line open. One
+        requester holds EVENTS_PER_USER streams at most: one more is 429
+        busy."""
         who = (self.role, self.user)
         if not self.server.stream_open(who):
             return self._error(429, "busy", "%d live streams already open for you; close a tab" % EVENTS_PER_USER)
@@ -1439,7 +1443,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _events(self):
         self._sse()
-        watched = (CHECK_JSON, BAR_CACHE, SERVE_URL_FILE) + ((FORGE_LOG,) if self.role == "admin" else ())
+        watched = (CHECK_JSON, SERVE_URL_FILE)
 
         def stamps():
             out = []
@@ -1460,22 +1464,12 @@ class Handler(BaseHTTPRequestHandler):
                     emit("check", {"counts": d.get("counts", {}), "ts": d.get("ts", 0)})
                 except (OSError, ValueError):
                     emit("check", {"counts": {}, "ts": 0})
-            elif i == 1:
-                try:
-                    with open(BAR_CACHE, encoding="utf-8") as f:
-                        d = json.load(f)
-                    emit("bar", {"line": TMUX_SEQ.sub("", d.get("line", "")).strip()})
-                except (OSError, ValueError):
-                    pass
-            elif i == 2:
+            else:
                 url = wire.serve_url()
                 emit("serve", {"url": url, "health": wire.health(url) if url else "down"})
-            else:
-                tail = log_tail(1)
-                emit("log", {"line": tail[0] if tail else ""})
 
         last = stamps()
-        for i in range(3):
+        for i in range(2):
             snapshot(i)
         alive = time.time()
         while True:
@@ -1599,10 +1593,12 @@ class Handler(BaseHTTPRequestHandler):
         body, or a token. The whole of admin visibility into user data."""
         from . import users
         out = []
+        mine = users.account()[0]
         for n in users.list_users():
             count, newest, kept = users._thread_stats(n)
             out.append({"name": n, "threads": count, "kept": kept,
-                        "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else ""})
+                        "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else "",
+                        "account": n == mine})
         self._json(200, {"users": out})
 
     def api_users_add(self, body):
@@ -1624,18 +1620,40 @@ class Handler(BaseHTTPRequestHandler):
         self._audit("user add", name=name)
         return self._json(200, {"name": name, "token": token, "link": link, "qr": matrix or []})
 
+    def api_users_remove(self, name):
+        """DELETE /api/users/NAME: the user's store, every kept thread
+        with it, gone, as `spark user remove NAME` does at the terminal;
+        their sessions and cached keys die with the verifier. The box
+        account is the admin's own store and is removed at the terminal
+        alone (409 self). A name the verb refuses is 400, an unknown one
+        404."""
+        from . import users
+        if not users.valid_name(name):
+            return self._error(400, "bad", "a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
+        if not users.exists(name):
+            return self._error(404, "missing", "no user named %s" % name)
+        if users.account()[0] == name:
+            return self._error(409, "self", "the box account is removed at the terminal: spark user remove %s" % name)
+        users.remove(name)
+        log("%s user remove %s" % (self._ip(), name))
+        self._audit("user remove", name=name)
+        return self._json(200, {"name": name, "removed": True})
+
     def api_user_token(self, body):
         """POST /api/user/token: rotate the requesting user's own token.
         The session already holds their key; the new token is returned
-        once and never stored."""
+        once, with its login link and the link's QR as the add-user
+        answer carries them (a lost phone), and never stored."""
         from . import users
         if self.role != "user":
             return self._error(403, "role", "the admin rotates with spark serve --login --new")
         new = users.rewrap(self.user, self.dk)
         sid = self.server.new_session("user", new, self.user, self.dk)
+        link = page_url(self.server.cfg) + "#t=" + new
+        matrix = qr.encode(link) if "<" not in link else None
         log("%s user token rotated %s" % (self._ip(), self.user))
         self._audit("user token", name=self.user)
-        return self._json(200, {"token": new}, {"Set-Cookie": set_cookie(sid)})
+        return self._json(200, {"token": new, "link": link, "qr": matrix or []}, {"Set-Cookie": set_cookie(sid)})
 
     def _thread_of(self, body):
         """The thread a body names, checked against the requester's own
@@ -2084,6 +2102,20 @@ def root_url(cfg):
     plus one."""
     parts = urllib.parse.urlsplit(link_url(cfg))
     return "http://%s:%d" % (parts.hostname, (parts.port or 443) + tls.TRUST_PORT_OFFSET)
+
+
+def https_facts(cfg):
+    """What the page says of its own https under machine: the mode (off,
+    own, pair), the page's link and, in own mode, the root's link for
+    the phones and that link's QR as a matrix (GET /api/config)."""
+    own = cfg.forge_scheme == "https" and tls.is_own(cfg.forge_cert)
+    d = {"mode": "off" if cfg.forge_scheme != "https" else ("own" if own else "pair"),
+         "link": link_url(cfg) + "/login"}
+    if own:
+        ca = root_url(cfg) + "/ca"
+        d["ca"] = ca
+        d["ca_qr"] = (qr.encode(ca) if "<" not in ca else None) or []
+    return d
 
 
 def _short(path):
@@ -2586,11 +2618,17 @@ def _https_show(cfg):
 
 
 def _restart_page():
-    """The page's server again with the keys as they are now: through
-    its unit when one is loaded, by hand otherwise; nothing when it is
-    not running."""
+    """The page's server again with the keys as they are now: one
+    restart through its unit when one is loaded, stop and start by hand
+    otherwise; nothing when it is not running. One command, because the
+    verb may be the page's own child (`https` under machine runs it):
+    systemd stops a unit's whole cgroup, the verb's process in it, and
+    a restart it was asked for happens all the same -- a stop followed
+    by a start would end at the stop."""
     cfg = config.load()
-    if not (_pid() or engine.forge_service_state(cfg) == "loaded"):
+    if engine.forge_service_state(cfg) == "loaded":
+        return 0 if engine.kickstart(cfg, "forge", restart=True) else 1
+    if not _pid():
         return 0
     rc = cmd_stop(["--force"])
     return rc or cmd_start([])

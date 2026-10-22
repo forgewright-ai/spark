@@ -125,15 +125,17 @@
     </div>
     <div id="stats-tiles" class="tiles"></div>
   </div>
-  <div class="card adm" id="bar-card">
-    <h2>status line</h2>
-    <p id="bar" class="bar mono" title="the status line, live"></p>
+  <div class="card" id="sends-card">
+    <div class="head">
+      <h2>what left this machine</h2>
+      <span class="muted small">what spark sent over the network: bytes by destination and day</span>
+    </div>
+    <div id="sends-table"></div>
   </div>
   <div class="two adm">
     <div class="card">
       <h2>serve</h2>
       <dl id="serve-facts" class="facts"></dl>
-      <pre id="serve-log" class="log" tabindex="0" aria-label="server log tail"></pre>
     </div>
     <div class="card" id="gpu-card" hidden>
       <h2>gpu</h2>
@@ -182,6 +184,10 @@
       <span id="account-note" class="muted small"></span>
     </div>
     <p id="account-status" class="muted small mono"></p>
+    <div id="account-new" hidden>
+      <div id="account-qr" class="qr" aria-label="the login QR"></div>
+      <p id="account-token" class="token-line"></p>
+    </div>
     <p class="muted small">your token is the only key to your chats; rotating logs your other devices out</p>
   </div>
   <div class="two">
@@ -223,8 +229,19 @@
       <button type="button" data-run="serve">serve</button>
       <span class="lbl">tune</span>
       <button type="button" data-run="tune" data-args="apply">apply winner</button>
+      <span class="lbl">page</span>
+      <button type="button" id="https-own" title="spark serve https own">https</button>
+      <span class="lbl">spark</span>
+      <button type="button" id="update-btn" title="spark update">update</button>
     </div>
     <dl id="config-facts" class="facts"></dl>
+    <p class="muted small">https: a root and a certificate of this machine's own, then the page restarts over https.
+      update: the newest signed release; the page restarts, so log in again.</p>
+    <div id="root-box" hidden>
+      <p class="muted small">Each phone installs the root once: open this link there, or scan it. Then open the page.</p>
+      <p id="root-link" class="token-line"></p>
+      <div id="root-qr" class="qr" aria-label="the root certificate's QR"></div>
+    </div>
   </div>
   <div class="card adm" id="users-card">
     <div class="head">
@@ -232,15 +249,21 @@
       <span class="muted small">counts only; the chats are sealed, there is no key here</span>
     </div>
     <table class="keys" id="users-table"></table>
+    <p id="users-status" class="muted small"></p>
     <form id="user-add-form" class="row">
       <input id="user-add-name" type="text" placeholder="name" aria-label="a new user's name"
         autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
-        pattern="[a-z][a-z0-9-]{0,31}" maxlength="32">
+        pattern="[a-z][a-z0-9\-]{0,31}" maxlength="32">
       <button type="submit" class="primary">add user</button>
       <span id="user-add-note" class="muted small"></span>
     </form>
     <div id="user-new" hidden>
       <p class="muted small">the token, shown once, never stored; it is the only key. Scan the QR on that person's phone, or give them the token.</p>
+      <div id="user-root" hidden>
+        <p class="muted small">scan 1: the root, installed once on that phone</p>
+        <div id="user-root-qr" class="qr" aria-label="the root certificate's QR"></div>
+        <p class="muted small">scan 2: the login</p>
+      </div>
       <div id="user-qr" class="qr" aria-label="the login QR"></div>
       <p id="user-token" class="token-line"></p>
     </div>

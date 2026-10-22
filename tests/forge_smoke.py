@@ -195,13 +195,15 @@ def admin_boundary(ok):
         answers = []
         h._error = lambda code, kind, hint, extra=None: answers.append((code, kind))
         h._body = lambda: {}
-        for name in ("api_run", "api_do_propose", "api_do_run", "api_check_refresh", "api_soul_write", "api_users_add", "api_serve"):
+        for name in ("api_run", "api_do_propose", "api_do_run", "api_check_refresh", "api_soul_write", "api_users_add",
+                     "api_users_remove", "api_serve"):
             setattr(h, name, lambda body=None, name=name: answers.append(name))
         with patch.object(fs, "log", lambda line: logged.append(line)):
             h._route(method, path)
         return answers
 
-    for method, path in fs.ACTS:
+    for method, pattern in fs.ACTS:
+        path = pattern.replace("*", "nobody")      # a `*` is one segment: the boundary reads it as the table does
         a = ask("203.0.113.9", "http", method, path)
         ok(a == [(403, "boundary")], "%s %s over plain http from a routed peer: 403 boundary, the body unread" % (method, path), a)
         for ip, scheme in (("203.0.113.9", "https"), ("192.0.2.7", "http"), ("127.0.0.1", "http"), ("2001:db8::9", "http")):
@@ -849,6 +851,75 @@ def tls_cases(ok, spark, env, home, state, exe):
         spark("forge", "off", "--force")
 
 
+def page_units(ok):
+    """The page's side without a server: the verbs it may run and the
+    ones that end with its own restart, the https facts in each mode,
+    the one-command restart through the unit, and the newest tag the
+    checkout knows."""
+    import re as _re
+    from spark import REPO, config, forgeserve, qr, run, version
+    rv = forgeserve.RUN_VERBS
+    ok(rv["update"] is None and rv["serve"](["https", "own"]) and not rv["serve"](["https", "off"])
+       and not rv["serve"](["https"]) and rv["serve"]([]) and rv["serve"](["--login", "--new"]),
+       "RUN_VERBS: update, and serve https own, are the page's; https off and bare https stay the terminal's")
+    rs = forgeserve.RESTARTS
+    ok(rs["update"]([]) and rs["serve"](["https", "own"]) and not rs["serve"](["--login", "--new"]) and "model" not in rs,
+       "RESTARTS names the verbs whose stream ends with the page: update, serve https")
+
+    class Cfg:
+        forge_scheme, forge_cert, forge_name = "http", "", ""
+    saved = (forgeserve.link_url, forgeserve.tls.is_own)
+    try:
+        forgeserve.link_url = lambda cfg, url=None: "http://192.0.2.9:8081"
+        d = forgeserve.https_facts(Cfg())
+        ok(d == {"mode": "off", "link": "http://192.0.2.9:8081/login"}, "https_facts over plain http: mode off, the page's link, nothing else", d)
+        Cfg.forge_scheme, Cfg.forge_cert = "https", "/nowhere/leaf.crt"
+        forgeserve.link_url = lambda cfg, url=None: "https://192.0.2.9:8081"
+        forgeserve.tls.is_own = lambda c: True
+        d = forgeserve.https_facts(Cfg())
+        ok(d.get("mode") == "own" and d.get("link") == "https://192.0.2.9:8081/login" and d.get("ca") == "http://192.0.2.9:8082/ca"
+           and d.get("ca_qr") == qr.encode("http://192.0.2.9:8082/ca"),
+           "https_facts in own mode: the root's link on the port plus one, and its QR as qr.encode draws it", sorted(d))
+        forgeserve.tls.is_own = lambda c: False
+        d = forgeserve.https_facts(Cfg())
+        ok(d.get("mode") == "pair" and "ca" not in d and "ca_qr" not in d, "https_facts with your pair: mode pair, no root", d)
+    finally:
+        forgeserve.link_url, forgeserve.tls.is_own = saved
+
+    calls = []
+    saved = (forgeserve.engine.forge_service_state, forgeserve.engine.kickstart, forgeserve._pid,
+             forgeserve.cmd_stop, forgeserve.cmd_start, forgeserve.config.load)
+    try:
+        forgeserve.config.load = lambda: Cfg()
+        forgeserve.engine.forge_service_state = lambda cfg, unit="forge": "loaded"
+        forgeserve.engine.kickstart = lambda cfg, unit="serve", restart=False: calls.append(("kick", unit, restart)) or True
+        forgeserve._pid = lambda: 4242
+        forgeserve.cmd_stop = lambda a: calls.append(("stop", tuple(a))) or 0
+        forgeserve.cmd_start = lambda a: calls.append(("start", tuple(a))) or 0
+        rc = forgeserve._restart_page()
+        ok(rc == 0 and calls == [("kick", "forge", True)],
+           "_restart_page with a loaded unit: one restart through it, never a stop and then a start", (rc, calls))
+        calls[:] = []
+        forgeserve.engine.kickstart = lambda cfg, unit="serve", restart=False: calls.append(("kick", unit, restart)) and False
+        ok(forgeserve._restart_page() == 1, "_restart_page: a restart the manager refused is rc 1")
+        calls[:] = []
+        forgeserve.engine.forge_service_state = lambda cfg, unit="forge": "none"
+        rc = forgeserve._restart_page()
+        ok(rc == 0 and calls == [("stop", ("--force",)), ("start", ())], "_restart_page by hand: stop --force, then start", (rc, calls))
+        calls[:] = []
+        forgeserve._pid = lambda: 0
+        ok(forgeserve._restart_page() == 0 and calls == [], "_restart_page with nothing running: nothing", calls)
+    finally:
+        (forgeserve.engine.forge_service_state, forgeserve.engine.kickstart, forgeserve._pid,
+         forgeserve.cmd_stop, forgeserve.cmd_start, forgeserve.config.load) = saved
+
+    n = version.newest()
+    rc, out = run(["git", "-C", REPO, "tag", "-l", "v[0-9]*", "--sort=-v:refname"])
+    want = out.split()[0][1:] if rc == 0 and out.split() else ""
+    ok(n == want and (n == "" or _re.match(r"^\d+\.\d+(\.\d+)?$", n)),
+       "version.newest reads the newest v* tag as git sorts them, no subprocess", (n, want))
+
+
 def main():
     fails = 0
 
@@ -861,6 +932,7 @@ def main():
     generation_admission(ok)
     reply_interruptions(ok)
     verb_runner(ok)
+    page_units(ok)
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
@@ -1173,10 +1245,17 @@ def main():
                and "/" not in raw.decode() and ".gguf" not in raw.decode(),
                "/v1/models: one entry a served role, the file's stem as id, never a path or the engine's own listing", raw[:200])
 
-            # the monitor
-            st, _, raw = req(url, "GET", "/api/bar", headers=bearer, timeout=30)
+            # the monitor: the status line card left the page with v1.97
+            st, _, _ = req(url, "GET", "/api/bar", headers=bearer, timeout=30)
+            ok(st == 404, "/api/bar is gone (v1.97: the status line card left the page) -> 404", st)
+            # what left this machine: the rows of spark stats --sends, for the window
+            st, _, raw = req(url, "GET", "/api/stats?days=7", headers=bearer, timeout=30)
             d = json.loads(raw)
-            ok(st == 200 and "line" in d and "#[" not in d["line"], "/api/bar has a line without tmux sequences", raw[:200])
+            ok(st == 200 and d.get("days") == 7 and isinstance(d.get("sends"), list)
+               and all(set(r) == {"day", "dest", "bytes", "turns"} and isinstance(r["bytes"], int) for r in d["sends"]),
+               "/api/stats carries sends: day, dest, bytes, turns a row (%d rows)" % len(d.get("sends") or []), raw[:200])
+            st, _, raw = req(url, "GET", "/api/stats?days=1", headers=ubearer, timeout=30)
+            ok(st == 200 and isinstance(json.loads(raw).get("sends"), list), "/api/stats answers a user with sends too", raw[:100])
             # /api/models: the box's table for a client's `spark model`, any role
             st, _, raw = req(url, "GET", "/api/models", headers={"Authorization": "Bearer " + utoken}, timeout=30)
             dm = json.loads(raw)
@@ -1238,6 +1317,9 @@ def main():
                                                           "SITE_QUIET_START", "SITE_QUIET_AUDIO", "SPARK_LOOK_MOTION"))
                and "SPARK_LOOK" in d["effective"],
                "/api/config: models, effective (SPARK_LOOK); no palettes, no removed keys", raw[:200])
+            hf = d.get("https") or {}
+            ok(isinstance(hf, dict) and hf.get("mode") == "off" and hf.get("link", "").endswith("/login") and "ca" not in hf,
+               "/api/config carries https: mode off, the page's link, no root over plain http", hf)
             secret = [k for k in ks if re.search("KEY|TOKEN|SECRET", k)]
             ok(not secret, "/api/config never names a key matching KEY|TOKEN|SECRET (spark.env holds three)", secret)
             ok(token not in raw.decode() and smoke.TOKEN not in raw.decode() and "forge-token" not in raw.decode()
@@ -1251,7 +1333,8 @@ def main():
             ok(st == 404, "/api/theme is gone (v1.62: the look left core) -> 404", st)
             st, _, raw = req(url, "GET", "/api/serve", headers=bearer)
             d = json.loads(raw)
-            ok(st == 200 and d["url"] == stub_url and d["health"] == "ok" and d["model"] == "stub-7b-q4", "/api/serve sees the upstream", raw[:200])
+            ok(st == 200 and d["url"] == stub_url and d["health"] == "ok" and d["model"] == "stub-7b-q4" and "log" not in d,
+               "/api/serve sees the upstream, and carries no log tail (v1.97)", raw[:200])
             st, _, raw = req(url, "GET", "/api/gpu", headers=bearer)
             ok(st == 200 and isinstance(json.loads(raw), dict), "/api/gpu")
             st, _, raw = req(url, "GET", "/api/bench", headers=bearer)
@@ -1263,17 +1346,8 @@ def main():
             # poll writes a log line of its own, so waiting on a tail of 3
             # pushes the line being waited for out of its own window the
             # moment the server is slow enough to need a second look.
-            for _ in range(20):
-                st, _, raw = req(url, "GET", "/api/log?n=30", headers=bearer)
-                d = json.loads(raw)
-                if any(" GET /api/bench 200 " in ln for ln in d.get("lines") or []):
-                    break
-                time.sleep(0.1)
-            ok(st == 200 and any(" GET /api/bench 200 " in ln for ln in d["lines"]),
-               "/api/log tails forge.log", d)
-            st, _, raw = req(url, "GET", "/api/log?n=3", headers=bearer)
-            ok(st == 200 and len(json.loads(raw)["lines"]) == 3,
-               "/api/log?n= is the tail length", raw[:120])
+            st, _, _ = req(url, "GET", "/api/log?n=30", headers=bearer)
+            ok(st == 404, "/api/log is gone (v1.97: nothing on the page read it) -> 404", st)
             lg = open(state + "/forge.log").read()
             ok(oct(os.stat(state + "/forge.log").st_mode & 0o777) == "0o600" and token not in lg and smoke.TOKEN not in lg, "forge.log 0600, no token in it")
             ok("login failed" in lg and "wrong bearer" in lg, "forge.log has the login events", lg[-300:])
@@ -1289,7 +1363,9 @@ def main():
                     break
                 head += line
             c.close()
-            ok(r.status == 200 and "event: check" in head and "event: serve" in head, "/api/events opens with check and serve", head[:200])
+            ok(r.status == 200 and "event: check" in head and "event: serve" in head
+               and "event: bar" not in head and "event: log" not in head,
+               "/api/events opens with check and serve, and no bar or log event (v1.97)", head[:200])
             # a browser that hangs up mid-stream must not kill the server
             # (bin/spark sets SIGPIPE to SIG_DFL for pipes; the forge ignores it)
             import socket as _socket
@@ -1921,8 +1997,9 @@ def main():
             du = json.loads(raw)
             ok(st == 200 and any(u["name"] == "ualice" and u["threads"] >= 1 for u in du["users"]),
                "/api/users: names, counts and stamps", raw[:200])
-            ok(len(du["users"]) >= 3 and all(set(u) == {"name", "threads", "kept", "last"} for u in du["users"]),
-               "every /api/users entry carries exactly {name, threads, kept, last} and nothing else", raw[:200])
+            ok(len(du["users"]) >= 3 and all(set(u) == {"name", "threads", "kept", "last", "account"} for u in du["users"])
+               and sum(1 for u in du["users"] if u["account"]) <= 1,
+               "every /api/users entry carries exactly {name, threads, kept, last, account}, one account at most", raw[:200])
             st, _, _ = req(url, "GET", "/api/users", headers=ubearer)
             ok(st == 403, "a user cannot list the users", st)
 
@@ -1948,6 +2025,44 @@ def main():
             ok(st == 403, "a user cannot mint a user", st)
             st, _, raw = req(url, "GET", "/api/users", headers=bearer)
             ok(st == 200 and any(u["name"] == "upage" for u in json.loads(raw)["users"]), "the minted user is listed", raw[:120])
+            # /api/me: the newest release the checkout knows, for the admin alone
+            st, _, raw = req(url, "GET", "/api/me", headers=bearer)
+            dme = json.loads(raw)
+            ok(st == 200 and isinstance(dme.get("newest"), str) and (dme["newest"] == "" or re.match(r"^\d+\.\d+(\.\d+)?$", dme["newest"])),
+               "/api/me (admin) carries newest, the newest v* tag as X.Y or X.Y.Z", raw[:160])
+            st, _, raw = req(url, "GET", "/api/me", headers=ubearer)
+            ok(st == 200 and "newest" not in json.loads(raw), "/api/me (a user) carries no newest", raw[:160])
+            # removed from the page: the store gone, the token dead, the row gone
+            ptoken = dn.get("token", "x")
+            st, _, _ = req(url, "DELETE", "/api/users/upage", headers=dict(ubearer, **xs))
+            ok(st == 403, "a user cannot remove a user (403)", st)
+            st, _, _ = req(url, "DELETE", "/api/users/Upage", headers=dict(bearer, **xs))
+            ok(st == 400, "DELETE /api/users/NAME: a name the verb refuses is 400", st)
+            st, _, _ = req(url, "DELETE", "/api/users/unobody", headers=dict(bearer, **xs))
+            ok(st == 404, "DELETE /api/users/NAME: an unknown name is 404", st)
+            st, _, _ = req(url, "DELETE", "/api/users/upage", headers=bearer)
+            ok(st == 403, "DELETE /api/users/NAME goes through the write gate: no X-Spark is 403", st)
+            st, _, raw = req(url, "DELETE", "/api/users/upage", headers=dict(bearer, **xs))
+            ok(st == 200 and json.loads(raw) == {"name": "upage", "removed": True} and not os.path.isdir(state + "/users/upage"),
+               "DELETE /api/users/upage: 200, the store gone", raw[:120])
+            st, _, _ = req(url, "GET", "/api/me", headers={"Authorization": "Bearer " + ptoken})
+            ok(st == 401, "the removed user's token is dead", st)
+            st, _, _ = req(url, "DELETE", "/api/users/upage", headers=dict(bearer, **xs))
+            ok(st == 404, "removed twice is 404", st)
+            st, _, raw = req(url, "GET", "/api/users", headers=bearer)
+            ok(st == 200 and not any(u["name"] == "upage" for u in json.loads(raw)["users"]), "the removed user is not listed", raw[:120])
+            acct = ""
+            try:
+                with open(state + "/account", encoding="utf-8") as f:
+                    acct = next((ln.split("=", 1)[1].strip() for ln in f if ln.startswith("name=")), "")
+            except OSError:
+                pass
+            if acct:
+                st, _, raw = req(url, "DELETE", "/api/users/" + acct, headers=dict(bearer, **xs))
+                ok(st == 409 and json.loads(raw)["error"]["kind"] == "self" and os.path.isdir(state + "/users/" + acct),
+                   "DELETE of the box account is 409 self, and the store stays", (st, raw[:120]))
+            else:
+                ok(True, "(no box account in this HOME: the 409 self case is skipped)")
             # the look's files: the tokens, the theme script and a font
             st, hd, raw = req(url, "GET", "/static/tokens.css")
             ok(st == 200 and b"--page:" in raw and b"@font-face" in raw, "tokens.css is served", st)
@@ -2100,7 +2215,7 @@ def main():
             st, _, _ = req(url, "GET", "/api/stats?days=1", headers=ubearer)
             ok(st == 200, "user /api/stats 200", st)
             st, _, _ = req(url, "GET", "/api/bar", headers=ubearer, timeout=30)
-            ok(st == 200, "user /api/bar 200", st)
+            ok(st == 404, "user /api/bar 404 (gone with v1.97)", st)
             st, _, raw = req(url, "POST", "/v1/chat/completions",
                              {"messages": [{"role": "user", "content": "capital of France?"}], "stream": False}, headers=ubearer)
             ok(st == 200 and "Paris" in json.loads(raw)["choices"][0]["message"]["content"], "/v1 with the user bearer 200", raw[:200])
@@ -2110,7 +2225,7 @@ def main():
                                        ("GET", "/api/config", None),
                                        ("POST", "/api/do/propose", {"text": "x"}),
                                        ("POST", "/api/do/run", {"command": "echo hi"}),
-                                       ("GET", "/api/bench", None), ("GET", "/api/log", None),
+                                       ("GET", "/api/bench", None), ("DELETE", "/api/users/nobody", {}),
                                        ("GET", "/api/serve", None), ("GET", "/api/gpu", None),
                                        ("POST", "/api/check/refresh", {})):
                 st, _, raw = req(url, method, path, body, headers=upost if body is not None else ubearer)
@@ -2242,7 +2357,7 @@ def main():
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
             ok(rc == 0 and ("page     " + url + "/login") in out and "stub-7b-q4" in out
-               and "admin token" in out and "5 users" in out,   # alice, bob, the box account, qrguy, upage
+               and "admin token" in out and "4 users" in out,   # alice, bob, the box account, qrguy (upage was removed)
                "spark forge (bare, the serve view): the page, the model, the admin token, the user count", out)
             rc, out2, _ = spark("serve")
             ok(rc == 0 and out2 == out, "bare spark serve is the same view", out2)
@@ -2278,8 +2393,11 @@ def main():
             rc, out, _ = spark("forge", "token", "--new", "--user")
             ok(rc == 2 and "spark user token --new" in out, "forge token --new --user: gone, names spark user", out)
             st, _, raw = req(url, "POST", "/api/user/token", {}, headers=upost)
-            utoken2 = json.loads(raw).get("token", "")
+            drot = json.loads(raw)
+            utoken2 = drot.get("token", "")
             ok(st == 200 and utoken2 and utoken2 != utoken, "POST /api/user/token: a fresh token, returned once", raw[:80])
+            ok(set(drot) == {"token", "link", "qr"} and drot["link"].endswith("/login#t=" + utoken2) and drot["qr"] == _qr.encode(drot["link"]),
+               "POST /api/user/token: the login link and its QR too (v1.97)", sorted(drot))
             st, _, _ = req(url, "POST", "/api/user/token", {}, headers=dict(bearer, **{"X-Spark": "1", "Origin": url}))
             ok(st == 403, "the admin has no personal token to rotate here", st)
             st, _, _ = req(url, "GET", "/api/check", headers=ubearer)

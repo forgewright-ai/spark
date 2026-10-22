@@ -97,6 +97,36 @@ def _describe(sha):
     return "0+" + sha[:7]
 
 
+def newest():
+    """The newest release tag this checkout knows, "X.Y" or "X.Y.Z": the
+    v* names under refs/tags and in packed-refs (two reads, no
+    subprocess), "" with none. The check's git row fetches them; the
+    page's header says `newest vX.Y` when it is newer than version()."""
+    common = _common_dir(_git_dir())
+    names = set()
+    try:
+        names.update(os.listdir(os.path.join(common, "refs", "tags")))
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(common, "packed-refs"), encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) == 2 and parts[1].startswith("refs/tags/"):
+                    names.add(parts[1][len("refs/tags/"):])
+    except OSError:
+        pass
+    best = None
+    for n in names:
+        m = re.match(r"^v(\d+)\.(\d+)(?:\.(\d+))?$", n)
+        if m:
+            t = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+            best = t if best is None or t > best else best
+    if best is None:
+        return ""
+    return "%d.%d" % best[:2] + (".%d" % best[2] if best[2] else "")
+
+
 def version():
     """The version string, cached by sha so an unchanged checkout never pays
     for `git describe` twice. Never raises: any failure yields the best

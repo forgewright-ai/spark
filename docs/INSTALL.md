@@ -583,7 +583,12 @@ token or login QR screenshot in a public issue.
 For someone else, create an ordinary user with `spark user add NAME`
 and give that person only their own token. On the page, the admin adds
 a user under settings: the token shows once, with a QR for that
-person's phone.
+person's phone. The same card removes a user: click remove twice. A
+user who lost their phone rotates their token under settings and scans
+the new QR. Under machine, `https` turns the page's https on and
+`update` moves spark to the newest release. Both restart the page, so
+log in again. What left this machine is under activity, and under a
+user's settings.
 
 ### HTTPS for the page
 
@@ -600,6 +605,8 @@ URL` follow.
    spark mints a root for this machine's names and a certificate under
    it, and renews the certificate itself. Each phone installs the root
    once: `spark serve --login` shows its QR first, then the login's.
+   On the page, the root's link and QR are under machine, and beside
+   a new user's login QR.
    On iOS, after the profile, turn the root on under General, About,
    Certificate Trust Settings. Android says the network may be
    monitored: that is the root. The root signs for this machine's
@@ -742,7 +749,9 @@ spark update
 ```
 
 It moves to the newest signed release, sets it up and runs `spark
-check`. `spark update --dry-run` says what it would do.
+check`. `spark update --dry-run` says what it would do. On the page,
+`update` under machine runs it. The page restarts at the end, so log
+in again.
 
 A release is signed. `spark update` moves only forward, to a release
 signed by a key this install already trusts. It skips a tag that fails,

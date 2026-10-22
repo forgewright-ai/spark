@@ -1568,7 +1568,6 @@ and may change freely.
    GET     /api/me                    user
    GET     /api/check                 user
    GET     /api/stats                 user
-   GET     /api/bar                   user
    GET     /api/events                user
    GET     /api/soul                  user
    GET     /api/memory                user
@@ -1589,9 +1588,9 @@ and may change freely.
    GET     /api/gpu                   admin
    GET     /api/bench                 admin
    GET     /api/config                admin
-   GET     /api/log                   admin
    GET     /api/users                 admin
    POST    /api/users                 admin
+   DELETE  /api/users/*               admin
    POST    /api/run                   admin
    POST    /api/do/propose            admin
    POST    /api/do/run                admin
@@ -1599,10 +1598,11 @@ and may change freely.
    POST    /api/soul                  admin
    ```
 
-   Six admin rows act on this machine: `POST /api/run`, `POST
+   Seven admin rows act on this machine: `POST /api/run`, `POST
    /api/do/propose`, `POST /api/do/run`, `POST /api/check/refresh`,
-   `POST /api/soul` and `POST /api/users`. They are every admin
-   `POST` row (`forgeserve.ACTS`). Over plain http they answer this
+   `POST /api/soul`, `POST /api/users` and `DELETE /api/users/*`. They
+   are every admin `POST` and `DELETE` row (`forgeserve.ACTS`), a `*`
+   read as the table reads it. Over plain http they answer this
    machine and a peer on one of its own networks alone. The networks
    are the interface
    prefixes `own_networks` reads, or the private and link-local ranges
@@ -1625,7 +1625,16 @@ and may change freely.
    `GET /api/me` answers `{role, user, name, version, faces, blink}`:
    how the page decides which console to draw and whom to greet. The
    faces are the machine's own (`look.faces`), with their blink rate,
-   for the face in the page's bar. `GET /api/models`
+   for the face in the page's bar. For the admin it carries `newest`
+   too, the newest release tag this checkout knows (`version.newest`:
+   the refs read, no subprocess). The page's header says `newest
+   vX.Y` when that is past the version it runs. `update` under machine
+   runs `spark update` through `/api/run`. `GET /api/stats?days=N` (1,
+   7 or 3650) answers the turns' numbers for the window and `sends`,
+   the rows of `spark stats --sends` for it. A row is day,
+   destination, bytes and turns: what left this machine, never a word
+   of it. The page shows them under activity, and under a user's
+   settings. `GET /api/models`
    answers this machine's model table `{name, total_gb, budget_gb,
    budget_pct, backend, cap_note, models: model.model_rows}`, what
    `spark model` on a client prints instead of its own numbers. The
@@ -1636,17 +1645,24 @@ and may change freely.
    scoped to the requester's own sealed store: a user's to their
    `users/<name>/`, the admin's to the box account's. Nobody holds a key
    to anyone else's. `GET /api/users` (admin) answers `{users: [{name,
-   threads, kept, last}]}`: counts and stamps, never a title, a body or
-   a token. `kept` counts the kept threads among `threads`, read from
+   threads, kept, last, account}]}`: counts and stamps, never a title,
+   a body or a token. `account` marks the box account's own store.
+   `kept` counts the kept threads among `threads`, read from
    the plaintext headers without a key. That is the whole of admin
    visibility. `POST /api/users` (admin) takes `{name}` and mints a
    user as `spark user add NAME` does. It answers `{name, token, link,
    qr}` once: the token, its login link and the link's QR as a matrix
    the page draws for that person's phone. Nothing is stored; a name
    the verb refuses is 400, one in use 409; it acts, with an audit
-   record `user add`. `POST /api/user/token` (user) rotates the
-   requester's own
-   token, returned once, never stored. `DELETE /api/threads` clears the
+   record `user add`. `DELETE /api/users/*` (admin) removes that user
+   as `spark user remove NAME` does: the store and every kept thread,
+   gone, and their sessions die with the verifier. The box account is
+   409 `{error: {kind: self}}`, removed at the terminal alone; an
+   unknown name is 404; it acts, with an audit record `user remove`.
+   `POST /api/user/token` (user) rotates the requester's own token,
+   returned once with its login link and the link's QR, as `POST
+   /api/users` answers them, never stored. `DELETE /api/threads` clears
+   the
    requester's own regular threads and answers `{cleared, kept}`: the
    kept threads stay, and `kept` says how many. `GET /api/threads` rows
    are `{id, ts, title, turns, kept}`. Every known route needs one
@@ -1769,7 +1785,8 @@ and may change freely.
    `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
    digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
    removed or rotated `{ts, ip|cli, action, name}` (`spark user
-   add|remove|token --new`, `POST /api/user/token`), `spark serve
+   add|remove|token --new`, `POST /api/users`, `DELETE /api/users/*`,
+   `POST /api/user/token`), `spark serve
    --login --new` `{ts, cli, action}`, and a tools/call `{ts, cli,
    action, who, server, tool, args, error}` (`mcp/call`, contract 16).
    Numbers and names, never a
@@ -1777,7 +1794,13 @@ and may change freely.
    [--porcelain]` prints the newest N (50 by default), one line each. A
    trail that does not open is one signed line, exit 2, never written
    over. `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`,
-   whatever spark.env holds. Streams are SSE. `/api/chat` (mode
+   whatever spark.env holds. It carries `https` too: the page's `mode`
+   (`off`, `own` or `pair`) and its `link`. In own mode it adds the
+   root's `ca` link on the port plus one and that link's QR (`ca_qr`).
+   The machine card and a new user's card draw them for the phones.
+   `https` under machine runs `spark serve https own` through
+   `/api/run`.
+   Streams are SSE. `/api/chat` (mode
    `chat|answer`) emits `queued` when the model is busy, `delta {t}`,
    `done {thread, ms, model}`, `model` the list's name, and `error
    {kind, hint, thread?}`. `talk`
@@ -1794,9 +1817,11 @@ and may change freely.
    session of its own (`forgeserve.run_verb`), `RUN_CAP` seconds at most
    (rc 124). When it ends, times out or the page hangs up, its process
    group is killed and it is reaped. A service it starts in a session of
-   its own stays. `/api/events` emits `check`, `bar` and `serve` on
-   change, `log` too for an admin, and a
-   `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
+   its own stays. `/api/events` emits `check` and `serve` on change,
+   and a `:keepalive` comment every 15 seconds. A verb that restarts
+   the page (`update`, `serve https own`) ends its own stream: the
+   page expects that and says what comes next.
+   `/v1/chat/completions` and
    `/v1/models` are OpenAI-shaped and proxied to the llama-server with
    the api-token. The request's `model` field routes, and a missing
    `model` means `ember`. Only a served role routes: `spark`, `ember`,
@@ -2482,8 +2507,12 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   record (`Handler._audit`). The page calls verbs through `/api/run`'s
   allowlist (`RUN_VERBS`) rather than writing config. The page is a
   door to the same identity, not a product of its own: a page change
-  lands only when it is the client side of a contract change. No new
-  page features in this release or the next.
+  lands only when it is the client side of a contract change. A verb
+  that restarts the page (`update`, `serve https own`) restarts it
+  through its unit in one command, last (`forgeserve._restart_page`,
+  `update._restart_units`). systemd stops a unit's whole cgroup, the
+  verb's process in it, and a restart it was asked for happens all
+  the same. A stop followed by a start would end at the stop.
 - **A shell thing.** The look and the tools of a machine are not spark's
   business: the console's palette and font, a quiet boot, the prompt,
   the desktop. `spark look` dresses spark's own lines, never the

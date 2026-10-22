@@ -39,7 +39,8 @@ from spark import forgeserve  # noqa: E402
 OPEN = "open"          # any status but 401 and 403
 # what stands in for `*` in a pattern: a name no store holds
 FILL = {"/static/*": "/static/spark.css", "/api/threads/*": "/api/threads/none",
-        "/api/threads/*/append": "/api/threads/none/append", "/api/memory/*": "/api/memory/1"}
+        "/api/threads/*/append": "/api/threads/none/append", "/api/memory/*": "/api/memory/1",
+        "/api/users/*": "/api/users/none"}
 # the body a route needs to reach past its own parser: the model's face
 # is proxied to the stub, so it says hello; a kept thread is made for
 # real, in each caller's own store under this test's throwaway HOME (a
@@ -189,8 +190,8 @@ def main():
                "ROUTES: %d rows, the three roles" % len(forgeserve.ROUTES))
             # the acting rows: every admin POST row and nothing else, each
             # named in contract 9 (forge_smoke proves the boundary itself)
-            acting = {k for k, v in forgeserve.ROUTES.items() if v == "admin" and k[0] == "POST"}
-            ok(set(forgeserve.ACTS) == acting, "ACTS is every admin POST row of ROUTES, and nothing else",
+            acting = {k for k, v in forgeserve.ROUTES.items() if v == "admin" and k[0] in ("POST", "DELETE")}
+            ok(set(forgeserve.ACTS) == acting, "ACTS is every admin POST and DELETE row of ROUTES, and nothing else",
                sorted(acting ^ set(forgeserve.ACTS)))
             with open(os.path.join(REPO, "CLAUDE.md"), encoding="utf-8") as f:
                 claude = f.read()
