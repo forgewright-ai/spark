@@ -1445,30 +1445,39 @@ def substantial(span):
     return not all(w in _STOP_WORDS for w in words)
 
 
-def anchor(span, data, folded=None, whole=False):
-    """Is `span` in `data`: verbatim; else folded on both sides
-    (whitespace, quote marks, case); else with the punctuation the model
-    tucked inside the closing quote stripped. `folded` is fold(data)
-    when the caller has it already. A span that is nothing after fold
-    anchors nowhere -- the verbatim check runs after that guard, so
-    three spaces cannot anchor in a run of spaces. `whole=True` matches
-    at word boundaries in the folded text: "500" must not anchor in a
-    window holding only "1500ms" (spark watch, spark recall)."""
+# A letter or a digit in any script: what a word is made of. `_` and `-`
+# part words, as a reader sees them.
+_WORDCH = r"[^\W_]"
+
+
+def at_edges(f):
+    """A pattern for the folded span `f` that holds only at word edges: a
+    span that starts with a letter or a digit has none before it, one
+    that ends with one has none after. So "answers 4" is not in "answers
+    422", "aç" is not in "ação", and "--force" and "lib/" need nothing."""
+    p = re.escape(f)
+    if re.match(_WORDCH, f):
+        p = "(?<!%s)%s" % (_WORDCH, p)
+    if re.search(_WORDCH + r"\Z", f):
+        p = "%s(?!%s)" % (p, _WORDCH)
+    return p
+
+
+def anchor(span, data, folded=None):
+    """Is `span` in `data`, folded on both sides (whitespace, quote marks,
+    case), at word edges (at_edges); else with the punctuation the model
+    tucked inside the closing quote stripped. `folded` is fold(data) when
+    the caller has it already. A span that is nothing after fold anchors
+    nowhere, so three spaces cannot anchor in a run of spaces. A quote
+    cut inside a word anchors nowhere either: "500" is not in a window
+    holding only "1500ms", nor "the service answers 4" in a spec that
+    says 422 (#92)."""
     folded = fold(data) if folded is None else folded
     f = fold(span)
-    if not f:
-        return False
-    if whole:
-        for cand in (f, f.rstrip(".,;:!?")):
-            if cand and re.search(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(cand), folded):
-                return True
-        return False
-    if span in data:
-        return True
-    if f in folded:
-        return True
-    f = f.rstrip(".,;:!?")
-    return bool(f) and f in folded
+    for cand in (f, f.rstrip(".,;:!?")):
+        if cand and re.search(at_edges(cand), folded):
+            return True
+    return False
 
 
 # ------------------------------------------------------------ grounding
@@ -1507,10 +1516,9 @@ class Ground:
     `misses`: it does point at the text, and mark() says which half to
     distrust."""
 
-    def __init__(self, data, whole=False):
+    def __init__(self, data):
         self.data = data
         self.folded = fold(data)
-        self.whole = whole      # word-boundary anchoring (watch, recall)
         self._starts = None     # offsets in folded where a line or a sentence starts
 
     def verdict(self, unit):
@@ -1523,7 +1531,7 @@ class Ground:
         spans = [q[0] for q in quotes(unit) if substantial(q[0])]
         if not spans:
             return (GROUNDED if self.verbatim(unit) else UNQUOTED), []
-        misses = [q for q in spans if not anchor(q, self.data, self.folded, whole=self.whole)]
+        misses = [q for q in spans if not anchor(q, self.data, self.folded)]
         return (UNGROUNDED if len(misses) == len(spans) else GROUNDED), misses
 
     def verbatim(self, unit):
@@ -1535,7 +1543,7 @@ class Ground:
         if len(f.split()) < VERBATIM_WORDS or not substantial(f):
             return False
         starts = self.starts()
-        found = re.finditer(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(f), self.folded)
+        found = re.finditer(at_edges(f), self.folded)
         return any(m.start() in starts for m in found)
 
     def starts(self):
@@ -1577,7 +1585,7 @@ class Ground:
             out.append("`%s`" % span if span != m.group(m.lastindex) and "`" not in span else raw)
             if PROPOSAL.search(unit[:m.start()]):
                 out.append(PROPOSED_MARK)
-            elif not anchor(span, self.data, self.folded, whole=self.whole):
+            elif not anchor(span, self.data, self.folded):
                 out.append(ANCHOR_MARK)
             last = m.end()
         out.append(unit[last:])
@@ -1615,9 +1623,9 @@ class Gate:
 
     JOIN_MAX = 2
 
-    def __init__(self, stream, data, keep=None, whole=False):
+    def __init__(self, stream, data, keep=None):
         self.stream, self.data = stream, data
-        self.ground = Ground(data, whole)
+        self.ground = Ground(data)
         self.keep = keep
         self.buf = ""
         self.held = []                     # the lines of a quote a line break split, so far
@@ -1644,7 +1652,7 @@ class Gate:
         qs = quotes(line)
         self.quoted += len(qs)
         self.missed += sum(1 for q, _s, _e in qs
-                           if not anchor(q, self.data, self.ground.folded, whole=self.ground.whole))
+                           if not anchor(q, self.data, self.ground.folded))
         self.stream.write(scrub(self.ground.mark(line), keep="\t") + ("\n" if newline else ""))
 
     def _line(self, line):
@@ -1679,7 +1687,7 @@ class Gate:
                 breaks.append(at)       # the space that stands for the line break
                 at += 1
             across = [m for m in QUOTE.finditer(joined) if any(m.start() < b < m.end() for b in breaks)]
-            if across and all(anchor(quoted(m), self.data, self.ground.folded, whole=self.ground.whole)
+            if across and all(anchor(quoted(m), self.data, self.ground.folded)
                               for m in across):
                 verdict, misses = self.ground.verdict(joined)
                 if self.keep(joined, verdict, misses):

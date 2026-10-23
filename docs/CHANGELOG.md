@@ -2,15 +2,19 @@
 
 ## v1.100.1
 
+- S3: a quote cut inside a word passed the grounding check: "the
+  service answers 4" anchored in a text that says "answers 422", so
+  read, ask and edit ? kept the line. A quote anchors at word edges
+  now, in every grounded contract and in any script (#92)
+- S3: tests/smoke.py's three Ctrl-C cases failed when the suite ran as
+  a shell's background job, which starts with SIGINT ignored; smoke
+  gives SIGINT back its default first, so a spark it starts sees a
+  Ctrl-C as a terminal's foreground job does (#93)
 - S3: in spark-shell's desktop terminal, whose palette sets five slots
   after the sixteen, the prompt of spark chat and the steps of spark do
   lost their accent: the color check dropped a 38;5 value whole. It
   takes the five slots, 38;5;16 to 38;5;20, and drops any other 38;5
   value as before (#94)
-- S3: tests/smoke.py's three Ctrl-C cases failed when the suite ran as
-  a shell's background job, which starts with SIGINT ignored; smoke
-  gives SIGINT back its default first, so a spark it starts sees a
-  Ctrl-C as a terminal's foreground job does (#93)
 
 ## v1.100
 
