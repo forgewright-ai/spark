@@ -7,6 +7,10 @@
   lost their accent: the color check dropped a 38;5 value whole. It
   takes the five slots, 38;5;16 to 38;5;20, and drops any other 38;5
   value as before (#94)
+- S3: tests/smoke.py's three Ctrl-C cases failed when the suite ran as
+  a shell's background job, which starts with SIGINT ignored; smoke
+  gives SIGINT back its default first, so a spark it starts sees a
+  Ctrl-C as a terminal's foreground job does (#93)
 
 ## v1.100
 
