@@ -1,5 +1,84 @@
 # Changelog
 
+## v1.100
+
+A trial of spark's use cases on the box and the Mac, with real inputs
+(man pages, a web page, a blog feed, a git repository, a live log, a
+lease, a school mail), found what small fixtures never showed. Each
+cause it found in spark is fixed here.
+
+- A rewrite of the whole text no longer comes back as one part of it.
+  Asked to change one part, a small model answered with that part
+  alone, and an editor spliced it over the whole file: spark-micro
+  kept one function of nineteen lines. The reply is now held until it
+  ends. A part that is surely one run of the text, or one section of
+  it, goes back in its place. A part returned unchanged is asked about
+  once more, so a deletion stays deleted and an untouched part brings
+  the whole text back. Anything unsure is refused in one line, the
+  text unchanged (#79)
+- `spark watch` finds the lines a web server or a JSON log writes. The
+  window goes to the model numbered, and the model names the line that
+  matches by its number; spark prints that line from the stream.
+  Before, the model copied the line between quotes, its own quotes came
+  back escaped or a long line was cut, and the match was thrown away:
+  `anything that fails` stayed silent on an nginx timeout and a 504
+  (#80)
+- A busy model skips one window of `spark watch` and `spark edit
+  --watch`, as a loading one does. Before, the page's 429 to a full
+  queue ended the watch with exit 1 (#90)
+- `spark read` finds the part that answers. A text past 16 kB was
+  refused until you named a part, so `man tar`, `man sshd_config` and
+  most web pages needed a guess. Now spark ranks the parts by your
+  words, reads the best one, and the next only when it does not
+  answer, two at most. The first line still names the part, and
+  `--part N` reads the one you name (#84)
+- `spark read` keeps a line the model copied from the text. The answer
+  to "what does the API return on an error" lost its 422: the model
+  wrote the spec's own line with no quote marks, and the check dropped
+  it as a line that quotes nothing. A line that is the text's own
+  words, five or more from the start of a line or a sentence, counts
+  as a quote now (#89)
+- The quote check reads two more shapes. A quote whose own quotes came
+  back escaped (`\"`) is one quote, shown without the backslashes. A
+  quote a line break split, as a model wraps near 70 columns, is
+  checked whole. `ask` reads them the same way
+- A chat turn after `/read` answers from the file it read. The part
+  that answered rides the chat's thread, held back as the read held it,
+  so "and if I get a second cat?" after reading a lease answers from
+  the lease. With history off, a chat goes on with its own turns of
+  this session, in memory: before, no earlier turn reached the model at
+  all. The page's view of a thread never carries the file's text (#85)
+- `spark do` tells the model what each step changed: in a sandbox,
+  every path whose bytes moved in the copy, or "This step changed no
+  file." after a step that can destroy data; outside one, the paths the
+  step names, none when the step moves its directory first. A `sed`
+  whose pattern matched nothing read as done, and the run spent its 8
+  steps (#81)
+- A sandboxed run that changed nothing after a step that can destroy
+  data no longer ends with a claim that it did: the done is asked again
+  once with the fact, then shown as "nothing changed: ...". A run that
+  only read ends as it said (#82)
+- `spark do` lowers the model's `!` on a step whose every stage only
+  reads, as the prompt line does: `du -sh * | sort -rh | head` asks for
+  Enter, not yes. `sort` is a read-only head, with `-o`, `--output` and
+  `--compress-program` denied. A glob or a brace before `--` makes a
+  stage no proof, past the heads whose every option only reads (`du`,
+  `ls`, `wc`, `grep`, `head`): beside a file named `-oMakefile`, `sort
+  *` would have written the Makefile (#83)
+- `??` goes on with the newest answer. The widgets stop `spark line`
+  once you move on (Enter, a key, Ctrl-C, the next prompt), and the
+  turn reached its thread only at the end: a command you were handed
+  and discarded was nowhere, and `??` followed an older one. Now the
+  question and the command are kept the moment you move on. On a
+  client, `??` goes on with that client's own newest `?` turn until
+  the page or the box's prompt moves the newest thread there (#86)
+- `explain` names a command only when a command fixes it. A fix inside
+  a file is said as the file and the change, never as `spark edit
+  FILE` (#87)
+- The fix after an explain (`Esc s` again) reads the explain's answer,
+  and never lands the command that just failed as its own fix: after
+  one more try it says no other command fixes this (#88)
+
 ## v1.99
 
 The third audit, 2026-10-23, read everything shipped since v1.77. The

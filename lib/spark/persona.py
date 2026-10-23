@@ -37,8 +37,12 @@ SENDS = (
     # prefix as spark mcp call lines -- never a schema or a description
     ("line", "the names, required arguments and titles of the MCP tools spark mcp last listed, "
              "1.5 kB at most"),
-    ("chat", "the conversation: soul, remembered facts, earlier turns"),
+    ("chat", "the conversation: soul, remembered facts, earlier turns -- with a /read's turn, the part "
+             "of the file that answered, a span that looks like a secret held back"),
     ("do", "each step's output, last 4 kB -- a span that looks like a secret is held back"),
+    # v1.100: what a step changed, as spark read it -- names, never text
+    ("do", "the names of the files a step changed: in a sandbox every path that moved in the copy, "
+           "outside one the paths the step names -- never a file's text"),
     ("do", "an MCP tool's result, its last 4 kB -- a span that looks like a secret is held back"),
     # a step refused for an option: spark reads that command's own man
     # page (never runs the tool) and the lines about the option go back
@@ -1260,9 +1264,11 @@ MODE_EXPLAIN = (
     "The user pasted the output of a command that did not do what they wanted. A Command: line, when "
     "present, is the exact command that ran and Exit: its status -- read them first: a typo in the "
     "command is corrected, a permission is named, a service's log is where its own message points. Say "
-    "in two or three short lines what happened and what to do next, with the exact command to run on "
-    "its own line, indented four spaces, when there is one. Plain text for a terminal -- no markdown "
-    "marks. No preamble."
+    "in two or three short lines what happened and what to do next. When a command fixes it, put that "
+    "exact command on its own line, indented four spaces. When the fix is a change inside a file -- "
+    "code, a config line -- name the file and the change instead, with no command: spark's own "
+    "commands are for spark's own failures. Plain text for a terminal -- no markdown marks. No "
+    "preamble."
 )
 MODE_CHAT = (
     "This is a conversation, not the shell prompt. Talk with the user the way they talk to you: answer in "
@@ -1327,7 +1333,10 @@ MODE_DO = (
     "it or say so. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
     "permissions. Never propose a command that needs interactive input, and never repeat a step whose "
     "output already answers the goal. A step that writes a file may be a here-document over several "
-    "lines; every other step is one line."
+    "lines; every other step is one line. Write each command for the OS and the tools the first line "
+    "names. After a step that can write, the next message says which files it changed: a step meant "
+    "to change a file that changed nothing did not work, so try another way. To change part of a "
+    "file, write the whole file with a here-document, or escape [ ] . * in a sed pattern."
 )
 # A mode is named for what spark DOES. "answer" was called "ask" until
 # v1.16, which read backwards beside `spark ask` (contract 12), where
@@ -1462,6 +1471,11 @@ READ_SCHEMA = {
     "required": ["language", "kind"],
 }
 REVIEW = "Review this."
+# A rewrite of the whole text that came back as part of it, unchanged, is
+# a deletion or a part left as it was; the reply alone cannot tell, so the
+# editor says so once and asks again (edit._place, "part")
+EDIT_PART_AGAIN = ("That reply was part of the text, unchanged: reply with the whole text with the change "
+                   "asked, or with that same part again if the instruction removes the rest.")
 # The questioner (spark ask, contract 12). The law is enforced after the
 # model, not by it -- a line that is not a question never reaches the
 # reader -- but a brief that asks for the right shape wastes fewer
@@ -1550,12 +1564,14 @@ MODE_DRILL_ITEMS = (
 # was shown is dropped, so silence is the honest answer when nothing matches.
 MODE_WATCH = (
     "You watch a live stream -- log lines, build output, a running process -- for the one "
-    "thing the reader named. Most of what flows past does not matter, and you say nothing "
-    "about it. When a line matches what they asked for, reply with ONE line: a few words of "
-    "your own, then the matching line's own text between double quotes, word for word. "
-    "Every quote is checked against the lines you were shown, and a line whose quote is not "
-    "among them is thrown away -- so quote what is really there, never what you expect to "
-    "see. A line that only reports progress or state -- a task started, a slot chosen, a "
+    "thing the reader named. The lines come numbered, [1] the oldest. Most of what flows "
+    "past does not matter, and you say nothing about it. When a line matches what they asked "
+    "for, reply with ONE line that starts with [N], that line's number as the window shows "
+    "it, then a few words of your own on what happened. Do not copy the line: spark prints "
+    "it from the stream, and a number the window does not hold prints nothing -- so name the "
+    "line that is really there, never the one you expect to see, and never one that only "
+    "comes close. A line that only reports progress or "
+    "state -- a task started, a slot chosen, a "
     "request served, a file opened -- is not a match unless the reader asked for exactly "
     "that; it is silence. No preamble, no summary, no 'nothing yet': when nothing matches, "
     "answer with nothing at all. Silence is the normal, healthy state.")
@@ -1694,7 +1710,10 @@ PROOF_HEADS = ("test", "[", "ls", "stat", "grep", "wc", "file", "du", "df",
                # v1.53 (the maintainer's word): heads that only read, so a
                # model's `!` on them can be lowered -- their writing and
                # never-returning options are denied below
-               "ps", "groups", "id", "uname", "dmesg", "free", "uptime", "lsof")
+               "ps", "groups", "id", "uname", "dmesg", "free", "uptime", "lsof",
+               # v1.100: sort only reads (its output file and its program
+               # are denied below), so `du -sh * | sort -rh | head` is read-only
+               "sort")
 PROOF_PAIRS = (("git", ("status", "log", "diff", "show", "ls-files")),
                ("systemctl", ("is-active", "is-enabled", "status")),
                ("sv", ("status", "check")),
@@ -1740,7 +1759,49 @@ PROOF_DENIED = (
     # v1.56 (the maintainer's word): file compiles a magic file into NAME.mgc
     ("-C", ("file",)),          # file -C -m NAME: writes NAME.mgc
     ("--compile", ("file",)),
+    # v1.100: sort's -o and --output are denied above, for every head
+    ("--compress-program", ("sort",)),   # sort --compress-program=PROG: runs PROG on its temp files
 )
+
+
+# v1.100: the proof heads whose every option only reads. A glob or a
+# brace the shell expands can bring in a word that starts with -: on any
+# other head that word can be an option the list above denies (`sort *`
+# beside a file named -oMakefile writes Makefile, `git diff *` beside one
+# named --output=x writes x), so there a glob or a brace before `--` is
+# no proof. On these it still reads. A named line, so it can be argued with
+GLOB_READS = ("du", "ls", "wc", "grep", "head", "stat", "readlink", "cmp", "test", "[", "which")
+
+
+def _expands(command):
+    """Does a word of `command`, before a `--` word, hold an unquoted glob
+    or brace (* ? [ {) -- one the shell expands into words of its own? A
+    backslash escapes one character; a quote opens a span the shell
+    leaves whole. The `--` is read as the program reads it, quotes gone."""
+    quote, esc, word = "", False, ""
+    for ch in command + " ":
+        if esc:
+            word, esc = word + ch, False
+        elif quote:
+            if ch == quote:
+                quote = ""
+            elif ch == "\\" and quote == '"':
+                esc = True
+            else:
+                word += ch
+        elif ch == "\\":
+            esc = True
+        elif ch in "'\"":
+            quote = ch
+        elif ch.isspace():
+            if word == "--":
+                return False
+            word = ""
+        elif ch in "*?[{":
+            return True
+        else:
+            word += ch
+    return False
 
 
 def _denied(opt, arg):
@@ -1766,8 +1827,9 @@ def proof_ok(command):
     allowlisted head word, no compound, no redirect, no control
     character, nothing dangerous, and none of PROOF_DENIED anywhere in
     its argv (`git diff --output PATH` truncates PATH; `head SECRET
-    /nope` prints the secret and exits 1). A proof that is not read-only
-    is refused: never printed, never run."""
+    /nope` prints the secret and exits 1), and no glob or brace before
+    `--` past GLOB_READS (_expands). A proof that is not read-only is
+    refused: never printed, never run."""
     c = (command or "").strip()
     if not c or is_dangerous(c) or re.search(r"[;&|<>`$]", c):
         return False
@@ -1782,6 +1844,8 @@ def proof_ok(command):
     head = w[0]
     if head not in PROOF_HEADS and not any(
             head == h and len(w) > 1 and w[1] in subs for h, subs in PROOF_PAIRS):
+        return False
+    if head not in GLOB_READS and _expands(c):
         return False
     for opt, heads in PROOF_DENIED:
         if heads and head not in heads:

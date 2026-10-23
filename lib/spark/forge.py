@@ -131,6 +131,46 @@ def _written(path):
         return False
 
 
+def _source(m):
+    """The file text a record carries for the model -- a chat /read's
+    `source`, held back and bounded when it was kept -- or ""."""
+    src = m.get("source") if m.get("role") == "user" else None
+    return src if isinstance(src, str) else ""
+
+
+def _fit(recs):
+    """Thread records, oldest first, as chat messages within
+    HISTORY_MAX_CHARS. A turn that read a file sends the file's text
+    after its words, as the turn itself did, so the turn after it
+    answers from the file too. Over the budget the oldest files go
+    first, their words and answers kept; then the oldest pairs whole (a
+    user and the answer after it)."""
+    srcs = [_source(m) for m in recs]
+    total = sum(len(m["text"]) for m in recs) + sum(len(x) + 2 for x in srcs if x)
+    for i, x in enumerate(srcs):
+        if total <= HISTORY_MAX_CHARS:
+            break
+        if x:
+            total -= len(x) + 2
+            srcs[i] = ""
+    msgs = [{"role": m["role"], "content": m["text"] + "\n\n" + x if x else m["text"]} for m, x in zip(recs, srcs)]
+    first = 0
+    while first < len(msgs) and total > HISTORY_MAX_CHARS:
+        total -= len(msgs[first]["content"])
+        first += 1
+        if first < len(msgs) and msgs[first]["role"] == "assistant":
+            total -= len(msgs[first]["content"])
+            first += 1
+    return msgs[first:]
+
+
+def said_history(said):
+    """This chat's own turns (SAID, in memory) as chat messages, capped
+    as a thread's are: what a turn goes on with when no thread keeps the
+    conversation -- history off, or a client not logged in yet."""
+    return _fit([m for m in said if m.get("role") in ("user", "assistant") and isinstance(m.get("text"), str)])
+
+
 class Store:
     """One user's sealed thread store: the directory and the data key.
     Every read decrypts, every write seals; a caller without the key has
@@ -324,7 +364,7 @@ class Store:
         pairs dropped until at most HISTORY_MAX_CHARS remain."""
         if not tid:
             return []
-        msgs, total, bad, cut = [], 0, 0, False
+        recs, words, bad, cut = [], 0, 0, False
         try:
             for rec in vault.newest_sealed_records(self._path(tid), self.dk, "thread", tid):
                 if rec is None:
@@ -340,11 +380,13 @@ class Store:
                     continue
                 if not isinstance(m, dict) or m.get("role") not in ("user", "assistant") or not isinstance(m.get("text"), str):
                     continue
-                msgs.append({"role": m["role"], "content": m["text"]})
-                total += len(m["text"])
-                # Include the user at the boundary so trimming drops its
-                # answer with it, just as the whole-thread reader did.
-                if total > HISTORY_MAX_CHARS and m["role"] == "user":
+                recs.append(m)
+                # the words alone decide how far back to read: a file a
+                # record carries can be left out, its words cannot. Include
+                # the user at the boundary so trimming drops its answer
+                # with it, just as the whole-thread reader did.
+                words += len(m["text"])
+                if words > HISTORY_MAX_CHARS and m["role"] == "user":
                     break
         except vault.SealError:
             self.refused = getattr(self, "refused", 0) + 1
@@ -352,21 +394,15 @@ class Store:
             return []
         except OSError:
             return []
-        msgs.reverse()
-        first = 0
-        while first < len(msgs) and total > HISTORY_MAX_CHARS:
-            total -= len(msgs[first]["content"])
-            first += 1
-            if first < len(msgs) and msgs[first]["role"] == "assistant":
-                total -= len(msgs[first]["content"])
-                first += 1
+        recs.reverse()
+        msgs = _fit(recs)
         if cut:
-            while first < len(msgs) and msgs[first]["role"] == "assistant":
-                first += 1
+            while msgs and msgs[0]["role"] == "assistant":
+                msgs.pop(0)
             print("! older thread context omitted -- input limit reached", file=sys.stderr)
         if bad:
             skipped_line(self._path(tid), tid, bad)
-        return msgs[first:]
+        return msgs
 
     def pick(self, cfg, more):
         if cfg.history <= 0:
@@ -764,18 +800,33 @@ def _peer_req(cfg, method, path, body=None):
         return 0, None
 
 
-def peer_newest(cfg):
-    """The newest thread of the logged-in user's OWN store on the peer
-    FORGE, as (tid, chat history) -- what a client's `??` continues, so
-    the box's prompt, this prompt and the page share one thread (one
-    identity, every door). None on any trouble: the local path answers
-    as before."""
+def peer_head(cfg):
+    """(tid, turns) of the newest thread of the logged-in user's OWN store
+    on the peer FORGE, ("", 0) when that store has none, None on any
+    trouble or off a client."""
     if not cfg.client:
         return None
     st, d = _peer_req(cfg, "GET", "/api/threads?n=1")
-    if st != 200 or not d or not d.get("threads"):
+    if st != 200 or not isinstance(d, dict):
         return None
-    tid = d["threads"][0].get("id")
+    rows = d.get("threads") or []
+    if not rows or not isinstance(rows[0], dict):
+        return "", 0
+    turns = rows[0].get("turns")
+    return str(rows[0].get("id") or ""), turns if isinstance(turns, int) else 0
+
+
+def peer_newest(cfg, head=None):
+    """The newest thread of the logged-in user's OWN store on the peer
+    FORGE, as (tid, chat history) -- what a client's `??` continues, so
+    the box's prompt, this prompt and the page share one thread (one
+    identity, every door). `head` is peer_head's answer when the caller
+    asked already. None on any trouble: the local path answers as
+    before."""
+    head = peer_head(cfg) if head is None else head
+    if not head or not head[0]:
+        return None
+    tid = head[0]
     st, d = _peer_req(cfg, "GET", "/api/threads/%s" % tid)
     if st != 200 or not d:
         return None
@@ -787,6 +838,49 @@ def peer_newest(cfg):
         if msgs and msgs[0]["role"] == "assistant":
             total -= len(msgs.pop(0)["content"])
     return tid, msgs
+
+
+# state/line-seen (0600): where a client's last line turn landed, and the
+# FORGE's newest thread then -- `local TID PEER_TID TURNS` or `peer TID`.
+# A client's `??` goes on with its own last turn while the FORGE's newest
+# is that same thread at that same count: nothing happened there since.
+# Once it moved (the page, the box's prompt, another client), `??` goes on
+# with the FORGE's. No clock is compared: two machines' clocks and zones
+# need not agree.
+LINE_SEEN = "line-seen"
+
+
+def line_saw(cfg, where, tid, head=None):
+    """A client's line turn landed `where` (local | peer) on `tid`; for a
+    local one, `head` is the FORGE's newest then (peer_head), asked here
+    when not given. Quiet on any trouble: the turn is answered."""
+    if not cfg.client or not tid:
+        return
+    if where == "local":
+        head = peer_head(cfg) if head is None else head
+        line = "local %s %s %d\n" % (tid, (head[0] or "-") if head else "?", head[1] if head else 0)
+    else:
+        line = "peer %s\n" % tid
+    try:
+        vault.write_private(os.path.join(state_dir(), LINE_SEEN), line.encode("utf-8"))
+    except OSError:
+        log_exc("line seen")
+
+
+def line_mine(head):
+    """This client's own last line thread, when `??` goes on with it: the
+    last turn landed here, and the FORGE's newest (`head`) is still what it
+    was then, or the FORGE did not answer. None otherwise."""
+    try:
+        with open(os.path.join(state_dir(), LINE_SEEN), encoding="utf-8") as f:
+            words = f.read().split()
+    except OSError:
+        return None
+    if len(words) != 4 or words[0] != "local" or not valid_id(words[1]):
+        return None
+    if words[2] != "?" and head is not None and (words[2] != (head[0] or "-") or words[3] != str(head[1])):
+        return None             # the FORGE's newest moved since: it goes on there
+    return words[1]             # unmoved, or not known then or now: this client's own turn
 
 
 def peer_append(cfg, tid, role, text, **fields):
@@ -1052,7 +1146,10 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     st = store if store is not None else local_store(provision=cfg.history > 0)
     if thread is None:
         thread = st.new_thread(cfg)
-    s = session.Session(cfg, mode, shell, cwd, st.history(thread) if thread else None, brain, mem=mem)
+    # no thread keeps this conversation (history off, a client not logged
+    # in): the chat's own turns in memory are what it goes on with
+    hist = st.history(thread) if thread else (said_history(said) if said else None)
+    s = session.Session(cfg, mode, shell, cwd, hist, brain, mem=mem)
     tap = on_delta or (lambda d: None)
     collected = []
 
@@ -1178,9 +1275,10 @@ CHAT_USAGE = """%s chat -- talk with the model
 # exit while the prompt lives on -- a first-session trap.
 QUIT_WORDS = ("/q", "/quit", "/exit", ":q", ":quit", ":wq", "quit", "exit", "bye")
 
-# This chat's own turns since it began (or since /new), in memory only:
-# what /copy and /save take when no thread keeps them (SPARK_HISTORY=0)
-# -- the replies on the screen this session, gone when the chat ends.
+# This chat's own turns since it began (or since /new), in memory only,
+# a /read's file with its turn: when no thread keeps them (SPARK_HISTORY=0,
+# a client not logged in) they are what a turn goes on with
+# (said_history) and what /copy and /save take -- gone when the chat ends.
 SAID = []
 CONTINUING_COLS = 79    # the opening line fits 80 columns
 SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
@@ -1208,7 +1306,9 @@ def _land(cfg, thread, asked, said, user=None, assistant=None):
     if thread:
         append(cfg, thread, "user", asked, **(user or {}))
         append(cfg, thread, "assistant", said, **(assistant or {}))
-    SAID.extend([{"role": "user", "text": asked}, {"role": "assistant", "text": said}])
+    src = (user or {}).get("source")
+    SAID.extend([dict({"role": "user", "text": asked}, **({"source": src} if src else {})),
+                 {"role": "assistant", "text": said}])
     return thread
 
 
@@ -1995,8 +2095,8 @@ def _slash_read(cfg, thread, args):
     if thread is None:
         thread = new_thread(cfg)      # made first: the turn record names it, so /last shows this turn
     try:
-        readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start, thread=thread,
-                       on_read=readmod.told(busy))
+        _n, part = readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start, thread=thread,
+                                  on_read=readmod.told(busy))
     except (readmod.Refused, wire.BrainError) as e:
         busy.stop()
         if wrap.started:
@@ -2020,8 +2120,17 @@ def _slash_read(cfg, thread, args):
     if face:
         face.settle("pleased", play=True)       # its score may play while chat> waits
         FACE[0] = face
-    return _land(cfg, thread, ("/read " + " ".join(args)).strip(), "".join(out.text).rstrip("\n"),
-                 {"mode": "read", "cwd": os.getcwd()}, {"kind": "read"})
+    # the part that answered rides the exchange, held back as the read
+    # held it: the turn after answers from the file, not from the kept
+    # lines alone. The `[part N of M]` line is the screen's: the file's
+    # own line names the part, so a later reply never copies the header
+    said = "".join(out.text).rstrip("\n")
+    head = re.match(r"\[(part \d+ of \d+)\]\n", said)
+    if head:
+        said = said[head.end():]
+    source = "File %s%s:\n%s" % (paths[0], ", " + head.group(1) if head else "", part)
+    return _land(cfg, thread, ("/read " + " ".join(args)).strip(), said,
+                 {"mode": "read", "cwd": os.getcwd(), "source": source}, {"kind": "read"})
 
 
 def _slash_do(cfg, thread, args):

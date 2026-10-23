@@ -10,15 +10,17 @@
 #                     are not in the source is dropped (text.Gate), and
 #                     so is a line that quotes nothing (text.UNQUOTED):
 #                     an unquoted sentence about a source is the model's
-#                     own knowledge wearing the source's clothes.
+#                     own knowledge wearing the source's clothes. A line
+#                     that is the source's own words, copied whole,
+#                     quotes it (text.Ground.verbatim).
 #   when it fails     when the source does not answer, the whole reply is
 #                     one line showing the source's own opening words --
 #                     composed here, never asked of the model: no "the
 #                     text does not say, but generally ...". On stderr,
 #                     exit 1, stdout untouched: a client tells "no
 #                     answer" from "an answer" by the exit code.
-#   the reading       one request a read. The answer's first line is the
-#                     model's reading of the source, `[Language, kind]`,
+#   the reading       one request a part read. The answer's first line is
+#                     the model's reading of the source, `[Language, kind]`,
 #                     taken out here before the fence and the gate
 #                     (Reading): at a terminal stderr shows it
 #                     (`reading ... English, essay`), stdout never sees
@@ -34,11 +36,14 @@
 #                     question's request then processes only its own.
 #   caps              READ_MAX chars a part; past that the source is
 #                     parts (each carrying PART_OVERLAP chars of the one
-#                     before) and `--part N` reads one -- refused with
-#                     the count otherwise -- and the answer's first line
-#                     names the part it read, always: an answer from
-#                     part 2 that does not say so cannot be told from an
-#                     answer about the whole.
+#                     before) and `--part N` reads one. Without it spark
+#                     picks: the parts ranked here by the question's
+#                     words (ranked: BM25, no model), the best read
+#                     first and the next only when it does not answer,
+#                     TRIES at most -- a bare question reads part 1.
+#                     The answer's first line names the part it read,
+#                     always: an answer from part 2 that does not say so
+#                     cannot be told from an answer about the whole.
 #   ledger            kind `read`: the questions asked of this source
 #                     (--name records them, --ledger lists), so a second
 #                     reader sees what has been asked. Nothing
@@ -54,7 +59,9 @@
 #                     A span that looks like a secret (text.SOURCE_SHAPES)
 #                     is held back first: the model sees [held].
 
+import math
 import os
+import re
 import sys
 import time
 
@@ -63,6 +70,11 @@ from . import text as textmod
 
 READ_MAX = 16000        # the source one part reads
 PART_OVERLAP = 400      # a part carries this much of the one before it
+# Parts one question reads when spark picks them: each is a whole
+# request, about 10 s of a 16000-character prefill on a CPU box, so the
+# second is read only when the first does not answer, and no third.
+TRIES = 2
+K1, B = 1.2, 0.75       # BM25's saturation and length weight, the textbook pair
 MODE = "read-source"    # persona.MODES key
 READ_TOKENS = 500
 READ_TIMEOUT = 180
@@ -99,6 +111,48 @@ def part_slice(data, n):
     opens with the last PART_OVERLAP chars of the one before it."""
     start = (n - 1) * (READ_MAX - PART_OVERLAP)
     return data[start:start + READ_MAX]
+
+
+_CAMEL = re.compile(r"([a-z0-9])([A-Z])")
+
+
+def _terms(s):
+    """The words a part is ranked by: intake's one tokenizer, a camelCase
+    word split first (sshd_config's PasswordAuthentication holds
+    "password")."""
+    from . import intake        # here: a source of one part never pays the import
+    return intake.words(_CAMEL.sub(r"\1 \2", s))
+
+
+def ranked(data, question):
+    """The parts of `data` to read for `question`, best first: BM25 over
+    the parts by the question's words, ties to the earlier part, a part
+    holding none of them left out. One part, a bare question, or words
+    no part holds (another language) is [1]."""
+    total = parts_of(len(data))
+    asked = list(dict.fromkeys(_terms(question)))
+    if total == 1 or not asked:
+        return [1]
+    counts, lens = [], []
+    for n in range(1, total + 1):
+        tf = {}
+        words = _terms(part_slice(data, n))
+        for w in words:
+            tf[w] = tf.get(w, 0) + 1
+        counts.append(tf)
+        lens.append(len(words) or 1)
+    avg = sum(lens) / float(total)
+    scores = []
+    for i, tf in enumerate(counts):
+        score = 0.0
+        for w in asked:
+            if w not in tf:
+                continue
+            df = sum(1 for c in counts if w in c)
+            idf = math.log(1 + (total - df + 0.5) / (df + 0.5))
+            score += idf * tf[w] * (K1 + 1) / (tf[w] + K1 * (1 - B + B * lens[i] / avg))
+        scores.append((score, i + 1))
+    return [n for score, n in sorted(scores, key=lambda s: (-s[0], s[1])) if score > 0] or [1]
 
 
 def opening(part):
@@ -203,6 +257,16 @@ def told(busy):
     return tell
 
 
+def turned(busy):
+    """What a turn to the next part does at a terminal: the pulse
+    cleared, then `reading ... part 5 of 6, part 4 does not answer`
+    (a tty only); the next request starts the pulse again."""
+    def tell(part, nxt, total):
+        busy.stop()
+        session._tell("%s part %d of %d, part %d does not answer\n" % (session.READING_LINE, nxt, total, part))
+    return tell
+
+
 def _args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
     opts = {"name": "", "part": None, "ledger": None, "warm": False}
@@ -294,7 +358,7 @@ def cmd_read(args):
     busy = textmod.wait("read")
     try:
         answer(config.load(), data, " ".join(words), _Waited(sys.stdout, busy), want, name,
-               on_ask=busy.start, on_read=told(busy))
+               on_ask=busy.start, on_read=told(busy), on_next=turned(busy))
     except Refused as e:
         busy.stop()
         if e.code == 2:
@@ -333,25 +397,23 @@ class Refused(Exception):
         self.hint, self.code = hint, code
 
 
-def _cut(data, want):
-    """(part, want, total, held, names): the source held back -- every
+def _cut(data, want, question=""):
+    """(data, plan, total, held, names): the source held back -- every
     span that looks like a secret becomes [held] before the parts, the
-    gate and the model see it -- and cut to the part `want`. Refused for
-    a long source with no part named (exit 1) and for a part that is not
-    there (exit 2), before anything is sent."""
+    gate and the model see it -- and the parts to read, in order: the
+    part `want` alone when one is named, else the best TRIES for
+    `question` (ranked). Refused for a part that is not there (exit 2),
+    before anything is sent."""
     spans, names = textmod.held_spans(data)
     held = len(spans)
     if held:
         data = textmod.hold_spans(data, spans)
     total = parts_of(len(data))
-    if total > 1 and want is None:
-        raise Refused("the source is %d characters, %d parts of %d -- read one: --part N"
-                      % (len(data), total, READ_MAX))
     if want is not None and want > total:
         raise Refused("the source is %d part%s; there is no part %d"
                       % (total, "" if total == 1 else "s", want), 2)
-    want = want or 1
-    return part_slice(data, want), want, total, held, names
+    plan = [want] if want is not None else ranked(data, question)[:TRIES]
+    return data, plan, total, held, names
 
 
 def context_of(part, question=""):
@@ -362,25 +424,52 @@ def context_of(part, question=""):
     return "Source:\n" + part + "\n\n" + ASKS + ((" " + question) if question else "")
 
 
-def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=None, on_read=None):
+def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=None, on_read=None,
+           on_next=None):
     """Contract 11's core, one law for every caller (spark read, the
-    chat's /read): the source `data` held back, cut to the part `want`,
-    asked `question` (bare: what it covers), and every line of the
-    answer through the gate before it reaches `stream` -- a line that
-    does not quote the source, or whose quotes are not in it, never gets
-    there. The answer's first line is the model's reading of the source,
-    taken out before the gate (Reading) and told to `on_read(reading)`.
-    `on_ask()` runs once, right before the request. `thread` (the chat's
-    /read) rides the turn record, so `/last` there finds the words.
-    Returns the gate's kept count, never 0: nothing kept is Refused, with
-    the source's own opening words. Refused before anything is sent for
-    a part that is not there; wire.BrainError and KeyboardInterrupt pass
-    through, the stream closed first."""
-    part, want, total, held, names = _cut(data, want)
-    shell = os.path.basename(os.environ.get("SHELL") or "sh")
+    chat's /read): the source `data` held back, cut to the part `want`
+    (none named: the parts ranked for the question, the next read only
+    when one does not answer), asked `question` (bare: what it covers),
+    and every line of the answer through the gate before it reaches
+    `stream` -- a line that does not quote the source, or whose quotes
+    are not in it, never gets there. The answer's first line is the
+    model's reading of the source, taken out before the gate (Reading)
+    and told to `on_read(reading)`, once. `on_ask()` runs right before
+    each request, `on_next(part, nxt, total)` between two. `thread` (the
+    chat's /read) rides the turn record, so `/last` there finds the
+    words. Returns (n, part): the number and the text, held back, of the
+    part that answered -- what the chat's thread keeps for the turn
+    after. Nothing kept is Refused, with the source's own opening words,
+    or with the parts read and the remedy. Refused before anything is sent for a part that is
+    not there; wire.BrainError and KeyboardInterrupt pass through, the
+    stream closed first."""
+    data, plan, total, held, names = _cut(data, want, question)
     text = question.strip() or "What does this source cover?"
     if held:        # said once nothing can refuse any more: the source is on its way
         print(textmod.held_line(held, names), file=sys.stderr, flush=True)
+    for i, n in enumerate(plan):
+        if i and on_next:
+            on_next(plan[i - 1], n, total)
+        part = part_slice(data, n)
+        if _ask(cfg, part, n, total, text, stream, name=name, on_ask=on_ask,
+                thread=thread, on_read=on_read if i == 0 else None, held=held):
+            return n, part
+    if total == 1 or len(plan) == total:
+        raise Refused('the source does not answer -- it opens: "%s"' % opening(part_slice(data, 1)))
+    if want is not None:
+        raise Refused('part %d of %d does not answer -- it opens: "%s"'
+                      % (want, total, opening(part_slice(data, want))))
+    which = " and ".join(str(n) for n in plan)
+    raise Refused("part%s %s of %d %s not answer -- read another: --part N"
+                  % ("s" if len(plan) > 1 else "", which, total, "do" if len(plan) > 1 else "does"))
+
+
+def _ask(cfg, part, want, total, text, stream, name="", on_ask=None, thread=None, on_read=None, held=0):
+    """One request: `part` (part `want` of `total`) asked `text`, the
+    answer through the gate to `stream`, the turn recorded (`held` the
+    source's held spans), the ledger written when a line was kept.
+    Returns the kept count."""
+    shell = os.path.basename(os.environ.get("SHELL") or "sh")
     if on_ask:
         on_ask()
 
@@ -419,9 +508,6 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
              kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed,
              **dict(first_ms, **({"held": held} if held else {}), **({"thread": thread} if thread else {})))
-    if not gate.kept:
-        where = "part %d of %d" % (want, total) if total > 1 else "the source"
-        raise Refused('%s does not answer -- it opens: "%s"' % (where, opening(part)))
     return gate.kept
 
 
@@ -431,9 +517,17 @@ def warm(cfg, data, want=None):
     for one token. The engine's slot then holds the source, and the
     question's request processes only its own tokens. Nothing is
     printed, the turn is kind `warm`, numbers only, and no ledger record
-    is written. Refused as answer() is for a part that is not there.
-    Returns the part count."""
-    part, want, total, held, _names = _cut(data, want)
+    is written. Refused as answer() is for a part that is not there, and
+    for a long source with no part named (exit 1, nothing sent): the
+    part a question reads is the one its words pick, and a warm has no
+    words, so a 16 kB prefill of part 1 would go mostly unused. Returns
+    the part count."""
+    data, plan, total, held, _names = _cut(data, want)
+    if total > 1 and want is None:
+        raise Refused("the source is %d characters, %d parts of %d -- read one: --part N"
+                      % (len(data), total, READ_MAX))
+    want = plan[0]
+    part = part_slice(data, want)
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     t0 = time.monotonic()
     s = session.Session(cfg, MODE, shell, "", role="ember")

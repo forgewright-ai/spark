@@ -1532,7 +1532,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, "bad", ID_HINT)
         if not st.exists(tid):
             return self._error(404, "missing", "no thread %s" % tid)
-        return self._json(200, {"id": tid, "messages": st.load(tid)})
+        # a chat's /read keeps its file's text on the record for the model
+        # (`source`, forge._fit); the page shows the words alone, so
+        # the file's text never travels to the browser
+        msgs = [{k: v for k, v in m.items() if k != "source"} for m in st.load(tid)]
+        return self._json(200, {"id": tid, "messages": msgs})
 
     def api_threads_create(self, body):
         """POST /api/threads: a KEPT thread in the requester's OWN store,

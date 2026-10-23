@@ -214,10 +214,12 @@ it on a new install. What each command sends:
   may be a network client of its own: `spark stats --sends` does not
   count what it sends on. A credential it asks for goes to it alone,
   never to the model.
-- `chat`: your soul, your remembered facts and the conversation.
-- `do`: each step's output (the last 4 kB) and the folder's path. After
-  a refused option, a few lines of that command's man page. A tool's
-  result, the last 4 kB.
+- `chat`: your soul, your remembered facts and the conversation, with
+  the part of a file that answered each `/read` in it.
+- `do`: each step's output (the last 4 kB) and the folder's path, and
+  the names of the files the step changed: in `--sandbox`, every file
+  that changed in the copy. After a refused option, a few lines of that
+  command's man page. A tool's result, the last 4 kB.
 - `explain`: the piped text, the last 6 kB.
 - `steps`: your words and the tools you pipe in, their names,
   arguments and titles, up to 16 kB. Never a tool's description or a

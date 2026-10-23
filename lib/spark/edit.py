@@ -7,6 +7,8 @@
 # unless the client names one: an editor, a pipe or a script is a client
 # with nothing to install. The turn record is numbers only.
 
+import difflib
+import io
 import os
 import re
 import sys
@@ -136,6 +138,230 @@ def _printable_feed(feed, data):
     when the text on stdin has one (a file with CRLF line ends)."""
     p = textmod.Printable(keep="\t\n\r" if "\r" in (data or "") else "\t\n")
     return lambda chunk: feed(p.feed(chunk))
+
+
+_WORD = re.compile(r"\w{3,}")
+_HEADING = re.compile(r"(#{1,6}) ")
+PLACE_LIKE = 0.6        # a reply's unit is like one of the text's at this similarity of its characters,
+PLACE_WORDS = 0.5       # or this share of its words in that unit...
+PLACE_CLEAR = 0.2       # ...and only when that beats the next best by this much
+
+
+def _units(text, lines=False):
+    """The text's units, as (start, end) offsets: each run of non-blank
+    lines (a paragraph), or each non-blank line, from the start of its
+    first line to the end of its last (the line break not included)."""
+    out, start, end, pos = [], None, 0, 0
+    for line in text.splitlines(keepends=True):
+        if line.strip():
+            if start is None:
+                start = pos
+            end = pos + len(line.rstrip("\r\n"))
+            if lines:
+                out.append((start, end))
+                start = None
+        elif start is not None:
+            out.append((start, end))
+            start = None
+        pos += len(line)
+    if start is not None:
+        out.append((start, end))
+    return out
+
+
+def _clear(scores):
+    """The index whose score is clearly the best, at least PLACE_CLEAR
+    above the second, or None."""
+    order = sorted(range(len(scores)), key=lambda k: -scores[k])
+    if not order or scores[order[0]] <= 0:
+        return None
+    second = scores[order[1]] if len(order) > 1 else 0.0
+    return order[0] if scores[order[0]] - second >= PLACE_CLEAR else None
+
+
+def _anchor(unit, texts, firsts, words):
+    """The index of the text's unit this reply unit rewrites, or None when
+    that is not sure: its first line equal to exactly one unit's first
+    line, else a unit clearly the most like it, by its characters or by
+    the share of its words, with the other measure not clearly pointing
+    elsewhere. A tie never places it."""
+    first = unit.split("\n", 1)[0].strip()
+    if _WORD.search(first) and firsts.count(first) == 1:
+        return firsts.index(first)
+    flat = " ".join(unit.split())
+    chars = [difflib.SequenceMatcher(None, flat, " ".join(t.split()), autojunk=False).ratio() for t in texts]
+    mine = set(_WORD.findall(unit.lower()))
+    share = [len(mine & w) / len(mine) if len(mine & w) >= 3 else 0.0 for w in words]
+    by_chars, by_words = _clear(chars), _clear(share)
+    if by_chars is not None and by_words not in (None, by_chars):
+        return None
+    if by_chars is not None and chars[by_chars] >= PLACE_LIKE:
+        return by_chars
+    if by_words is not None and share[by_words] >= PLACE_WORDS:
+        return by_words
+    return None
+
+
+def _header(first):
+    """A unit's first line that opens a section: ("md", level) for a
+    markdown heading, ("code", indentation) for a line ending in ':' or
+    '{'; None for anything else."""
+    m = _HEADING.match(first)
+    if m:
+        return "md", len(m.group(1))
+    if first.rstrip().endswith((":", "{")):
+        return "code", len(first) - len(first.lstrip())
+    return None
+
+
+def _opens(first, head):
+    """Does this first line end the section `head` opened: a heading at
+    its level or above, or code no deeper than its header?"""
+    if head[0] == "md":
+        m = _HEADING.match(first)
+        return bool(m) and len(m.group(1)) <= head[1]
+    return len(first) - len(first.lstrip()) <= head[1]
+
+
+def _section(texts, i):
+    """The end of the section unit i opens (_header): the next unit that
+    opens one at its level or above. A closing bracket at the header's
+    own indentation belongs to the section."""
+    head = _header(texts[i].split("\n", 1)[0])
+    for k in range(i + 1, len(texts)):
+        first = texts[k].split("\n", 1)[0]
+        if _opens(first, head):
+            closing = head[0] == "code" and first.lstrip()[:1] in "}])" and len(first) - len(first.lstrip()) == head[1]
+            return k + 1 if closing else k
+    return len(texts)
+
+
+def _same(unit):
+    """A unit as compared for being the text's own, unchanged: its lines,
+    trailing space aside."""
+    return tuple(line.rstrip() for line in unit.splitlines())
+
+
+def _part_again(data, first, again):
+    """The re-ask's verdict on a reply that was part of the text,
+    unchanged ("part"): the same part again is the deletion it is; a reply
+    that is not part of the text goes through the placement; another part
+    is not sure."""
+    whole, how = _place(data, again)
+    if how != "part":
+        return whole, how
+    if [_same(again[a:b]) for a, b in _units(again)] == [_same(first[a:b]) for a, b in _units(first)]:
+        return again, "whole"
+    return None, "unplaced"
+
+
+def _place(data, reply):
+    """A rewrite of the whole text, made sure to be whole: (text, how).
+
+    A small model asked to change one part of a text often answers with
+    that part alone, and an editor splices the reply over the whole file,
+    so the rest would be deleted. A placement is sure or does nothing. The
+    units are paragraphs, or lines when the text has no blank line. A
+    reply that is fewer of the text's own units, unchanged, is a deletion
+    or a part left untouched: ("part"), for the caller to ask once more
+    (_part_again). The reply is the whole ("whole") when it is all of the
+    text's units unchanged, when it has about as many units as the text,
+    when it spans the text's first unit to its last, when it holds a unit
+    from outside its own run (a merge: not a local edit), or when it is
+    placed nowhere and draws on most of the text (a new text).
+    A run of the text's units, each found for sure (_anchor), goes back in
+    their place ("spliced") when nothing of the text is missing inside it
+    and nothing new sits at an edge the text goes on past. A reply that
+    opens with a header the text holds once (a heading, a `def ...:`) and
+    stays inside that header's section replaces the section. Anything else
+    is not sure: (None, "unplaced"), and nothing is printed."""
+    src = _units(data)
+    lines = len(src) < 2
+    if lines:
+        src = _units(data, lines=True)
+    rep = _units(reply, lines=lines)
+    if len(src) < 2 or not rep:
+        return reply, "whole"
+    texts = [data[a:b] for a, b in src]
+    mine = [reply[a:b] for a, b in rep]
+    own = {_same(t) for t in texts}
+    if all(_same(t) in own for t in mine):
+        # the text's own units, unchanged: all of them is the text as it
+        # was; fewer is a deletion or a part left untouched, which the
+        # reply alone cannot tell apart (the caller asks once more)
+        return reply, ("part" if len(mine) < len(src) else "whole")
+    if len(rep) * 4 >= len(src) * 3:
+        return reply, "whole"
+    words = [set(_WORD.findall(t.lower())) for t in texts]
+    seen = {}
+    for w in words:
+        for x in w:
+            seen[x] = seen.get(x, 0) + 1
+    rare = [{x for x in w if seen[x] == 1} for w in words]     # a unit's words no other unit has
+    said = set(_WORD.findall(reply.lower()))
+    firsts = [t.split("\n", 1)[0].strip() for t in texts]
+    at = [_anchor(t, texts, firsts, words) for t in mine]
+    placed = [k for k in at if k is not None]
+    if not placed:
+        short = len(reply.strip()) * 2 < len(data.strip())
+        if short and sum(1 for r in rare if r & said) * 2 < len(src):
+            return None, "unplaced"
+        return reply, "whole"
+    if placed != sorted(placed):
+        return None, "unplaced"
+    i, j = placed[0], placed[-1] + 1
+    sure, last, between = True, None, 0
+    for k in at:                      # every unit of the run is in the reply, or rewritten between
+        if k is None:
+            between += 1
+            continue
+        if last is not None and k > last + 1 and not between:
+            sure = False
+        last, between = k, 0
+    if sure and i == 0 and j == len(src):
+        return reply, "whole"
+    if (at[0] is None and i > 0) or (at[-1] is None and j < len(src)):
+        sure = False
+    if not sure:
+        # a reply that opens with a header the text holds once, and stays
+        # inside its section, is that section rewritten
+        head = _header(texts[i].split("\n", 1)[0])
+        if at[0] != i or not head or mine[0].split("\n", 1)[0].strip() != firsts[i]:
+            return None, "unplaced"
+        j = _section(texts, i)
+        if placed[-1] >= j or any(_opens(t.split("\n", 1)[0], head) for t in mine[1:]):
+            return None, "unplaced"
+    outside = [k for k in range(len(src)) if k < i or k >= j]
+    flat = " ".join(reply.split())
+    taken = set().union(*(rare[k] for k in outside)) & said
+    if (len(taken) >= 3 and len(taken) * 10 >= len(said) * 3) or any(
+            len(words[k]) >= 3 and " ".join(texts[k].split()) in flat for k in outside):
+        return reply, "whole"
+    body = reply[rep[0][0]:rep[-1][1]]
+    if "\r\n" in data:
+        body = body.replace("\r\n", "\n").replace("\n", "\r\n")
+    return data[:src[i][0]] + body + data[src[j - 1][1]:], "spliced"
+
+
+def _ask_again(s, text, context, reply, data, max_tokens):
+    """The one re-ask of a rewrite that came back as part of the text,
+    unchanged: the first exchange rides as history and the model hears
+    persona.EDIT_PART_AGAIN. (reply, ms), the reply held like the first."""
+    s.history = [{"role": "user", "content": persona.user_message(text, "", context)},
+                 {"role": "assistant", "content": reply}]
+    held_out = io.StringIO()
+    fence = textmod.Fence(held_out, newline=data.endswith("\n"))
+    busy = textmod.wait("read")
+    try:
+        busy.start()
+        _out, ms = s.ask_stream(persona.EDIT_PART_AGAIN, "", _printable_feed(fence.feed, data),
+                                max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
+    except wire.BrainError as e:
+        die(e.hint)
+    finally:
+        busy.stop()
+    fence.close()
+    return held_out.getvalue(), ms
 
 
 def _comment(cfg, shell, whole, piece, name, words):
@@ -358,7 +584,12 @@ def cmd_edit(args):
     # an answer's quotes are checked against the text, line by line, and
     # the ones the text does not hold are marked where they stand
     anchors = textmod.Anchors(sys.stdout, data) if kind == "answer" else None
-    fence = textmod.Fence(anchors or sys.stdout, newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
+    # a rewrite of the whole text is held until it ends: it is printed only
+    # once it is known to be whole (_place). A selection (--part) and a text
+    # written from nothing stream, since their reply is all there is
+    held_out = io.StringIO() if kind == "rewrite" and data and not opts["part"] else None
+    fence = textmod.Fence(anchors or held_out or sys.stdout,
+                          newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
 
     def done():
         fence.close()
@@ -376,7 +607,8 @@ def cmd_edit(args):
     feed = _printable_feed(fence.feed, data)
 
     def first(chunk):
-        busy.stop()
+        if held_out is None:     # a held rewrite shows nothing until it ends: the pulse goes on
+            busy.stop()
         feed(chunk)
     try:
         s = session.Session(cfg, mode, shell, "", role=role,
@@ -397,6 +629,23 @@ def cmd_edit(args):
     counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
     if held:
         counts["held"] = held
+    if held_out is not None:
+        reply = held_out.getvalue()
+        whole, how = _place(data, reply)
+        if how == "part":
+            # part of the text, unchanged: a deletion or a part left as it
+            # was. The model hears so and is asked once more
+            again = _ask_again(s, text, context, reply, data, max_tokens)
+            whole, how = _part_again(data, reply, again[0])
+            ms += again[1]
+            counts["again"] = 1
+        if whole is None:
+            s.record(kind=kind, chars=len(data), ms=ms, unplaced=1, **counts)
+            die("the reply is not the whole text, and its place in it is not sure; nothing changed -- select the part and ask again")
+        sys.stdout.write(whole)
+        sys.stdout.flush()
+        if how == "spliced":
+            counts["spliced"] = 1
     if kind == "answer" and tid:
         forge.append(cfg, tid, "user", persona.user_message(text, "", context), text_sha=sha)
         forge.append(cfg, tid, "assistant", out or "")

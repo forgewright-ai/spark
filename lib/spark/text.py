@@ -1044,12 +1044,33 @@ class Fence:
 # text the question was about, and the ones that do not anchor are
 # marked where they stand, so the reader (and the editor's jump key)
 # knows which quotes to trust.
-QUOTE = re.compile(r'"([^"\n]{3,200})"|“([^”\n]{3,200})”|`([^`\n]{3,200})`')
+# A double-quoted span may hold quotes of its own, escaped the way a
+# model writes JSON (`"request: \"POST /x\""`): escaped quotes come in
+# pairs inside the span, and the span is read unescaped (quoted). A lone
+# backslash before a quote escapes nothing: `"C:\temp\"` is a path, and
+# its quote closes the span.
+QUOTE = re.compile(r'"((?:[^"\\\n]|\\[^"\n]|\\"[^"\\\n]*\\"){3,200}\\?)"'
+                   r'|“([^”\n]{3,200})”|`([^`\n]{3,200})`')
 ANCHOR_MARK = " [not in the text]"
 PROPOSED_MARK = " [proposed]"
 
 
 PROPOSAL = re.compile(r"(->|→|=>)\s*$")
+
+
+def quoted(m):
+    """A QUOTE match's span as the text holds it: the escaped quotes
+    inside a double-quoted span unescaped."""
+    span = m.group(m.lastindex)
+    return span.replace('\\"', '"') if m.lastindex == 1 else span
+
+
+def open_quote(line):
+    """Does `line` hold a quote mark that opens no span QUOTE reads: a
+    quote the line break split, or an inch (`27"`) -- the gate's join
+    tells the two apart by what anchors."""
+    rest = QUOTE.sub("", line)
+    return '"' in rest or "`" in rest or "\u201c" in rest
 
 
 def quotes(line):
@@ -1058,7 +1079,7 @@ def quotes(line):
     of its opening mark and the one just past its closing mark. A span
     right after an arrow (`"was" -> "should be"`) is the model's own
     proposal, not a quote of the text: left out."""
-    return [(m.group(m.lastindex), m.start(), m.end()) for m in QUOTE.finditer(line)
+    return [(quoted(m), m.start(), m.end()) for m in QUOTE.finditer(line)
             if not PROPOSAL.search(line[:m.start()])]
 
 
@@ -1459,12 +1480,24 @@ def anchor(span, data, folded=None, whole=False):
 # instead of invent. The judge is one, so "grounded" means the same thing
 # in every contract that uses the word.
 GROUNDED, UNGROUNDED, UNQUOTED = "grounded", "ungrounded", "unquoted"
+# A line with no quote marks that is itself the source's own words, copied
+# whole, quotes the source as surely as a quoted span does: a model often
+# answers from a manual or a spec by copying its line (v1.100, #89). From
+# this many words, past the floor (substantial), at word boundaries and
+# from where a line or a sentence of the source starts: "limited to 10" is
+# not in "limited to 100", and "retry a request" cut from "does not retry
+# a request" grounds nothing.
+VERBATIM_WORDS = 5
+_LIST_MARK = re.compile(r"^(?:[-*•]|\d{1,2}[.)])\s+")
+_MARK_WORD = re.compile(r"[-*•#>]+|\d{1,2}[.)]")
+_ENDS = re.compile(r"[.!?:;][\"')\]]*$")
 
 
 class Ground:
     """One source text, a verdict per unit (a line, a note, a question):
 
-      GROUNDED    it quotes the source and at least one quote anchors
+      GROUNDED    it quotes the source and at least one quote anchors, or
+                  the whole unit is the source's own words (verbatim)
       UNGROUNDED  it quotes and not one quote anchors -- fluent invention,
                   the failure these contracts exist to make impossible
       UNQUOTED    it quotes nothing, which only a contract can judge (a
@@ -1478,33 +1511,75 @@ class Ground:
         self.data = data
         self.folded = fold(data)
         self.whole = whole      # word-boundary anchoring (watch, recall)
+        self._starts = None     # offsets in folded where a line or a sentence starts
 
     def verdict(self, unit):
         """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks]).
         Only a span past the floor (substantial) counts as grounding
         evidence: quoting "the" against any English text proves nothing,
         so a unit whose only spans fail the floor is UNQUOTED -- the
-        contracts that demand a quote refuse it."""
+        contracts that demand a quote refuse it -- unless the whole unit
+        is a verbatim copy of the source."""
         spans = [q[0] for q in quotes(unit) if substantial(q[0])]
         if not spans:
-            return UNQUOTED, []
+            return (GROUNDED if self.verbatim(unit) else UNQUOTED), []
         misses = [q for q in spans if not anchor(q, self.data, self.folded, whole=self.whole)]
         return (UNGROUNDED if len(misses) == len(spans) else GROUNDED), misses
+
+    def verbatim(self, unit):
+        """Is the whole unit, a list mark before it aside, the source's own
+        words: VERBATIM_WORDS or more, past the floor, found in the folded
+        source (a line break, a capital, the quote marks) at word
+        boundaries, from a line's or a sentence's start (starts)."""
+        f = fold(_LIST_MARK.sub("", unit.strip())).rstrip(".,;:!?")
+        if len(f.split()) < VERBATIM_WORDS or not substantial(f):
+            return False
+        starts = self.starts()
+        found = re.finditer(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(f), self.folded)
+        return any(m.start() in starts for m in found)
+
+    def starts(self):
+        """The offsets in the folded source where a line starts (past a
+        list mark), and where a sentence or a clause starts (after `.`,
+        `!`, `?`, `:` or `;`). fold keeps the words and their order, one
+        space between, so a word's offset is the lengths before it."""
+        if self._starts is None:
+            words = self.folded.split(" ") if self.folded else []
+            at, pos = [], 0
+            for w in words:
+                at.append(pos)
+                pos += len(w) + 1
+            firsts, i = set(), 0
+            for line in self.data.splitlines():
+                n = len(line.split())
+                if n:
+                    firsts.add(i)
+                    if n > 1 and _MARK_WORD.fullmatch(words[i] if i < len(words) else ""):
+                        firsts.add(i + 1)
+                i += n
+            firsts.update(k + 1 for k, w in enumerate(words) if _ENDS.search(w))
+            self._starts = {at[k] for k in firsts if k < len(at)}
+        return self._starts
 
     def mark(self, unit):
         """`unit` with ANCHOR_MARK after every span the source does not
         hold, and PROPOSED_MARK after every span that is the model's own
         proposal (after an arrow) -- unchecked, and it must not read as
-        a quotation of the text. The marking rule, one unit at a time."""
+        a quotation of the text. The marking rule, one unit at a time. A
+        span the model escaped (`"a \\"b\\" c"`) is written as the text
+        holds it, between backticks, so the reader never sees the
+        backslashes."""
         out, last = [], 0
         for m in QUOTE.finditer(unit):
-            span, end = m.group(m.lastindex), m.end()
+            span = quoted(m)
+            out.append(unit[last:m.start()])
+            raw = unit[m.start():m.end()]
+            out.append("`%s`" % span if span != m.group(m.lastindex) and "`" not in span else raw)
             if PROPOSAL.search(unit[:m.start()]):
-                out.append(unit[last:end] + PROPOSED_MARK)
-                last = end
+                out.append(PROPOSED_MARK)
             elif not anchor(span, self.data, self.folded, whole=self.whole):
-                out.append(unit[last:end] + ANCHOR_MARK)
-                last = end
+                out.append(ANCHOR_MARK)
+            last = m.end()
         out.append(unit[last:])
         return "".join(out)
 
@@ -1524,17 +1599,32 @@ class Gate:
 
     keep=None keeps every line and drops nothing: that is `Anchors`,
     contract 10's marker, whose only job is to say which quotes to
-    trust."""
+    trust.
+
+    A model hard-wraps its answer near 70 columns, so one quote can run
+    over a line break. A dropping gate (keep set) holds a line with a
+    quote mark that opens no span (open_quote), unless the line ends in
+    `?` (ask is one question a line), and reads it with the next, joined
+    by a space, JOIN_MAX more lines at most; a blank line or the end
+    lets the lines go. Judged alone, the quote's second half has no
+    opening mark and drops, and the line before it ends mid-quote. The
+    lines are one unit only when a quote runs across the break and every
+    such quote anchors, and the keep takes the joined unit; else each
+    line is judged alone, as if never joined (the open mark was an
+    inch, `27"`). Anchors keeps the editor's lines as they came."""
+
+    JOIN_MAX = 2
 
     def __init__(self, stream, data, keep=None, whole=False):
         self.stream, self.data = stream, data
         self.ground = Ground(data, whole)
         self.keep = keep
         self.buf = ""
+        self.held = []                     # the lines of a quote a line break split, so far
         self.quoted = self.missed = self.kept = self.dropped = 0
         self.spoke = False
 
-    def _unit(self, line, newline):
+    def _unit(self, line, newline, kept=None):
         if line.strip():
             self.spoke = True
         if self.keep is not None:
@@ -1544,8 +1634,10 @@ class Gate:
             line = line.rstrip()
             if not line:
                 return                      # a blank line is not a unit
-            verdict, misses = self.ground.verdict(line)
-            if not self.keep(line, verdict, misses):
+            if kept is None:
+                verdict, misses = self.ground.verdict(line)
+                kept = self.keep(line, verdict, misses)
+            if not kept:
                 self.dropped += 1
                 return
             self.kept += 1
@@ -1555,17 +1647,63 @@ class Gate:
                            if not anchor(q, self.data, self.ground.folded, whole=self.ground.whole))
         self.stream.write(scrub(self.ground.mark(line), keep="\t") + ("\n" if newline else ""))
 
+    def _line(self, line):
+        """One whole line in: a dropping gate joins a quote a line break
+        split (the class's note) before the unit is judged."""
+        if self.keep is None:
+            self._unit(line, True)
+            return
+        if self.held and not line.strip():
+            self._let_go()
+        elif self.held:
+            self.held.append(line)
+            if not open_quote(" ".join(self.held)) or len(self.held) > self.JOIN_MAX:
+                self._let_go()
+            return
+        if line.strip() and open_quote(line) and not line.rstrip().endswith("?"):
+            self.held = [line]
+            return
+        self._unit(line, True)
+
+    def _let_go(self):
+        """The held lines judged as one unit when a quote crosses a break
+        and every quote that does anchors, and the keep takes it; one by
+        one otherwise."""
+        lines, self.held = self.held, []
+        if len(lines) > 1:
+            parts = [l.strip() for l in lines]
+            joined = " ".join(parts)
+            breaks, at = [], 0
+            for p in parts[:-1]:
+                at += len(p)
+                breaks.append(at)       # the space that stands for the line break
+                at += 1
+            across = [m for m in QUOTE.finditer(joined) if any(m.start() < b < m.end() for b in breaks)]
+            if across and all(anchor(quoted(m), self.data, self.ground.folded, whole=self.ground.whole)
+                              for m in across):
+                verdict, misses = self.ground.verdict(joined)
+                if self.keep(joined, verdict, misses):
+                    self._unit(joined, True, kept=True)
+                    return
+        for line in lines:
+            self._unit(line, True)
+
     def write(self, s):
         self.buf += s
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
-            self._unit(line, True)
+            self._line(line)
         self.stream.flush()
 
     def flush(self):
         self.stream.flush()
 
     def close(self):
+        if self.held:
+            if self.buf.strip():
+                self.held.append(self.buf)
+            self.buf = ""
+            self._let_go()
         if self.buf:
             line, self.buf = self.buf, ""
             # a dropping gate (watch, read) writes lines for a reader or a

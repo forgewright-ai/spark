@@ -77,6 +77,7 @@ SANDBOX_MAX_WAITING = 5         # runs running or waiting for review; a sixth is
 BWRAP_MIN = (0, 11)             # --overlay arrived in bubblewrap 0.11
 DIFF_MAX = 256 * 1024           # a text larger than this is one line in the review, not a diff
 REVIEW_MAX = 2 * 1024 * 1024    # old + new text one review shows; past it, headings only
+STATE_MAX = 2000                # raw changes a step's own changes are read from (state); past it, untold
 PROBE_TIMEOUT = 20
 
 # a run's id: the time it began and six hex digits -- load() refuses any
@@ -1285,11 +1286,13 @@ def _overlay_mark(run, src):
     return ""
 
 
-def _classify(run, r, st, old):
+def _classify(run, r, st, old, texts=True):
     """The review entries for one raw change (none when nothing changed,
-    two when the type changed: the old one goes, the new one comes)."""
+    two when the type changed: the old one goes, the new one comes).
+    texts=False reads no old or new text: the statuses and shas alone
+    (state, a step's before and after)."""
     if st is not None and old is not None and _kind(st) != _kind(old):
-        return _classify(run, r, None, old) + _classify(run, r, st, None)
+        return _classify(run, r, None, old, texts) + _classify(run, r, st, None, texts)
     src, low = os.path.join(_src_root(run), r), os.path.join(run["cwd"], r)
     e = {"path": r, "status": "", "kind": _kind(st if st is not None else old), "old": None, "new": None,
          "mode_old": stat.S_IMODE(old.st_mode) if old is not None else None,
@@ -1299,7 +1302,7 @@ def _classify(run, r, st, old):
     mark = _overlay_mark(run, src) if st is not None else ""
     if st is None:
         e["status"] = "deleted"
-        if k == "file":
+        if k == "file" and texts:
             e["old"] = _text(_read(low, DIFF_MAX))
         elif k == "link":
             e["old"] = os.readlink(low)
@@ -1331,6 +1334,8 @@ def _classify(run, r, st, old):
             if (e["mode_old"] & 0o777) == (e["mode_new"] & 0o777):
                 return []
             e["status"] = "mode"
+        elif not texts:
+            e["status"] = "added" if old is None else "changed"
         else:
             new = _read(src, DIFF_MAX)
             e["status"] = "added" if old is None else "changed"
@@ -1472,6 +1477,25 @@ def changes(run):
         e["control"] = _control(e)
     _budget(entries)
     return entries
+
+
+def state(run):
+    """What the copy holds changed against the project, for a step's
+    before and after: {path: (status, sha)}, the review's own reading
+    (_classify: a file written again with the same bytes is no change),
+    with no text read. None past STATE_MAX raw changes, or when the copy
+    does not read: then a step's changes go untold."""
+    try:
+        raw = _clone_raw(run) if run["os"] == "macos" else _upper_raw(os.path.join(run["dir"], "up"), run["cwd"])
+        if len(raw) > STATE_MAX:
+            return None
+        out = {}
+        for r, st, old in raw:
+            for e in _classify(run, r, st, old, texts=False):
+                out[e["path"]] = (e["status"], e["sha"])
+        return out
+    except (OSError, ValueError, SandboxError):
+        return None
 
 
 def _flatten(entries):

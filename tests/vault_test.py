@@ -947,6 +947,31 @@ def test_bounded_context():
             f.write(crlf.replace(b"\n", b"\r\n"))
         check("CRLF keeps canonical authenticated header", [m["content"] for m in st.history(tid)], ["windows", "ok"])
 
+        # A chat /read's file (`source`) rides its turn while it fits. Over
+        # the budget the oldest files go first, their words and answers
+        # kept; whole pairs go only after: two /reads both still answer
+        # "compare the two", and a /read outlives later chat as it did
+        # before files rode at all.
+        reads2 = [("user", "/read @a.txt what is the fee", {"source": "File a.txt:\n" + "a" * 15990}),
+                  ("assistant", '"The fee is $300."', {}),
+                  ("user", "/read @b.txt what is the fee", {"source": "File b.txt:\n" + "b" * 15990}),
+                  ("assistant", '"The fee is $450."', {})]
+        chat2 = reads2[:2] + [("user", "x" * 2500, {}), ("assistant", "y" * 2500, {})]
+        small = [("user", "/read @c.txt when", {"source": "File c.txt:\nIt opens at nine."}), ("assistant", "at nine", {})]
+        for name, rows, want in (
+                ("two /reads: the older file goes, both turns stay", reads2,
+                 ["/read @a.txt what is the fee", '"The fee is $300."',
+                  "/read @b.txt what is the fee\n\nFile b.txt:\n" + "b" * 15990, '"The fee is $450."']),
+                ("a /read then chat: its file goes, the turn stays", chat2,
+                 ["/read @a.txt what is the fee", '"The fee is $300."', "x" * 2500, "y" * 2500]),
+                ("a /read within the budget keeps its file", small,
+                 ["/read @c.txt when\n\nFile c.txt:\nIt opens at nine.", "at nine"])):
+            with open(sealed, "wb") as f:
+                f.write(hdr.encode() + b"\n" + b"".join(rec(r, x, **e) for r, x, e in rows))
+            check("history: " + name, [m["content"] for m in st.history(tid)], want)
+            said = [dict(role=r, text=x, **e) for r, x, e in rows]
+            check("said_history: " + name, [m["content"] for m in forge.said_history(said)], want)
+
         pair = rec("user", "\U0001f680" * 5000, text_sha="fixture") + rec("assistant", "reply" * 1000)
         with open(sealed, "wb") as f:
             f.write(hdr.encode() + b"\n" + pair * 100)

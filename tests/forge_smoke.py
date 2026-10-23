@@ -851,6 +851,28 @@ def tls_cases(ok, spark, env, home, state, exe):
         spark("forge", "off", "--force")
 
 
+def thread_view(ok):
+    """GET /api/threads/<id> sends a thread's words, never the text of a
+    file a chat's /read carried for the model (`source`): the browser
+    never needs it, and the store keeps it as it was. A bare handler, a
+    fake store, the real route body."""
+    from spark import forgeserve as fs
+    recs = [{"role": "user", "text": "/read @gate.txt when", "mode": "read", "source": "File gate.txt:\nTickets are"},
+            {"role": "assistant", "text": "It opens \"at nine\"", "kind": "read"}]
+    store = type("S", (), {"exists": lambda self, tid: True, "load": lambda self, tid: [dict(r) for r in recs]})()
+    sent = []
+    h = object.__new__(fs.Handler)
+    h._ustore = lambda: store
+    h._json = lambda code, obj, extra=None: sent.append((code, obj))
+    h._error = lambda code, kind, hint, extra=None: sent.append((code, kind))
+    fs.Handler.api_thread(h, "t1")
+    code, d = sent[0] if sent else (0, {})
+    msgs = d.get("messages", []) if isinstance(d, dict) else []
+    ok(code == 200 and [m.get("text") for m in msgs] == [r["text"] for r in recs]
+       and msgs[0].get("mode") == "read" and not any("source" in m for m in msgs) and "Tickets" not in json.dumps(d),
+       "/api/threads/<id>: a /read's words and fields go to the page, its file's text does not", sent)
+
+
 def page_units(ok):
     """The page's side without a server: the verbs it may run and the
     ones that end with its own restart, the https facts in each mode,
@@ -932,6 +954,7 @@ def main():
     generation_admission(ok)
     reply_interruptions(ok)
     verb_runner(ok)
+    thread_view(ok)
     page_units(ok)
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
@@ -1476,6 +1499,30 @@ def main():
             ok(st == 200 and "".join(d["t"] for e, d in evs if e == "delta") == "4", "a second chat on the thread: the stub saw 4 messages", evs)
             st, _, raw = req(url, "GET", "/api/threads?n=30", headers=bearer)
             ok(json.loads(raw)["threads"][0]["turns"] == 2, "the thread has 2 turns now", raw[:200])
+            # the page going on with a thread a terminal chat's /read began
+            # (seeded in the owner's store, then removed): the file rides the
+            # history to the model, and never the thread's view to the page
+            seed = ("import sys; sys.path.insert(0, sys.argv[1]); from spark import config, forge; "
+                    "cfg = config.load(); st = forge.local_store(provision=True); t = st.new_thread(cfg); "
+                    "st.append(cfg, t, 'user', '/read @gate.txt when', mode='read', "
+                    "source='File gate.txt:\\nTickets are two dollars'); "
+                    "st.append(cfg, t, 'assistant', 'It opens at nine', kind='read'); print(t)")
+            sp = subprocess.run([sys.executable, "-c", seed, os.path.join(REPO, "lib")], env=env,
+                                capture_output=True, text=True, timeout=30)
+            rtid = sp.stdout.strip()
+            st, _, raw = req(url, "POST", "/api/chat", {"thread": rtid, "text": "and for children?", "mode": "ask"},
+                             headers=post, timeout=30)
+            hist = SEEN.get("body", {}).get("messages", [])
+            ok(st == 200 and rtid and any("Tickets are two dollars" in (m.get("content") or "") for m in hist[1:-1]),
+               "the page going on with a /read's thread: the file rides the history to the model",
+               sp.stderr[-200:] + json.dumps(hist)[-300:])
+            st, _, raw = req(url, "GET", "/api/threads/" + rtid, headers=cookie)
+            view = raw.decode("utf-8", "replace")
+            ok(st == 200 and '"/read @gate.txt when"' in view and "Tickets" not in view and '"source"' not in view,
+               "GET /api/threads/<id> of that thread: its words, never the file's text", view[:300])
+            subprocess.run([sys.executable, "-c", "import os, sys; sys.path.insert(0, sys.argv[1]); from spark import forge; "
+                            "os.remove(forge.local_store()._path(sys.argv[2]))", os.path.join(REPO, "lib"), rtid],
+                           env=env, capture_output=True, timeout=30)
             st, _, _ = req(url, "POST", "/api/chat", {"thread": "2099-01-01-000000", "text": "x"}, headers=post)
             ok(st == 404, "chat on an unknown thread -> 404", st)
             st, _, _ = req(url, "POST", "/api/chat", {"thread": "../etc", "text": "x"}, headers=post)
@@ -1982,6 +2029,39 @@ def main():
             for _r, _d, fs in os.walk(cudir):
                 cthreads += [f for f in fs if f.endswith(".sealed")]
             ok(not cthreads, "no thread landed in the client's own store", cthreads)
+            # #86 on a client: its own `?` lands in its own store, so its
+            # `??` goes on with that turn while the FORGE's newest thread is
+            # the one it saw then; once the page (or the box's prompt) moved
+            # the FORGE's newest, `??` goes on with the FORGE's again
+            def _cline(words):
+                return subprocess.run([sys.executable, SPARK, "line", "--cwd", chome, "--shell", "zsh"],
+                                      input=words, capture_output=True, text=True, env=cenv, timeout=30)
+
+            def _chist():
+                h = subprocess.run([sys.executable, SPARK, "history"], capture_output=True, text=True,
+                                   env=cenv, timeout=30).stdout
+                return [l.split(None, 3) for l in h.splitlines() if re.match(r"\s+\d{4}-\d\d-\d\d-", l)]
+            p4 = _cline("? own-line-turn here")
+            p5 = _cline("?? and count them")
+            st, _, raw = req(url, "GET", "/api/threads/" + str(ntid), headers=ubearer)
+            ms5 = json.loads(raw)["messages"]
+            _own = [r for r in _chist() if len(r) == 4 and "own-line-turn" in r[3]]
+            ok(p4.returncode == 0 and p5.returncode == 0 and len(ms5) == len(ms4)
+               and _own and _own[0][1] == "2",
+               "a client's ?? goes on with its own newest ? turn while the FORGE's newest has not moved",
+               (p5.stdout[:80], len(ms4), len(ms5), _chist()[:2]))
+            st, _, _ = req(url, "POST", "/api/chat", {"text": "count"},
+                           headers=dict(ubearer, **{"X-Spark": "1", "Origin": url}), timeout=30)
+            st, _, raw = req(url, "GET", "/api/threads?n=1", headers=ubearer)
+            ptid = json.loads(raw)["threads"][0]["id"]
+            p6 = _cline("?? after-the-page")
+            st, _, raw = req(url, "GET", "/api/threads/" + str(ptid), headers=ubearer)
+            ms6 = json.loads(raw)["messages"]
+            _own = [r for r in _chist() if len(r) == 4 and "own-line-turn" in r[3]]
+            ok(p6.returncode == 0 and ptid != ntid and any(m.get("text") == "after-the-page" for m in ms6)
+               and _own and _own[0][1] == "2",
+               "once the page moved the FORGE's newest thread, a client's ?? goes on with the FORGE's",
+               (p6.stdout[:80], ptid, [m.get("text") for m in ms6][-3:], _chist()[:2]))
             import shutil as _sh2
             _sh2.rmtree(chome, ignore_errors=True)
 

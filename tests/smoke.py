@@ -407,6 +407,10 @@ def edit_pieces(system, user):
     echoes the text when asked to `keep it`; a completion is a tail; a
     question gets a numbered note."""
     if "You are editing text" in system:
+        if STATE.get("edit_replies"):                # a case shapes each rewrite in turn
+            return STATE["edit_replies"].pop(0)
+        if STATE.get("edit_reply") is not None:     # a case shapes the rewrite itself
+            return STATE["edit_reply"]
         if user.startswith("keep it"):
             return (user.split(":\n", 1)[1],)
         return ("```markdown\n", "Fixed ", "text.\n", "```\n")
@@ -461,6 +465,10 @@ def read_pieces(user=""):
         return ("[Portuguese, fiction]\n", "It is about a gate.\n", 'It costs "ten dollars" to enter.\n')
     if "what repeats" in user:
         return ("[Portuguese, fiction]\n", 'It repeats "word word" throughout.\n')
+    if "where is the spare key" in user:        # the parts case: one part holds the quote
+        return ("[English, notes]\n", 'It says "the spare key is under the mat".\n')
+    if "who hid the spare key" in user:         # no part holds it
+        return ("[English, notes]\n", 'It says "the key is in a drawer".\n')
     return ("[Portuguese, fiction]\n",
             "Here is what it says:\n",
             'It opens "at nine" and clo', 'ses "at noon".\n',
@@ -486,6 +494,13 @@ def drill_items(user):
         {"question": "what MAKES atp?", "answer": "Mitochondria"}]}
 
 
+# a web server's error line, double quotes inside it (#80)
+NGINX_ERROR = ('2026/10/22 21:30:41 [error] 2211#2211: *118 upstream timed out (110: Connection timed out) '
+               'while reading response header from upstream, client: 192.0.2.23, server: shop.lan, '
+               'request: "POST /api/checkout HTTP/1.1", upstream: "http://127.0.0.1:9000/api/checkout"')
+NGINX_OK = '192.0.2.21 - - [22/Oct/2026:21:30:40 +0000] "GET /api/items HTTP/1.1" 200 531 "-" "curl/8.5"'
+
+
 def watch_pieces(user):
     """spark watch's reply (contract 14): one line quoting the match when a
     500 is in the window, silence otherwise. The quote is a line the window
@@ -494,6 +509,32 @@ def watch_pieces(user):
     boundaries must refuse it."""
     if "5001" in user:
         return ('Saw "error 500" in the log.\n',)
+    # #80: a web server's line holds double quotes of its own. The model
+    # quotes it whole and escapes them, or is cut before the closing quote
+    # by the reply's token cap; either way the match is the stream's line.
+    if "*118 upstream timed out" in user:
+        return ('Found a timeout: "' + NGINX_ERROR.replace('"', '\\"') + '"',)
+    if "*119 upstream timed out" in user:
+        line = NGINX_ERROR.replace("*118", "*119").replace('"', '\\"')
+        return ('Found one: "' + line[:150],)
+    # a number inside a reply is no line number: a quote the window holds
+    # wins over the number in it, a log line the model copied whole is that
+    # line whatever number it starts with, and a reply that says nothing
+    # matches names no line, whatever number it mentions
+    if "worker [3] crashed" in user:
+        return ('worker crashed: "worker [3] crashed: out of memory"\n',)
+    if "[12] cache warmed" in user:
+        return ("[12] cache warmed in 300 ms\n",)
+    if "closest probe" in user:
+        return ("Nothing matches; the closest is [2] but it is a 200.\n",)
+    if "quiet probe" in user:
+        return ("[1] nothing here matches\n",)
+    # the numbered window: the model names the line, spark prints it
+    m = re.search(r"^\[(\d+)\] [^\n]*disk full", user, re.M)
+    if m:
+        return ("[%s] the disk filled up\n" % m.group(1),)
+    if "phantom" in user:
+        return ("[99] something failed\n",)
     if "500" in user:
         # no trailing newline on purpose: the gate must end the line
         # itself, or two matches concatenate and `| while read` starves
@@ -528,6 +569,9 @@ def answer_json(messages):
         if "already tried and failed" in last and "sameagain-fix" in " ".join(m.get("content", "") for m in messages):
             return {"kind": "cmd", "command": "echo FIXED", "hint": "a different way", "danger": False}
         return {"kind": "cmd", "command": "echo SAME", "hint": "same", "danger": False}
+    if "stubfail" in " ".join(m.get("content", "") for m in messages if m.get("role") == "user"):
+        # the fix key's ask (#88): a model that insists on the command that failed
+        return {"kind": "cmd", "command": "tar xzf stubfail.tgz", "hint": "extract it", "danger": False}
     user = messages[-1]["content"]
     if is_do(messages):
         goal = messages[1]["content"]           # the first user message is the goal
@@ -575,6 +619,34 @@ def answer_json(messages):
             if outs:
                 return {"kind": "done", "command": "", "hint": "looked", "danger": False}
             return {"kind": "cmd", "command": "ls", "hint": "look", "danger": False}
+        if "boxnoop" in goal:                   # v1.100: a sandboxed writer that changes nothing, then a claim
+            if outs:
+                return {"kind": "done", "command": "", "hint": "removed the old files", "danger": False}
+            return {"kind": "cmd", "command": "rm -f nothere.txt", "hint": "drop the old files", "danger": False}
+        if "dusort" in goal:                    # v1.100: the model flags a read-only pipeline
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "du -sh * | sort -rh | head -n 10", "hint": "the largest here",
+                    "danger": True}
+        if "sortout" in goal:                   # v1.100: the model flags sort -o, a writer: the flag stays
+            if outs or "skipped this step" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "sort -o sorted.txt names.txt", "hint": "sort the names",
+                    "danger": True}
+        if "boxcat" in goal:                    # v1.100: a sandboxed run that only reads, with a head the proof lacks
+            if outs:
+                return {"kind": "done", "command": "", "hint": "read it", "danger": False}
+            return {"kind": "cmd", "command": "cat old.txt", "hint": "read the old file", "danger": False}
+        if "cdstep" in goal:                    # v1.100: a step that changes directory before it writes
+            if outs or "skipped this step" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "cd sub && rm x", "hint": "drop the inner x", "danger": False}
+        if "samewrite" in goal:                 # v1.100: a writer whose file keeps its bytes, then one that changes it
+            if outs == 0:
+                return {"kind": "cmd", "command": "echo same > same.txt", "hint": "write it again", "danger": False}
+            if outs == 1:
+                return {"kind": "cmd", "command": "echo other > same.txt", "hint": "change it", "danger": False}
+            return {"kind": "done", "command": "", "hint": "all done", "danger": False}
         if "sumstep" in goal or "catsum" in goal:   # checksum lines and a token on one output: a tool's, or cat's
             if outs:
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
@@ -1092,12 +1164,17 @@ def knowledge_cases(t):
     # the evidence reaches the model from the prompt line alone: grounding
     # is imported by cli, bench, judge and persona (shell_map, the tree
     # alone) -- never by do, forgeserve or any porcelain path; judge by
-    # cli and bench alone
+    # cli and bench, and by do for read_only alone (v1.100): the argv
+    # proof that lowers a model's flag, never a verdict or its evidence
     users_g = sorted(n for n in mods - {"forge"} if "grounding" in imports(n))
     users_j = sorted(n for n in mods - {"forge"} if "judge" in imports(n))
-    t.ok(set(users_g) <= {"cli", "bench", "judge", "persona"} and set(users_j) <= {"cli", "bench"},
-         "knowledge: grounding is imported by cli, bench, judge, persona only; judge by cli, bench only",
+    t.ok(set(users_g) <= {"cli", "bench", "judge", "persona"} and set(users_j) <= {"cli", "bench", "do"},
+         "knowledge: grounding is imported by cli, bench, judge, persona only; judge by cli, bench, do only",
          "grounding: %s; judge: %s" % (users_g, users_j))
+    dsrc = open(os.path.join(lib, "do.py"), encoding="utf-8").read()
+    t.ok(set(re.findall(r"\bjudge\.(\w+)", dsrc)) == {"read_only"},
+         "knowledge: do takes read_only alone from judge -- the argv proof, never a verdict or its evidence",
+         str(set(re.findall(r"\bjudge\.(\w+)", dsrc))))
     psrc = open(os.path.join(lib, "persona.py"), encoding="utf-8").read()
     t.ok(set(re.findall(r"\bgrounding\.(\w+)", psrc)) == {"shell_map"},
          "knowledge: persona takes shell_map alone from grounding", str(set(re.findall(r"\bgrounding\.(\w+)", psrc))))
@@ -1591,6 +1668,15 @@ def knowledge_cases(t):
           "find . -delete", "grep 'a|b' f", "env GIT_EXTERNAL_DIFF=./x git diff", "LD_PRELOAD=x.so ls",
           "PAGER=x git log", "ls $(x)", "ls `x`", "ls |", "ls ‮", 'ls "a', "", "ls ; ", "tail -f log",
           "git -c core.pager=x log", "find . -exec ls {} +", "awk 1 f", "sh -c ls"]
+    yes += ["du -sh * | sort -rh | head -n 10", "sort -h f", "sort -t, -k2 f"]      # v1.100: sort reads
+    no += ["sort --compress-program=sh f", "sort --compress=sh f", "sort --output=x f", "sort -o x f"]
+    # v1.100: a glob can bring an option in (a file named -oMakefile, or
+    # --output=x): past a head whose every option reads, it is no proof;
+    # quoted, after --, or on du, ls, wc it reads as before
+    yes += ["sort -- *", "sort '*'", "sort \"a*\"", "ls *.py", "wc -l *", "grep -n x *.txt", "head -n 3 *.log",
+            "du -sh .[^.]*", "git log -- x *"]
+    no += ["sort *", "sort a*", "sort ?x", "sort [ab]*", "sort {a,-ox}", "sort *.txt -- b", "git diff *",
+           "tail *", "file *", "dmesg *", "lsof *"]
     bad = [c for c in yes if not judge.read_only(c)] + ["!" + c for c in no if judge.read_only(c)]
     t.ok(not bad, "knowledge: read_only -- every stage a proof as written; wrappers, assignments, redirects, "
          "substitutions, tee, xargs, find, awk, sh -c and the unlisted heads stay marked", str(bad))
@@ -3552,6 +3638,44 @@ def chat_tools_cases(t, spark, home):
     t.ok(saved.startswith('you: /read @gate.txt when does it open\n\nspark: It opens "at nine"')
          and "five dollars" not in saved,
          "chat: /read lands on the chat's thread like a turn", saved)
+    # the turn after a /read answers from the file it read: the source,
+    # held, rides the thread -- and with history off the chat's own
+    # turns in memory -- never the secret the read held back
+    with open(os.path.join(home, "gate2.txt"), "w") as f:
+        f.write(READ_TEXT + "Portal login: gatekeeper password: Blue-Harbor-7781\n")  # spark:allow-secret
+    for extra, where in (({}, "on its thread"), ({"SPARK_HISTORY": "off"}, "with history off, from memory")):
+        before = len(STATE.get("bodies", []))
+        rc, out, err = spark("chat", stdin="/new\n/read @gate2.txt when does it open\nand for children?\n:q\n",
+                             extra=extra, cwd=home)
+        sent = STATE.get("bodies", [])[before:]
+        follow = sent[-1]["messages"] if sent else []
+        earlier = "\n".join(m["content"] for m in follow[1:-1])
+        t.ok(rc == 0 and follow and follow[-1]["content"] == "and for children?"
+             and "Tickets are two dollars" in earlier and 'It opens "at nine"' in earlier and "[held]" in earlier
+             and "Blue-Harbor" not in json.dumps(sent),
+             "chat: the turn after /read carries the file it read, held back, %s" % where, out + err + earlier[-300:])
+    rc, out, err = spark("chat", stdin="count\ncount\n:q\n", extra={"SPARK_HISTORY": "off"})
+    t.ok(rc == 0 and re.findall(r"^\* (\d+)$", out, re.M) == ["2", "4"],
+         "chat: SPARK_HISTORY=off keeps nothing, yet a turn goes on with this chat's own turns", out + err)
+    # a long file: the part that answered rides the thread, not a cut of
+    # the whole -- read takes the best part, the next when it does not
+    # answer; here part 3 says "spare key" most, part 2 holds the line
+    from spark import read as readmod
+    _pad = "plain filler words here. " * 700
+    _blk = lambda s: (_pad[:7000] + s + " " + _pad)[:readmod.READ_MAX - readmod.PART_OVERLAP]
+    with open(os.path.join(home, "keys.txt"), "w") as f:
+        f.write(_blk("Nothing is said here about the door.") + _blk("A note: the spare key is under the mat.")
+                + _blk("spare key " * 30))
+    before = len(STATE.get("bodies", []))
+    rc, out, err = spark("chat", stdin="/new\n/read @keys.txt where is the spare key\nand the back door?\n:q\n", cwd=home)
+    sent = STATE.get("bodies", [])[before:]
+    follow = sent[-1]["messages"] if sent else []
+    earlier = "\n".join(m["content"] for m in follow[1:-1])
+    t.ok(rc == 0 and "[part 2 of 3]" in out and follow and follow[-1]["content"] == "and the back door?"
+         and "the spare key is under the mat" in earlier and "spare key spare key" not in earlier
+         and "[part 2 of 3]" not in earlier and "keys.txt, part 2 of 3:" in earlier
+         and len(earlier) < readmod.READ_MAX + 1000,
+         "chat: after a /read of a long file the turn after it carries the part that answered", out + err + earlier[-200:])
     STATE["read_none"] = True
     try:
         rc, out, err = spark("chat", stdin="/read @gate.txt\n/read @nope.txt\n/read\n:q\n", cwd=home)
@@ -7974,6 +8098,167 @@ def main():
         t.ok("Output:" not in umsg, "edit: the editor's block carries its own label", repr(umsg[:80]))
         rc, out, _ = spark("edit", "keep", "it", stdin="one\n  two\n\nthree")
         t.ok(rc == 0 and out == "one\n  two\n\nthree", "edit: an unchanged rewrite comes back byte for byte", repr(out))
+        # a rewrite of the whole text that comes back as the one part the
+        # words name (a small model's habit) is put back in its place: the
+        # editor splices the reply over the whole file, so a piece printed
+        # as the whole would delete the rest of it
+        invoice = ('"""Tiny invoice tool."""\nimport csv\nimport sys\n\nTAX = {"food": 0.05, "default": 0.20}\n\n\n'
+                   'def line_total(item):\n    rate = TAX[item["category"]]\n'
+                   '    return round(float(item["price"]) * int(item["qty"]) * (1 + rate), 2)\n\n\n'
+                   'def total(path):\n    with open(path, newline="") as f:\n'
+                   '        return round(sum(line_total(row) for row in csv.DictReader(f)), 2)\n\n\n'
+                   'if __name__ == "__main__":\n    print(f"TOTAL {total(sys.argv[1]):.2f}")\n')
+        fixed = invoice.replace('TAX[item["category"]]', 'TAX.get(item["category"], TAX["default"])')
+        piece = fixed[fixed.index("def line_total"):fixed.index("\n\n\ndef total")] + "\n"
+        STATE["edit_reply"] = ("```python\n", piece, "```\n")
+        rc, out, err = spark("edit", "--type", "python", "--name", "invoice.py", "use", "the", "default", "rate", stdin=invoice)
+        t.ok(rc == 0 and out == fixed, "edit: a rewrite that comes back as one function is put back in the whole file",
+             repr(out[:120]) + err)
+        prose = ("The mornings are quiet. I walk to the bakery before seven, when the street is still wet.\n\n"
+                 "The baker knows my order: a rye loaf, sliced, and one croissant for the walk back home.\n\n"
+                 "On Sundays the line runs out the door, and nobody minds the wait at all.\n\n"
+                 "In winter the windows fog, and the smell of bread reaches the corner.\n")
+        STATE["edit_reply"] = ("The baker knows my order: a rye loaf and one croissant.\n",)
+        rc, out, err = spark("edit", "make", "the", "second", "paragraph", "shorter", stdin=prose)
+        t.ok(rc == 0 and out == prose.replace("a rye loaf, sliced, and one croissant for the walk back home",
+                                              "a rye loaf and one croissant"),
+             "edit: a paragraph that comes back alone is put back between its neighbours", repr(out) + err)
+        # two pieces with a part of the text between them that the reply
+        # does not hold cannot be placed: nothing is printed, the text stays
+        STATE["edit_reply"] = (piece + "\n\n" + 'if __name__ == "__main__":\n    print(total(sys.argv[1]))\n',)
+        rc, out, err = spark("edit", "--name", "invoice.py", "rename", "it", stdin=invoice)
+        unsure = lambda rc, out, err: rc == 1 and out == "" and "its place in it is not sure" in err and err.count("\n") == 1
+        t.ok(unsure(rc, out, err),
+             "edit: pieces of the text with a gap between them are refused, one line, nothing printed", repr(out) + err)
+        # a reply that is part of the text, unchanged, is a deletion or a
+        # part left untouched, and the reply alone cannot tell: the model
+        # hears so once and is asked again. The same part again is the
+        # deletion it is; the whole text back is placed as any reply is;
+        # another part is refused
+        mail = ("Hi, thanks for sending the lease draft over yesterday afternoon. I read it twice and the rent "
+                "clause looks right to me now.\n\nPS: please also remember to bring the spare garage key on Friday.\n")
+        kept = mail[:mail.index("\n\nPS")] + "\n"
+        from spark import persona as _persona
+        asked = len(STATE["bodies"])
+        STATE["edit_replies"] = [(kept,), (kept,)]
+        rc, out, _ = spark("edit", "delete", "the", "PS", stdin=mail)
+        again = STATE["bodies"][-1]["messages"]
+        t.ok(rc == 0 and out == kept and len(STATE["bodies"]) == asked + 2
+             and again[-2] == {"role": "assistant", "content": kept} and again[-1]["content"].startswith(_persona.EDIT_PART_AGAIN),
+             "edit: a PS deleted stays deleted once the model, told its reply was part of the text, gives it again",
+             repr(out) + repr(again[-2:])[:300])
+        untouched = invoice[invoice.index("def total"):invoice.index("\n\n\nif __name__")] + "\n"
+        STATE["edit_replies"] = [(untouched,), (invoice,)]
+        rc, out, err = spark("edit", "--type", "python", "fix", "the", "typo", "in", "total()", stdin=invoice)
+        t.ok(rc == 0 and out == invoice, "edit: a part left untouched gives the whole text back when the model is asked again",
+             repr(out[:120]) + err)
+        STATE["edit_replies"] = [(untouched,), (invoice[:invoice.index("\n\n\ndef line_total")] + "\n",)]
+        rc, out, err = spark("edit", "--type", "python", "fix", "the", "typo", "in", "total()", stdin=invoice)
+        t.ok(unsure(rc, out, err), "edit: another part of the text the second time is refused, the text unchanged",
+             repr(out) + err)
+        STATE["edit_replies"] = None
+        STATE["edit_reply"] = (kept,)
+        rc, out, _ = spark("edit", "delete", "the", "PS", stdin=mail)
+        t.ok(rc == 0 and out == kept, "edit: a PS deleted from a mail stays deleted", repr(out))
+        six = "".join("%s paragraph talks about %s.\n\n" % (w, t_) for w, t_ in (
+            ("Alpha", "cats and dogs living together"), ("Bravo", "weather over northern mountains"),
+            ("Charlie", "groceries, apples and cherries"), ("Delta", "railway history across Europe"),
+            ("Echo", "ocean tides and the moon"), ("Foxtrot", "software testing and tooling"))).rstrip("\n") + "\n"
+        paras = six.split("\n\n")
+        STATE["edit_reply"] = (paras[0] + "\n",)
+        rc, out, _ = spark("edit", "keep", "only", "the", "first", "paragraph", stdin=six)
+        t.ok(rc == 0 and out == paras[0] + "\n", "edit: keep only the first paragraph keeps only it", repr(out))
+        STATE["edit_reply"] = ("\n\n".join(paras[:2]) + "\n",)
+        rc, out, _ = spark("edit", "delete", "the", "last", "four", stdin=six)
+        t.ok(rc == 0 and out == "\n\n".join(paras[:2]) + "\n", "edit: the last four paragraphs deleted stay deleted", repr(out))
+        # two paragraphs made one: the reply holds the second, so it is a
+        # rewrite of the whole, never spliced over the first beside it
+        two = ("Alpha paragraph talks about cats and dogs living together in the old farmhouse by the river near "
+               "town.\n\nBravo note short.\n")
+        merged = two.replace(".\n\nBravo", ". Bravo")
+        STATE["edit_reply"] = (merged,)
+        rc, out, _ = spark("edit", "make", "it", "one", "paragraph", stdin=two)
+        t.ok(rc == 0 and out == merged, "edit: two paragraphs merged print as the one paragraph, not twice", repr(out))
+        # a function that comes back holding a sibling's words goes back
+        # over itself, found by its own first line, never over the sibling
+        sib = ("def a():\n    return load_config(path, strict=True)\n\n"
+               "def b():\n    return load_config(path, strict=False)\n\ndef c():\n    return 3\n")
+        STATE["edit_reply"] = ("def b():\n    return load_config(path, strict=True)\n",)
+        rc, out, _ = spark("edit", "--type", "python", "make", "b", "strict", stdin=sib)
+        t.ok(rc == 0 and out == sib.replace("strict=False", "strict=True"),
+             "edit: a function goes back over itself by its first line, never over a sibling it now resembles", repr(out))
+        # a paragraph the text holds twice: which copy changed is not sure
+        rep = "\n\n".join([paras[0], paras[1], paras[0], paras[3]]) + "\n"
+        STATE["edit_reply"] = (paras[0].replace("living together", "living happily") + "\n",)
+        rc, out, err = spark("edit", "change", "the", "third", "paragraph", stdin=rep)
+        t.ok(unsure(rc, out, err), "edit: a paragraph the text holds twice is refused, never the first copy edited",
+             repr(out) + err)
+        # a new function alone, sharing nothing with the text's paragraphs:
+        # its place is not sure, and printed whole it would delete the file
+        STATE["edit_reply"] = ("def print_report(path):\n    print(compute(path))\n",)
+        rc, out, err = spark("edit", "--type", "python", "add", "a", "report", "function", stdin=invoice)
+        t.ok(unsure(rc, out, err), "edit: a new function alone is refused, never printed as the whole file", repr(out) + err)
+        # a section that comes back rewritten whole, its heading the same,
+        # replaces that section and leaves the next one where it was
+        readme = ("# tally\n\nCounts words in a file.\n\n## Install\n\n    curl -fsSL https://example.com/get | sh\n\n"
+                  "This puts tally in ~/.local/bin. Nothing else is written.\n\n## Use\n\n    tally FILE\n\n"
+                  "One row per file, a total at the end.\n")
+        section = ("## Install\n\nRun this once:\n\n    curl -fsSL https://example.com/get | sh\n\n"
+                   "The binary lands in ~/.local/bin; add that folder to PATH.\n")
+        STATE["edit_reply"] = (section,)
+        rc, out, err = spark("edit", "--type", "markdown", "make", "the", "install", "section", "clearer", stdin=readme)
+        t.ok(rc == 0 and out == readme[:readme.index("## Install")] + section.rstrip("\n") + readme[readme.index("\n\n## Use"):],
+             "edit: a section rewritten whole replaces its section, the next one kept", repr(out) + err)
+        code = ("import sys\n\n\ndef total(path):\n    rows = read(path)\n\n    return sum(rows)\n\n\n"
+                "def main():\n    print(total(sys.argv[1]))\n")
+        func = "def total(path):\n    rows = [r for r in read(path) if r]\n\n    # blank rows are skipped\n    return sum(rows)\n"
+        STATE["edit_reply"] = (func,)
+        rc, out, err = spark("edit", "--type", "python", "skip", "blank", "rows", stdin=code)
+        t.ok(rc == 0 and out == code[:code.index("def total")] + func.rstrip("\n") + code[code.index("\n\n\ndef main"):],
+             "edit: a function with a blank line inside goes back over the whole function", repr(out) + err)
+        # a paragraph cut to half its length still matches its own words:
+        # it goes back in its place, never printed as the whole text
+        feira = ("A feira começava antes do sol. Dona Zefa chegava com o carrinho de madeira às cinco e armava a "
+                 "banca de temperos no mesmo canto de sempre.\n\n"
+                 "O neto vinha depois, de bicicleta, com os olhos ainda fechados de sono. Trazia o café num garrafão "
+                 "e as notícias da noite: quem tinha brigado, quem tinha voltado, quem não voltava mais. Ela ouvia "
+                 "sem parar de arrumar os maços de cheiro-verde, e às vezes dizia \"hum\", que era o bastante.\n\n"
+                 "Quando o primeiro freguês aparecia, o dia já tinha decidido o que ia ser.\n")
+        short = ("O neto vinha depois, de bicicleta, com o café e as notícias da noite. Ela ouvia tudo enquanto "
+                 "arrumava os temperos, respondendo apenas com um \"hum\" ocasional.")
+        STATE["edit_reply"] = (short + "\n",)
+        rc, out, err = spark("edit", "deixe", "o", "segundo", "parágrafo", "mais", "curto", stdin=feira)
+        paras_f = feira.split("\n\n")
+        t.ok(rc == 0 and out == "\n\n".join([paras_f[0], short, paras_f[2]]),
+             "edit: a paragraph cut short goes back in its place by its own words", repr(out) + err)
+        # a text with no blank lines (a script) is placed by its lines
+        script = ('#!/bin/sh\nset -eu\nBIN="$HOME/.local/bin"\nSRC="$(dirname "$0")"\nmkdir -p "$BIN"\n'
+                  'for tool in alpha beta gamma; do\n  cp "$SRC/$tool" "$BIN/$tool"\n  chmod 755 "$BIN/$tool"\n'
+                  'done\necho "installed into $BIN"\n')
+        loop = 'for tool in alpha beta gamma delta; do\n  cp "$SRC/$tool" "$BIN/$tool"\n  chmod 755 "$BIN/$tool"\ndone\n'
+        STATE["edit_reply"] = (loop,)
+        rc, out, err = spark("edit", "--type", "sh", "add", "delta", "to", "the", "loop", stdin=script)
+        t.ok(rc == 0 and out == script.replace("gamma; do", "gamma delta; do"),
+             "edit: the loop of a script with no blank lines goes back in its lines", repr(out) + err)
+        # a multi-line paragraph spliced into a CRLF file keeps CRLF inside
+        # it (_place itself: the harness reads stdout as text, which folds
+        # a CRLF to a newline)
+        from spark import edit as editmod
+        crlf = "One line here, the first paragraph.\r\n\r\nTwo lines here,\r\nthe second paragraph.\r\n\r\nThree, the last.\r\n"
+        got = editmod._place(crlf, "Two lines here,\nthe second paragraph, edited.\n")
+        t.ok(got == (crlf.replace("second paragraph.", "second paragraph, edited."), "spliced"),
+             "edit: a paragraph spliced into a CRLF file keeps its CRLF", repr(got))
+        # a whole text is still whole: most of it back with an edge cut on
+        # purpose, or a new text drawn from the whole of the old one
+        cut = prose[:prose.index("In winter")].rstrip("\n") + "\n"
+        STATE["edit_reply"] = (cut,)
+        rc, out, _ = spark("edit", "drop", "the", "last", "paragraph", stdin=prose)
+        t.ok(rc == 0 and out == cut, "edit: most of the text back with its last paragraph cut is printed as it came", repr(out))
+        haiku = "Bread before seven\nwet street, a loaf under arm\nSunday's patient line\n"
+        STATE["edit_reply"] = (haiku,)
+        rc, out, _ = spark("edit", "make", "it", "a", "haiku", stdin=prose)
+        t.ok(rc == 0 and out == haiku, "edit: a new text drawn from the whole of the old one is printed as it came", repr(out))
+        STATE["edit_reply"] = None
         # a rewrite is the model's text too: an escape in it (a clipboard
         # write, OSC 52) never reaches the terminal or the buffer, and a
         # file's CRLF line ends stay
@@ -8138,6 +8423,105 @@ def main():
              and textmod.anchor("error 500", "an error 500 came back", whole=True)
              and not textmod.anchor("error 500", "an error 5001 came back", whole=True),
              "anchor whole: a span matches at word boundaries, never inside a longer token")
+        # a line that is the source's own words, copied whole with no quote
+        # marks, quotes it: a model answering from a spec copies its line
+        # (#89, the 422 dropped as "quotes nothing"). A short copy or a
+        # paraphrase still quotes nothing
+        g2 = textmod.Ground("On a validation error the service answers 422 with a JSON body\n"
+                            '`{"error": "...", "field": "..."}`. An unknown invoice id answers 404.\n')
+        t.ok(g2.verdict("On a validation error the service answers 422 with a JSON body")[0] == textmod.GROUNDED
+             and g2.verdict("- on a validation error the service answers 422 with a JSON body.")[0] == textmod.GROUNDED
+             and g2.verdict("An unknown invoice id")[0] == textmod.UNQUOTED
+             and g2.verdict("The service answers errors with a JSON body.")[0] == textmod.UNQUOTED,
+             "ground: a whole line copied from the source grounds; a four-word copy or a paraphrase does not")
+        # a double-quoted span whose own quotes came back escaped, JSON-style,
+        # is one span, anchored and written unescaped (#89; a log line in
+        # spark watch, #80)
+        _u = 'It answers "422 with a JSON body" containing "{\\"error\\": \\"...\\", \\"field\\": \\"...\\"}".'
+        t.ok([q[0] for q in textmod.quotes(_u)] == ["422 with a JSON body", '{"error": "...", "field": "..."}']
+             and g2.verdict(_u) == (textmod.GROUNDED, [])
+             and g2.mark(_u) == 'It answers "422 with a JSON body" containing `{"error": "...", "field": "..."}`.',
+             "quotes: a span with escaped quotes inside is one span, anchored, written unescaped", g2.mark(_u))
+        _log = ('2026/10/22 21:30:41 [error] upstream timed out, request: "POST /api/checkout HTTP/1.1", '
+                'upstream: "http://192.0.2.5:9000/api/checkout"')
+        _ws = io.StringIO()
+        _wg = textmod.Gate(_ws, _log + "\n", keep=lambda _l, v, _m: v == textmod.GROUNDED, whole=True)
+        _wg.write('Found one: "' + _log.replace('"', '\\"') + '"\n')
+        _wg.close()
+        t.ok(_wg.kept == 1 and "\\" not in _ws.getvalue() and "[not in the text]" not in _ws.getvalue(),
+             "gate: a quoted log line whose own quotes came back escaped is kept, shown unescaped", _ws.getvalue())
+        # a model hard-wraps near 70 columns, so one quote runs over a line
+        # break: a dropping gate judges the two lines as one unit (the
+        # newsboat overview lost the line's second half). An inch mark that
+        # opens nothing is judged line by line, as before; Anchors keeps
+        # the editor's lines
+        _src = ("She soldered in the new batteries and used silicone glue to glue the case shut, "
+                "and it works! She went to use the soldering iron.\n")
+
+        def _gated(chunks, keep=lambda _l, v, _m: v == textmod.GROUNDED):
+            _o = io.StringIO()
+            _g = textmod.Gate(_o, _src, keep)
+            for _c in chunks:
+                _g.write(_c)
+            _g.close()
+            return _o.getvalue(), _g.kept, _g.dropped
+        t.ok(_gated(['She "used silicone glue to\n', 'glue the case shut" in the end.\n'])
+             == ('She "used silicone glue to glue the case shut" in the end.\n', 1, 0)
+             and _gated(['She "soldered in the new\n', 'batteries and used\n', 'silicone glue" there.\n'])[1] == 1
+             and _gated(['It is 27" wide and\n', 'she went "to use the soldering iron".\n'])
+             == ('she went "to use the soldering iron".\n', 1, 1)
+             and _gated(['It "glue the\n', '\n', 'case shut" now.\n'])[1:] == (0, 2),
+             "gate: a quote split by a line break is judged whole; an inch mark or a blank line leaves the lines alone",
+             repr(_gated(['She "used silicone glue to\n', 'glue the case shut" in the end.\n'])))
+        _ao = io.StringIO()
+        _an = textmod.Anchors(_ao, _src)
+        _an.write('She "used silicone glue to\nglue the case shut" ok\n')
+        _an.close()
+        t.ok(_ao.getvalue().startswith('She "used silicone glue to\nglue the case shut" ok'),
+             "anchors: an editor's split quote keeps its lines", repr(_ao.getvalue()))
+        # the join reads a quote a line break split, and nothing else: a
+        # lone inch mark in a question never joins the questions after it
+        # (ask is one question a line, ASK_CAP of them), a line ending in
+        # "?" is never held, and two lines join only when the quote across
+        # the break anchors
+        _bud = "We will buy a 27 inch monitor in March. The budget is 400 dollars.\n"
+        _askish = lambda l, v, _m: l.rstrip().endswith("?") and v != textmod.UNGROUNDED
+
+        def _bgated(text):
+            _o = io.StringIO()
+            _g = textmod.Gate(_o, _bud, _askish)
+            _g.write(text)
+            _g.close()
+            return _o.getvalue()
+        t.ok(_bgated('Is the 27" monitor inside the budget?\nWhat happens if March slips?\n'
+                     'Who signs off on the 400 dollars?\n').count("\n") == 3
+             and _bgated('It is 27" wide and\nhow big is the budget?\n') == "how big is the budget?\n"
+             and _bgated('What if "we will buy a 27\ninch monitor in March" slips?\n')
+             == 'What if "we will buy a 27 inch monitor in March" slips?\n',
+             "gate: an inch mark joins nothing; a question is its own line; a quote that anchors across a break joins",
+             repr((_bgated('Is the 27" monitor inside the budget?\nWhat happens if March slips?\n'),
+                   _bgated('It is 27" wide and\nhow big is the budget?\n'))))
+        # a verbatim line anchors at word boundaries and starts where a line
+        # or a sentence of the source starts: "limited to 10" is not in
+        # "limited to 100", "encrypted" not in "Unencrypted", and a piece
+        # from mid-sentence that drops the "not" before it grounds nothing
+        g3 = textmod.Ground("Requests are limited to 100 per minute for each key.\n"
+                            "Unencrypted connections are not allowed on this port.\n"
+                            "The service does not retry a request after a 503 answer.\n"
+                            "On a validation error the service answers 422 with a JSON body.\n")
+        t.ok(g3.verdict("Requests are limited to 10")[0] == textmod.UNQUOTED
+             and g3.verdict("encrypted connections are not allowed on this port")[0] == textmod.UNQUOTED
+             and g3.verdict("retry a request after a 503 answer")[0] == textmod.UNQUOTED
+             and g3.verdict("Requests are limited to 100 per minute")[0] == textmod.GROUNDED
+             and g3.verdict("On a validation error the service answers 422 with a JSON body.")[0] == textmod.GROUNDED,
+             "ground: a verbatim line anchors at word boundaries, from the start of a line or a sentence")
+        # a backslash before the closing quote ends a path, it escapes
+        # nothing: escaped quotes come in pairs inside a span
+        t.ok([q[0] for q in textmod.quotes('the path "C:\\temp\\" is used and "foo bar baz" too')]
+             == ["C:\\temp\\", "foo bar baz"]
+             and [q[0] for q in textmod.quotes('the line is "request: \\"POST /x\\" now"')] == ['request: "POST /x" now'],
+             "quotes: a path's closing backslash leaves the quote closing; an escaped pair stays inside",
+             str(textmod.quotes('the path "C:\\temp\\" is used and "foo bar baz" too')))
         STATE["ask_quotes"] = True
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
@@ -8571,11 +8955,45 @@ def main():
         t.ok(readmod.parts_of(len(big)) == 3
              and readmod.part_slice(big, 1)[-readmod.PART_OVERLAP:] == readmod.part_slice(big, 2)[:readmod.PART_OVERLAP],
              "read: three parts of 40000 chars, each opening with the last 400 of the one before")
+        # no part named: the parts ranked by the question's words (#84). The
+        # spare key is said most in part 3, but only part 2 holds the line
+        # the answer quotes: part 3 is read first, refused by the gate, and
+        # part 2 answers. Two requests, the header naming the part that did
+        _pad = "plain filler words here. " * 700
+        _blk = lambda s: (_pad[:7000] + s + " " + _pad)[:readmod.READ_MAX - readmod.PART_OVERLAP]
+        keys = (_blk("Nothing is said here about the door.")
+                + _blk("A note: the spare key is under the mat.")
+                + _blk("spare key " * 30))
+        t.ok(readmod.parts_of(len(keys)) == 3 and readmod.ranked(keys, "where is the spare key")[:2] == [3, 2]
+             and readmod.ranked(keys, "") == [1] and readmod.ranked(keys, "zxqv") == [1]
+             and readmod.ranked("x " * 9000 + "PasswordAuthentication no", "turn off the password") == [2],
+             "read: ranked puts the parts in the order the question's words say, camelCase split; bare is part 1",
+             str(readmod.ranked(keys, "where is the spare key")))
         n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "where", "is", "the", "spare", "key", stdin=keys)
+        t.ok(rc == 0 and out == '[part 2 of 3]\nIt says "the spare key is under the mat".\n'
+             and len(STATE["bodies"]) == n0 + 2 and "--part" not in err,
+             "read: a long source with no part named reads the best part, then the next, and names the one that answered",
+             repr(out) + err)
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        _two = [json.loads(x) for x in open(turns[-1]).read().splitlines()[-2:]] if turns else []
+        t.ok([(x.get("part"), x.get("parts"), x.get("kept")) for x in _two] == [(3, 3, 0), (2, 3, 1)],
+             "read: each part read is its own turn, numbers only", json.dumps(_two)[:200])
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "who", "hid", "the", "spare", "key", stdin=keys)
+        t.ok(rc == 1 and out == "" and "parts 3 and 2 of 3 do not answer -- read another: --part N" in err
+             and len(STATE["bodies"]) == n0 + 2,
+             "read: two parts read and neither answers is one refusal naming them and the remedy, exit 1", err)
         rc, out, err = spark("read", "what", "repeats", stdin=big)
-        t.ok(rc == 1 and out == "" and "3 parts" in err and "--part N" in err
-             and len(STATE["bodies"]) == n0,
-             "read: a source past 16 kB is refused with the part count, nothing sent", err)
+        t.ok(rc == 0 and out == '[part 1 of 3]\nIt repeats "word word" throughout.\n',
+             "read: words every part holds alike read part 1 first", repr(out) + err)
+        # --warm cannot know the part a question will pick: a long source
+        # with none named is refused, nothing sent (a 16 kB prefill the
+        # question would not use)
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "--warm", stdin=big)
+        t.ok(rc == 1 and out == "" and "3 parts" in err and "--part N" in err and len(STATE["bodies"]) == n0,
+             "read --warm: a long source with no part named is refused with the count, nothing sent", repr(out + err))
         rc, out, err = spark("read", "--part", "2", "what", "repeats", stdin=big)
         t.ok(rc == 0 and out == '[part 2 of 3]\nIt repeats "word word" throughout.\n',
              "read: --part 2 answers, and the first line names the part it read", repr(out[:60]) + err)
@@ -8714,6 +9132,36 @@ def main():
         rc, out, err = spark("watch", "when a 500 appears", stdin="connection error 5001 logged\n")
         t.ok(rc == 0 and out == "",
              "watch: a quote of \"error 500\" cannot ground against a window holding only 5001", repr(out) + err)
+        # #80: a line with double quotes of its own -- every web server and
+        # JSON log line. The model escaped them (\"), and a long line was
+        # cut at the reply's cap before its closing quote: both were
+        # dropped, so the watch stayed silent on the very line it found.
+        rc, out, err = spark("watch", "anything that fails", stdin=NGINX_OK + "\n" + NGINX_ERROR + "\n")
+        t.ok(rc == 0 and out == 'Found a timeout: "' + NGINX_ERROR + '"\n',
+             "watch: a match whose line holds quotes of its own is printed, the stream's own line", repr(out) + err)
+        cut = NGINX_ERROR.replace("*118", "*119")
+        rc, out, err = spark("watch", "anything that fails", stdin=NGINX_OK + "\n" + cut + "\n")
+        t.ok(rc == 0 and out == 'Found one: "' + cut + '"\n',
+             "watch: a quote cut by the reply's cap still names its line", repr(out) + err)
+        rc, out, err = spark("watch", "when the disk is full", stdin="backup started\nwrite failed: disk full on /dev/sdb1\nbackup ended\n")
+        t.ok(rc == 0 and out == 'the disk filled up: "write failed: disk full on /dev/sdb1"\n'
+             and "[2] write failed: disk full" in (STATE.get("last_user") or ""),
+             "watch: the window is numbered and a line named by its number prints from the stream", repr(out) + err)
+        rc, out, err = spark("watch", "anything that fails", stdin="phantom line one\nphantom line two\n")
+        t.ok(rc == 0 and out == "", "watch: a number the window does not hold prints nothing", repr(out) + err)
+        rc, out, err = spark("watch", "anything that fails",
+                             stdin="job runner started\nGET /ok 200\nGET /ok 201\nworker [3] crashed: out of memory\nGET /ok 202\n")
+        t.ok(rc == 0 and out == 'worker crashed: "worker [3] crashed: out of memory"\n',
+             "watch: a quote the window holds wins over a number inside it", repr(out) + err)
+        lines = ["GET /ok %d" % (200 + i) for i in range(1, 15)]
+        lines[4] = "[12] cache warmed in 300 ms"
+        rc, out, err = spark("watch", "anything about the cache", stdin="\n".join(lines) + "\n")
+        t.ok(rc == 0 and out == '"[12] cache warmed in 300 ms"\n',
+             "watch: a line the model copied whole is that line, not the number it starts with", repr(out) + err)
+        rc, out, err = spark("watch", "anything that fails", stdin="closest probe GET /a 200\nclosest probe GET /b 200\n")
+        t.ok(rc == 0 and out == "", "watch: a reply that says nothing matches prints nothing, a number in it aside", repr(out) + err)
+        rc, out, err = spark("watch", "anything that fails", stdin="quiet probe one\nquiet probe two\n")
+        t.ok(rc == 0 and out == "", "watch: a number before 'nothing matches' prints nothing", repr(out) + err)
         # the watcher never watches itself: spark's own journal lines and a
         # llama-server log line are dropped before the window, and a window
         # of only those is no model call at all
@@ -8822,6 +9270,8 @@ def main():
                     raise wiremod.BrainError(kind, "the brain went away")
                 return run
             ok2, hint2 = sessmod.once(lambda: "S", _boom("cut"))
+            # a FORGE answering 429 {"kind": "busy"} to a full queue: a skip (#90)
+            ok3, _ = sessmod.once(lambda: "S", _boom("busy"))
             raised = False
             try:
                 sessmod.once(lambda: "S", _boom("auth"))
@@ -8829,8 +9279,8 @@ def main():
                 raised = True
         finally:
             wiremod.drop_cache = _drop
-        t.ok(ok1 and val1 == "ran:S" and ok2 is False and hint2 == "the brain went away" and raised,
-             "session.once: success passes through, a cut is a skip, an auth fault is raised")
+        t.ok(ok1 and val1 == "ran:S" and ok2 is False and hint2 == "the brain went away" and ok3 is False and raised,
+             "session.once: success passes through, a cut or a busy FORGE is a skip, an auth fault is raised")
 
         # spark share: one engine for the machine's other OS users (v1.22)
         rc, out, _ = spark("serve", "share", "-h")
@@ -9027,6 +9477,74 @@ def main():
         rc, out, _ = spark("line", stdin="? sameagain-stub please")
         rc, out, _ = spark("line", stdin="?? still nothing")
         t.ok(rc == 0 and "Already tried above" in out, "a stubborn repeat is labeled, not re-served as new", out)
+        # #86: the widgets stop spark line once the person moves on (the
+        # next Enter, a key, the next prompt): SIGTERM, a Ctrl-C at the
+        # prompt (SIGINT to the shell's group), or the reader gone and line
+        # 2's write a broken pipe. A turn whose command was handed over is
+        # on its thread all the same, so `??` goes on with it
+        for _how in ("term", "int", "pipe"):
+            _p = subprocess.Popen([sys.executable, SPARK, "line"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL, text=True, env=env)
+            _p.stdin.write("slowhint moved-%s?" % _how)
+            _p.stdin.close()
+            _l1 = _p.stdout.readline()
+            if _how == "term":
+                _p.terminate()
+            elif _how == "int":
+                _p.send_signal(signal.SIGINT)
+            else:
+                _p.stdout.close()
+            _p.wait(timeout=30)
+            _n0 = len(STATE["bodies"])
+            rc, out, _ = spark("line", stdin="?? and the hidden ones")
+            _sent = " ".join(m.get("content", "") for m in STATE["bodies"][_n0]["messages"]) if len(STATE["bodies"]) > _n0 else ""
+            t.ok(_l1.startswith("cmd\tls -la") and "moved-%s" % _how in _sent and "`ls -la`" in _sent,
+                 "line: a turn stopped after line 1 (%s) is on its thread, and ?? goes on with it" % _how,
+                 repr(_l1) + _sent[-300:])
+        # the stop's handler, alone: a signal with no turn in flight ends the
+        # process as the signal would (no _Moved to escape as a traceback);
+        # a turn being kept, or stopping already, lets it finish; a live one
+        # is stopped once, SIGTERM as _Moved and a Ctrl-C as itself
+        from spark import cli as _lc
+
+        def _sig(signum):
+            try:
+                _lc._moved(signum, None)
+            except BaseException as e:      # noqa: BLE001 -- what the handler raised is the result
+                return e
+            return None
+        _held, _lc._TURN[:] = list(_lc._TURN), []
+        _e0 = _sig(signal.SIGTERM)
+        _tn = _lc._Landing(None, None, False, "", "")
+        _lc._TURN[:] = [_tn]
+        _e1, _e2 = _sig(signal.SIGTERM), _sig(signal.SIGTERM)
+        _tn.stopping = False
+        _e3 = _sig(signal.SIGINT)
+        _tn.stopping, _tn.done = False, True
+        _e4 = _sig(signal.SIGTERM)
+        _lc._TURN[:] = _held
+        t.ok(isinstance(_e0, SystemExit) and _e0.code == 128 + signal.SIGTERM
+             and isinstance(_e1, _lc._Moved) and _e2 is None
+             and isinstance(_e3, KeyboardInterrupt) and _e4 is None,
+             "line: the stop's handler -- no turn ends quietly, a live turn stops once, a kept one finishes",
+             repr((_e0, _e1, _e2, _e3, _e4)))
+        # #88: the fix after an explain goes on with that explain's thread,
+        # and the command that failed is never landed as its own fix
+        _fx = {"SPARK_EXPLAIN_CMD": "tar xzf stubfail.tgz", "SPARK_EXPLAIN_RC": "2"}
+        spark("explain", stdin="tar: stubfail.tgz: Cannot open: No such file or directory\n", extra=_fx)
+        _n0 = len(STATE["bodies"])
+        rc, out, _ = spark("line", stdin="? fix it", extra=_fx)
+        _sent = " ".join(m.get("content", "") for m in STATE["bodies"][_n0]["messages"]) if len(STATE["bodies"]) > _n0 else ""
+        t.ok("The output means X." in _sent and "failed with exit 2" in _sent,
+             "line: the fix after an explain reads that explain's answer", _sent[-300:])
+        t.ok(rc == 0 and out.splitlines()[:1] == ["answer"] and "tar xzf stubfail.tgz" not in out
+             and "other command fixes this" in out,
+             "line: the command that failed is never landed as its own fix", repr(out))
+        # #87: explain names a command only when a command fixes it
+        from spark import persona as _pm
+        t.ok("When the fix is a change inside a file" in _pm.MODE_EXPLAIN
+             and "spark's own commands are for spark's own failures" in _pm.MODE_EXPLAIN,
+             "explain: a change inside a file is said, never a spark verb", _pm.MODE_EXPLAIN)
         rc, out, _ = spark("memory")
         t.ok("0 facts" in out, "no fact named -h was kept", out)
 
@@ -9199,6 +9717,50 @@ def main():
         rc2, out2, err2 = spark("do", "stubborn", stdin="", extra=hook, cwd=work)
         t.ok(rc2 == 0 and "nothing ran: Checking the status." in out2,
              "spark do: a second early done ends the run, saying nothing ran", out2 + err2)
+        # v1.100 (#83): the model's flag on a read-only pipeline is lowered,
+        # as the prompt line's judge lowers it; on sort -o, a writer, it stays
+        rc2, out2, err2 = spark("do", "dusort", stdin="\n", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and "* 1  du -sh * | sort -rh | head -n 10   the largest here" in out2
+             and "type yes" not in out2 and "done  all done" in out2,
+             "spark do: the model's ! on du -sh * | sort -rh | head is lowered -- every stage reads", out2 + err2)
+        rc2, out2, err2 = spark("do", "sortout", stdin="no\n", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and "! 1  sort -o sorted.txt names.txt" in out2 and "type yes to run it" in out2
+             and not os.path.exists(work + "/sorted.txt"),
+             "spark do: the model's ! on sort -o stays -- it writes a file", out2 + err2)
+        # v1.100 (#81): what a step changed rides its feedback -- outside a
+        # sandbox, the paths it names: the same bytes written again are
+        # unchanged, other bytes changed
+        with open(work + "/same.txt", "w") as f:
+            f.write("same\n")
+        n0 = len(STATE["bodies"])
+        rc2, out2, err2 = spark("do", "samewrite", stdin="yes\nyes\n", extra=hook, cwd=work)
+        _fb = [b["messages"][-1]["content"] for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+        t.ok(rc2 == 0 and len(_fb) == 3 and _fb[1].endswith("Of the paths it names: same.txt unchanged.")
+             and _fb[2].endswith("Of the paths it names: same.txt changed.")
+             and open(work + "/same.txt").read() == "other\n",
+             "spark do: the feedback says a named file kept its bytes, then that it changed", repr(_fb[1:]))
+        os.remove(work + "/same.txt")
+        # v1.100: a step that changes directory says nothing of the paths it
+        # names -- `cd sub && rm x` named x, and the top x stayed as it was
+        os.makedirs(work + "/sub", exist_ok=True)
+        for _p in ("x", "sub/x"):
+            with open(os.path.join(work, _p), "w") as f:
+                f.write("x\n")
+        n0 = len(STATE["bodies"])
+        rc2, out2, err2 = spark("do", "cdstep", stdin="yes\n", extra=hook, cwd=work)
+        _fb = [b["messages"][-1]["content"] for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+        t.ok(rc2 == 0 and len(_fb) == 2 and "Output of `cd sub && rm x`" in _fb[1] and "paths it names" not in _fb[1]
+             and os.path.exists(work + "/x") and not os.path.exists(work + "/sub/x"),
+             "spark do: a step that changes directory tells nothing of the paths it names", repr(_fb[1:]))
+        from spark import do as _dn
+        _cd = [c for c in ("cd sub && rm x", "pushd sub && rm x", "git -C sub rm x", "make -C sub clean",
+                           "tar -C out -xf a.tgz", "tar --directory=out -xf a.tgz", "env --chdir=sub rm x",
+                           "(cd sub; rm x)", "find . -name x -execdir rm {} +")
+               if _dn._named(c, work)]
+        t.ok(not _cd and _dn._named("rm x", work), "spark do: cd, pushd, -C, --directory, --chdir, -execdir and a "
+             "subshell leave the named paths untold; rm x names x", str(_cd))
+        shutil.rmtree(work + "/sub")
+        os.remove(work + "/x")
         # v1.70: a step of several lines -- a block -- is shown whole,
         # every line numbered beneath the step line, before the prompt
         from spark import do as _do
@@ -9866,6 +10428,10 @@ def main():
                  and (_sb.OS != "macos" or goal.split("]")[0].endswith("/clone")),
                  "spark do --sandbox: the goal says where it runs ([cwd] the clone on macOS) and carries the note",
                  goal)
+            _fb = [b["messages"][-1]["content"] for b in bodies]
+            t.ok(len(_fb) == 3 and _fb[1].endswith("Changed by this step: notes.txt.")
+                 and _fb[2].endswith("Changed by this step: old.txt."),
+                 "spark do --sandbox: each step's feedback names the files it changed in the copy", repr(_fb[1:]))
             plain = [b for b in STATE["bodies"][:n0] if is_do(b["messages"])][-1]["messages"][0]
             t.ok(bodies and all(b["messages"][0] == plain for b in bodies),
                  "spark do --sandbox: the system message is byte-identical to plain do's")
@@ -9923,6 +10489,26 @@ def main():
             rc, out, err = spark("do", "--sandbox", "boxlook", stdin="", extra=hook, cwd=box)
             t.ok(rc == 0 and "* nothing changed" in out and not waiting() and "type yes" not in out,
                  "spark do --sandbox: a run that changed nothing says so and leaves nothing waiting", out + err)
+            # v1.100 (#81, #82): a writer that changed nothing hears so; the
+            # done that follows is asked once more, then said as nothing changed
+            n0 = len(STATE["bodies"])
+            rc, out, err = spark("do", "--sandbox", "boxnoop", stdin="", extra=hook, cwd=box)
+            _users = [b["messages"][-1]["content"] for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+            t.ok(rc == 0 and len(_users) == 3 and _users[1].endswith(_do.UNCHANGED)
+                 and _users[2].endswith(_do.NOTHING_CHANGED_AGAIN)
+                 and "done  nothing changed: removed the old files" in out and "* nothing changed" in out
+                 and not waiting(),
+                 "spark do --sandbox: a step that changed nothing is told so; a done after it is asked again, "
+                 "then said as nothing changed", repr(_users[1:]) + out + err)
+            # v1.100: a run that only reads, with a head the read-only proof
+            # does not list (cat), is not asked again and ends as it said
+            n0 = len(STATE["bodies"])
+            rc, out, err = spark("do", "--sandbox", "boxcat", stdin="", extra=hook, cwd=box)
+            _users = [b["messages"][-1]["content"] for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+            t.ok(rc == 0 and len(_users) == 2 and "done  read it" in out and "nothing changed: read it" not in out
+                 and "* nothing changed" in out and not waiting(),
+                 "spark do --sandbox: a reading run is not asked again -- only a step that can write counts",
+                 repr(_users[1:]) + out + err)
             # detached: no terminal, the id printed, the changes wait; one at a time
             reset_box()
             rc, out, err = spark("do", "--sandbox", "--detach", "boxwork", stdin="", cwd=box)

@@ -7,6 +7,7 @@
 import json
 import os
 import re
+import signal
 import sys
 import time
 
@@ -145,6 +146,13 @@ def _last_proposed(history):
         if m.get("role") == "assistant" and c.startswith("`") and "`" in c[1:]:
             return c[1:1 + c[1:].index("`")]
     return None
+
+
+def _explains(history):
+    """Is the thread an explain's: its newest question `[explain] ...`
+    (cli.cmd_explain's line) -- what the fix after it goes on with."""
+    asked = next((m.get("content", "") for m in reversed(history or []) if m.get("role") == "user"), "")
+    return asked.startswith("[explain]")
 
 
 def _bench_history(path):
@@ -532,6 +540,13 @@ def _names_command(text):
     program of this machine."""
     return bool(_own_named(text) or _tool_named(text))
 REPEATED = "that exact command was already tried and failed; propose a different one."
+# the fix after an explain (the widgets' second Esc s): the turn goes on
+# with that explain's thread, so the model reads why the command failed
+FIX_ASK = ("The command `%s` failed with exit %d%s. Reply with the one command that fixes it: the "
+           "command corrected, or the step that removes the cause. When no command fixes it -- a "
+           "change inside a file -- answer in words what to change.")
+FIX_READ = ", and your explanation of why is above"
+NO_FIX = "no other command fixes this -- the reason above says what to change"
 NOT_HERE = "Nothing installed here does its job: answer with the package manager's command that installs it."
 BY_NAME = "The user asked for %s by name: answer with the package manager's command that installs it."
 NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
@@ -542,6 +557,96 @@ class _Stop(Exception):
     """The judge found the first command wrong before line 1: raised from
     the stream's own delta callback, so the response closes there (the
     server drops the task) and line 1 is never painted with it."""
+
+
+class _Moved(BaseException):
+    """SIGTERM in `spark line`: the widgets stop a turn still on its way
+    once the person moves on -- the next Enter, a key, the next prompt.
+    A BaseException, so no `except Exception` on the wire swallows it."""
+
+
+_TURN = []          # the line turn in flight (_Landing), for a stop mid-turn
+
+
+def _moved(signum, _frame):
+    """SIGTERM and SIGINT while `spark line` runs (_kept). A Ctrl-C's
+    SIGINT and the reap's SIGTERM come a moment apart: the first stops the
+    turn, and any after it waits for the keeping to finish."""
+    turn = _TURN[0] if _TURN else None
+    if turn is None:
+        raise SystemExit(128 + signum)      # no turn in flight: end as the signal would, quietly
+    if turn.done or turn.stopping:
+        return                              # being kept, or stopping already: that finishes first
+    turn.stopping = True
+    raise KeyboardInterrupt() if signum == signal.SIGINT else _Moved()
+
+
+class _Landing:
+    """The line turn on its thread, kept once: at the end, or when the turn
+    stops after line 1 -- the widgets' SIGTERM, a Ctrl-C at the prompt
+    (the shell's whole group gets the SIGINT), or line 2's write a broken
+    pipe once their reader is gone. The person was handed the command, so
+    it is what `??` goes on with, and `spark last` shows it."""
+
+    def __init__(self, cfg, thread, remote, text, cwd, head=None):
+        self.cfg, self.thread, self.remote, self.text, self.cwd = cfg, thread, remote, text, cwd
+        self.head = head            # the FORGE's newest thread when a client's `??` asked
+        self.early = self.session = None
+        self.done = self.recorded = self.stopping = False
+
+    def keep(self, kind, shown):
+        if self.done:
+            return
+        self.done = True
+        if self.remote:
+            forge.peer_append(self.cfg, self.thread, "user", self.text, mode="line")
+            forge.peer_append(self.cfg, self.thread, "assistant", shown, kind=kind)
+        else:
+            forge.append(self.cfg, self.thread, "user", self.text, mode="line", cwd=self.cwd)
+            forge.append(self.cfg, self.thread, "assistant", shown, kind=kind)
+        # a client: where this turn landed, and the FORGE's newest then,
+        # for its next `??` (forge.line_mine)
+        forge.line_saw(self.cfg, "peer" if self.remote else "local", self.thread, self.head)
+
+    def stopped(self):
+        """After a stop: what line 1 and line 2 handed over, kept."""
+        e = self.early
+        if self.done or e is None or e.head is None:
+            return
+        if e.head == "answer":
+            shown = e.hint or ""
+        else:
+            shown = "`%s` -- %s" % (e.command, e.hint) if e.hint else "`%s`" % e.command
+        if not shown:
+            return
+        if self.session is not None and not self.recorded:
+            self.session.record(kind=e.head, line=self.text, command=e.command, hint=e.hint or "",
+                                ms=e.ms(), cmd_ms=e.cmd_ms, thread=self.thread)
+        self.keep(e.head, shown)
+
+
+def _kept(args):
+    """_cmd_line, a stop after line 1 keeping its turn (_Landing). The
+    handlers are put back before the turn is let go, inside the try: a
+    signal at any point is either the turn's stop or the old handler's."""
+    old = signal.signal(signal.SIGTERM, _moved), signal.signal(signal.SIGINT, _moved)
+
+    def done():
+        signal.signal(signal.SIGTERM, old[0])
+        signal.signal(signal.SIGINT, old[1])
+        del _TURN[:]
+    try:
+        rc = _cmd_line(args)
+        done()
+        return rc
+    except (_Moved, KeyboardInterrupt, BrokenPipeError) as e:
+        if _TURN:
+            _TURN[0].stopping = True
+            _TURN[0].stopped()
+        done()
+        if not isinstance(e, _Moved):
+            raise
+        return 128 + signal.SIGTERM
 
 
 def _line_arm(cfg, bench):
@@ -763,8 +868,12 @@ class _Early:
     after persona.proof_ok. A re-ask's stream (retry) lands only a
     command early, and never stops."""
 
-    def __init__(self, cwd, more, history, busy, know=None, rode=False, retry=False, note="", t0=None):
+    def __init__(self, cwd, more, history, busy, know=None, rode=False, retry=False, note="", t0=None,
+                 tried=None):
         self.cwd, self.more, self.history, self.busy = cwd, more, history, busy
+        # the command this turn must not serve again: the one last proposed
+        # on a `??`, the one that failed on the fix after an explain
+        self.tried = tried if tried is not None else (_last_proposed(history) if more else None)
         self.know = know or _Know("off")
         self.rode = rode            # evidence rode the request this reply answers
         self.retry = retry
@@ -824,7 +933,7 @@ class _Early:
                     self.off = True
                     return False
             return self._first("answer")
-        if self.more and command == _last_proposed(self.history):
+        if self.tried and command == self.tried:
             self.off = True
             return False
         if self.only is not None and not self.only(command):
@@ -897,7 +1006,7 @@ class _Early:
         return True
 
 
-def _guards(s, reply, command, hint, text, cwd, more, history, ms):
+def _guards(s, reply, command, hint, text, cwd, tried, ms):
     """The two re-asks a cmd reply may earn, then the danger verdict:
     (reply, command, hint, kind, ms) with kind `cmd` or `danger`."""
     # the head-word guard: a command whose head word nothing here
@@ -918,9 +1027,10 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
             pass
         if missing:
             hint = _one_line("%s: not on this machine -- %s" % (missing, hint))
-    if more and command == _last_proposed(history):
+    if tried and command == tried:
         # the repair guard: a ?? turn must not re-serve the very command
-        # the user just said failed. One re-ask; then honesty.
+        # the user just said failed, nor the fix the command that just
+        # failed. One re-ask; then honesty.
         try:
             s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
@@ -975,7 +1085,7 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
     `early` is the one that painted, or that paints at the end."""
     found = know.verdict(command)
     know.findings = len(found)
-    repeat = early.more and command == _last_proposed(early.history)
+    repeat = bool(early.tried) and command == early.tried
     rode = early.rode
     if found and not _asked(found) and not repeat:
         early.note = _left(found[0])            # a slot alone: no re-ask, the hint asks for the value
@@ -1004,7 +1114,7 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
         s.history.extend([{"role": "user", "content": asked},
                           {"role": "assistant", "content": "`%s`" % command}])
         again = _Early(early.cwd, early.more, early.history, early.busy, know, rode=bool(ev.text),
-                       retry=True, t0=early.t0)
+                       retry=True, t0=early.t0, tried=early.tried)
         retry, ms2, err = _line_stream(s, " ".join(said) + " " + ASK_AGAIN, again, ev.text)
         know.reasked, ms = 1, ms + ms2
         if again.head is not None:
@@ -1014,7 +1124,7 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
         c2 = _one_line(raw, 1000) if isinstance(raw, str) and not LINE_CONTROL.search(raw) else ""
         if retry and retry.get("kind") == "cmd" and c2:
             left = know.verdict(c2)
-            rep2 = early.more and c2 == _last_proposed(early.history)
+            rep2 = bool(early.tried) and c2 == early.tried
             if len(left) + rep2 <= len(found) + repeat:
                 reply, command, rode, repeat = retry, c2, bool(ev.text), rep2
                 hint = _one_line(retry.get("hint", ""))
@@ -1044,7 +1154,8 @@ def _as_command(s, reply, hint, asked, ms, know, early):
     s.history.extend([{"role": "user", "content": asked}, {"role": "assistant", "content": said}])
     def fits(command):
         return judge.own(command) if spark_own else _head(command) != "spark"
-    again = _Early(early.cwd, early.more, early.history, early.busy, know, retry=True, t0=early.t0)
+    again = _Early(early.cwd, early.more, early.history, early.busy, know, retry=True, t0=early.t0,
+                   tried=early.tried)
     again.only = fits
     retry, ms2, err = _line_stream(s, OWN_AGAIN if spark_own else TOLD_AGAIN, again, "")
     know.reasked, ms = 1, ms + ms2
@@ -1093,11 +1204,11 @@ def cmd_line(args):
     except Exception:       # noqa: BLE001 -- the voice never breaks the line
         clear = False
     if not clear:
-        return _cmd_line(args)
+        return _kept(args)
     from . import voice
     tee = sys.stdout = _Tee(sys.stdout)
     try:
-        return _cmd_line(args)
+        return _kept(args)
     finally:
         sys.stdout = tee.out
         if not (args[:1] and args[0] in ("-h", "--help", "help")):
@@ -1135,6 +1246,7 @@ def _cmd_line(args):
     # the model is told what is missing and asked to name its package.
     fcmd, frc = _failed_cmd()
     install_ctx = ""
+    fix = False
     if frc == 127 and fcmd:
         head = fcmd.split()[0] if fcmd.split() else ""
         while head in ("sudo", "env", "nohup"):
@@ -1150,46 +1262,63 @@ def _cmd_line(args):
                        "that installs it on this machine, and a hint naming the "
                        "package." % head)
     elif frc is not None and fcmd and text.strip().lower() in ("fix it", "? fix it", "fix"):
-        # a second Esc s after an explain: correct the command that failed
-        install_ctx = ("The command `%s` failed with exit %d. Reply with a "
-                       "corrected command that does what it was trying to do."
-                       % (fcmd, frc))
+        # a second Esc s after an explain: fix the command that failed
+        fix = True
     cfg = config.load()
     # `??` on a logged-in client of a FORGE continues the newest thread
     # ON THE FORGE -- one identity, every door: the box's prompt, this
-    # prompt and the page share it. Any trouble falls back to the local
-    # store, as before.
-    remote = False
+    # prompt and the page share it -- unless this client's own last line
+    # turn is newer: it landed here, and the FORGE's newest has not moved
+    # since (forge.line_mine). Any trouble falls back to the local store,
+    # as before.
+    remote, head, mine = False, None, None
     thread, history = None, []
     # a measuring run (spark bench --line, the prompt-line audition) keeps
     # the turn's numbers, marked bench, and no thread: its questions are
     # not the person's history
     bench = os.environ.get("SPARK_LINE_BENCH") == "1"
     if more and cfg.client and not bench:
-        got = forge.peer_newest(cfg)
+        head = forge.peer_head(cfg)
+        mine = forge.line_mine(head)
+        history = forge.history(mine) if mine else []
+        got = None if history else forge.peer_newest(cfg, head)
         if got:
             thread, history = got
             remote = True
-    if not remote and not bench:
-        thread, history = forge.pick(cfg, more)
+    if history and not remote:
+        thread = mine                   # this client's own last turn
+    elif not remote and not bench:
+        thread, history = forge.pick(cfg, more or fix)
+        if fix and not _explains(history):
+            thread, history = forge.pick(cfg, False)    # no explain to go on with: a thread of its own
     elif bench and more and os.environ.get("SPARK_LINE_BENCH_HISTORY"):
         # the audition's `??` pair: a bench turn keeps no thread, so the
         # first turn rides this file (a measuring seam; nothing written)
         history = _bench_history(os.environ["SPARK_LINE_BENCH_HISTORY"])
+    if fix:
+        # the explain's thread, when it is the newest: the model reads why
+        # the command failed, and the command that failed is the one this
+        # turn must not serve again (_guards, _judged, _Early)
+        install_ctx = FIX_ASK % (fcmd, frc, FIX_READ if _explains(history) else "")
+    tried = fcmd if fix else (_last_proposed(history) if more else None)
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
+    land = _Landing(cfg, thread, remote, text, cwd, head)
+    _TURN[:] = [land]
     # the knowledge's arm; in arm full the question's evidence rides the
     # first request's user message (the prefix never changes)
     know = _Know(_line_arm(cfg, bench))
-    context = know.upfront(text, _last_proposed(history) if more else None)
+    context = know.upfront(text, tried)
     # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
     # the ask to line 1 -- through the guards' re-asks when a reply earns
     # one -- then in the reply's own mark until line 2
     busy = _Pulse.hint_row().start()
-    early = _Early(cwd, more, history, busy, know, rode=bool(context))
+    early = _Early(cwd, more, history, busy, know, rode=bool(context), tried=tried)
     early.says = know.says
+    land.early = early
     s, extra, err = None, ({"bench": 1} if bench else {}), None
     try:
         s = session.Session(cfg, "line", shell, cwd, history)
+        land.session = s
     except wire.BrainError as e:
         err = e
     if s is not None and bench and os.environ.get("SPARK_LINE_ROLE") in ("spark", "ember"):
@@ -1210,7 +1339,7 @@ def _cmd_line(args):
         if is_cmd and not refused:
             if know.arm == "off":
                 n = len(s.history)
-                reply, command, hint, kind, ms = _guards(s, reply, command, hint, text, cwd, more, history, ms)
+                reply, command, hint, kind, ms = _guards(s, reply, command, hint, ask_text, cwd, tried, ms)
                 know.reasked = int(len(s.history) > n)
             else:
                 asked = persona.user_message(ask_text, cwd, context)
@@ -1247,12 +1376,20 @@ def _cmd_line(args):
             # the reader holds, a command without its hint; the wire's
             # (down, a timeout, a cut socket) keeps its reason
             early.line2(HINT_LOST if err.thought or err.capped else _reason(err))
+            land.recorded = True
             s.record(kind=early.head, failed=err.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread, **extra)
+            if early.head != "answer":
+                land.keep(early.head, "`%s`" % early.command)
             return 1
         # lines 1 and 2 are whole: the reply stands, without its proof
         reply, extra = dict(early.parse.fields, proof=""), dict(extra, failed=err.kind)
     if early.head is None:
         busy.stop()
+        if is_cmd and fix and command == tried:
+            # asked again and still the command that failed: never landed
+            # as its own fix -- the answer says so
+            is_cmd, hint = False, NO_FIX
+            reply = dict(reply, kind="answer", hint=NO_FIX)
         if refused:
             say("error")
             say(LINE_REFUSED)
@@ -1280,18 +1417,15 @@ def _cmd_line(args):
         else:
             proof = ""
         shown = "`%s` -- %s" % (command, hint)
+        land.recorded = True
         s.record(kind=kind, line=text, command=command, hint=hint, proof=proof, ms=ms,
                  cmd_ms=early.cmd_ms, thread=thread, **extra)
     else:
         kind = "answer"
         shown = hint
+        land.recorded = True
         s.record(kind=kind, line=text, answer=shown, ms=ms, cmd_ms=early.cmd_ms, thread=thread, **extra)
-    if remote:
-        forge.peer_append(cfg, thread, "user", text, mode="line")
-        forge.peer_append(cfg, thread, "assistant", shown, kind=kind)
-    else:
-        forge.append(cfg, thread, "user", text, mode="line", cwd=cwd)
-        forge.append(cfg, thread, "assistant", shown, kind=kind)
+    land.keep(kind, shown)
     _prune(cfg)
     return 0
 

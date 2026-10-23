@@ -42,6 +42,7 @@
 # and tells.
 
 import codecs
+import hashlib
 import json
 import os
 import re
@@ -49,6 +50,7 @@ import select
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -87,6 +89,31 @@ SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a d
 EARLY_DONE = ("No step has run yet for the goal: %s. Propose the first command for it; reply done "
               "only if the goal needs no command at all.")
 NOTHING_RAN = "nothing ran: %s"
+# what a step changed, told to the model after its output (v1.100): a
+# step that exits 0 and prints nothing -- a sed whose pattern matched
+# nothing, an rm of a path that is not there -- read as done to the 26B
+# until the run ran out of steps (#81). In a sandbox spark reads every
+# change (sandbox.state, the review's own reading); outside it, the paths
+# the step names (_named)
+CHANGED = "Changed by this step: %s."
+UNCHANGED = "This step changed no file."
+NAMED = "Of the paths it names: %s."
+CHANGED_NAMES = 8           # the paths a change line names at most; then "and N more"
+NAMED_MAX = 8               # the words of a step read as paths at most
+NAMED_BYTES = 1 << 20       # a named file up to this size is weighed by its bytes, a larger one by size and time
+NAMED_ENTRIES = 1000        # a named directory's entries listed at most; past it, its listing goes untold
+STATE_SECONDS = 1.0         # a copy slower to read than this is not read again for the run's steps
+# the words that move a step's directory before its paths are read (cd,
+# pushd, git -C, make -C, tar -C and --directory, env --chdir, find
+# -execdir, a subshell): the paths it names are not where spark looks
+CHDIR_WORDS = frozenset(("cd", "pushd", "popd", "--chdir", "--directory", "-execdir", "(", ")"))
+CHDIR_PREFIXES = ("-C", "--chdir=", "--directory=")
+# a run that wrote nothing ends with spark's word first (#82): its done
+# is asked once more, with the fact, then said as what it is
+NOTHING_CHANGED_AGAIN = ("No file has changed in this run: the copy holds nothing new. If the goal needs a "
+                         "change, propose the step that makes it; reply done only when it needs none, and say "
+                         "what is true.")
+NOTHING_CHANGED = "nothing changed: %s"
 # a step is a LINE or a BLOCK: two or more lines, a here-document that
 # writes a file as the brief allows. A block is never joined into one
 # line (a script whose lines were joined runs wrong), and it is shown
@@ -501,8 +528,12 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
         kind, command, hint = "done", "", REFUSED_CONTROL
     elif why:
         kind, command, hint = "done", "", REFUSED_SIZE % why
+    # danger is spark's reading, or the model's flag -- lowered when
+    # spark's read-only proof holds for every stage, as the prompt line's
+    # judge lowers it: the 26B flagged `du -sh * | sort -rh | head` (#83)
     reply = {"kind": kind, "command": command if kind == "cmd" else "", "hint": hint,
-             "danger": kind == "cmd" and (bool(raw.get("danger")) or danger(command, cwd)),
+             "danger": kind == "cmd" and (danger(command, cwd)
+                                          or (bool(raw.get("danger")) and not read_only(command))),
              "proof": proof if kind == "cmd" and persona.proof_ok(proof) else ""}
     if not landed:
         land(cfg, thread, history, text, cwd)
@@ -705,20 +736,159 @@ def hold(text, command=""):
     return (textmod.hold_spans(text, spans) if spans else text), len(spans), names
 
 
-def feedback(command, rc, tail, proposed="", proof="", prc=None, man=""):
+def feedback(command, rc, tail, proposed="", proof="", prc=None, man="", changed=""):
     """The record of a step as it ran, and the next user message: the
     command that ran (`edited from` the proposal when the user changed
     it), what it printed -- `tail` as hold() left it: a key or a token a
     step printed is the machine's, not the model's -- how it ended, `man`
-    (man_excerpt's block) when there is one, and the proof's exit code
-    alone when one ran -- never the proof's output."""
+    (man_excerpt's block) when there is one, the proof's exit code alone
+    when one ran -- never the proof's output -- and `changed`, what the
+    step changed as spark read it (told), when it says something."""
     edited = ("; edited from `%s`" % proposed) if proposed and proposed != command else ""
     s = "Output of `%s` (exit %d%s):\n%s" % (command, rc, edited, tail.rstrip("\n") or NO_OUTPUT)
     if man:
         s += "\n\n" + man
     if proof and prc is not None:
         s += "\n\nProof `%s` exited %d." % (proof, prc)
+    if changed:
+        s += "\n\n" + changed
     return s
+
+
+def read_only(command):
+    """spark's read-only proof for a step (judge.read_only): every stage
+    an allowlisted reading head, nothing dangerous. A block is never one."""
+    from . import judge
+    return judge.read_only(command)
+
+
+def _names(paths):
+    """At most CHANGED_NAMES of `paths`, then `and N more`."""
+    paths = sorted(paths)
+    more = len(paths) - CHANGED_NAMES
+    return ", ".join(paths[:CHANGED_NAMES]) + (" and %d more" % more if more > 0 else "")
+
+
+def _fingerprint(path):
+    """What a named path is now, to compare after the step: None when it
+    is not there; a file's size and sha256 (its size and mtime past
+    NAMED_BYTES); a directory's names (None past NAMED_ENTRIES); a link's
+    target; any other kind by its kind alone. Never follows a link, never
+    reads anything but a regular file."""
+    try:
+        st = os.lstat(path)
+    except (OSError, ValueError):
+        return None
+    if stat.S_ISREG(st.st_mode):
+        if st.st_size > NAMED_BYTES:
+            return ("file", st.st_size, st.st_mtime_ns)
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+            with os.fdopen(fd, "rb") as f:
+                return ("file", st.st_size, hashlib.sha256(f.read(NAMED_BYTES + 1)).hexdigest())
+        except OSError:
+            return ("file", st.st_size, st.st_mtime_ns)
+    if stat.S_ISDIR(st.st_mode):
+        names = []
+        try:
+            with os.scandir(path) as it:
+                for e in it:
+                    names.append(e.name)
+                    if len(names) > NAMED_ENTRIES:
+                        return ("dir", None)
+        except OSError:
+            return ("dir", None)
+        return ("dir", tuple(sorted(names)))
+    if stat.S_ISLNK(st.st_mode):
+        try:
+            return ("link", os.readlink(path))
+        except OSError:
+            return ("link", None)
+    return ("other",)
+
+
+def _named(command, cwd):
+    """The paths a step names, read before it runs: {word: fingerprint}
+    for at most NAMED_MAX words of its first line (a block's here-document
+    body is text, not paths) that are no option, assignment, operator,
+    glob or substitution. A word that is not there yet is kept too: the
+    step may create it. {} when the line does not split, and when it
+    moves its directory (CHDIR_WORDS, CHDIR_PREFIXES): `cd sub && rm x`
+    names the x in sub, not the one here."""
+    line = command.split("\n", 1)[0]
+    try:
+        lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        words = list(lex)
+    except ValueError:
+        return {}
+    if any(w in CHDIR_WORDS or w.startswith(CHDIR_PREFIXES) for w in words):
+        return {}
+    out, root = {}, os.path.expanduser(cwd) if cwd else os.getcwd()
+    for w in words:
+        if (not w or w[0] in "-+" or set(w) <= set("();<>|&") or re.match(r"[A-Za-z_]\w*=", w)
+                or any(ch in w for ch in "$`*?[]{}") or (w.startswith("~") and not w.startswith("~/"))):
+            continue
+        path = os.path.join(root, os.path.expanduser(w))
+        if w not in out:
+            out[w] = _fingerprint(path)
+        if len(out) >= NAMED_MAX:
+            break
+    return out
+
+
+def watch_step(command, cwd, box, writes, slow):
+    """What a step may change, read before it runs (told() reads it again
+    after): None for a step spark reads as read-only, which changes
+    nothing to tell. In a sandbox the copy's state (sandbox.state; None
+    once `slow` says the copy reads too slowly); else the paths it names
+    (_named). `writes`: the step can destroy data (danger, or the model's
+    flag), so a step that changed nothing is said to have changed nothing."""
+    if read_only(command):
+        return None
+    if box is not None:
+        if slow[0]:
+            return None
+        t0 = time.time()
+        seen = sandbox.state(box)
+        slow[0] = time.time() - t0 > STATE_SECONDS
+        return None if seen is None else ("box", seen, writes)
+    return ("named", _named(command, cwd), writes)
+
+
+def told(before, cwd, box):
+    """What the step changed, as one line for the model (feedback's
+    `changed`), or '' when there is nothing sure to say. In a sandbox:
+    the paths whose status or bytes moved, else UNCHANGED for a step
+    that could write. Outside it: each named path that came, went or
+    changed, and each named file whose bytes stayed the same after a
+    step that could write -- a named directory whose names stayed is
+    untold, since its insides may have moved."""
+    if before is None:
+        return ""
+    how, seen, writes = before
+    if how == "box":
+        now = sandbox.state(box)
+        if now is None:
+            return ""
+        moved = [p for p in set(seen) | set(now) if seen.get(p) != now.get(p)]
+        if moved:
+            return CHANGED % _names(moved)
+        return UNCHANGED if writes else ""
+    root = os.path.expanduser(cwd) if cwd else os.getcwd()
+    said = []
+    for w, fp in seen.items():
+        now = _fingerprint(os.path.join(root, os.path.expanduser(w)))
+        if fp == now:
+            if writes and fp is not None and fp[0] == "file":
+                said.append("%s unchanged" % w)
+        elif fp is None:
+            said.append("%s created" % w)
+        elif now is None:
+            said.append("%s removed" % w)
+        elif not (fp[0] == now[0] == "dir" and None in (fp[1], now[1])):
+            said.append("%s changed" % w)
+    return NAMED % "; ".join(said) if said else ""
 
 
 def _refused_flag(line):
@@ -1310,6 +1480,8 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
     history, steps, seen, landed = [], 0, [], False
     skipped, reasked = set(), set()          # steps the user skipped; those re-asked once
     early = False                            # a done before any step, asked again once
+    wrote, still = False, False              # a step that can write ran; a done with nothing changed, asked again once
+    slow = [False]                           # the copy reads too slowly to tell each step's changes
 
     def record(s, **fields):
         """Every proposal is a turn: the server's timings for it (the
@@ -1336,6 +1508,15 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                     text = EARLY_DONE % goal
                     continue
                 reply["hint"] = NOTHING_RAN % reply["hint"]
+            if reply["kind"] == "done" and wrote and box is not None and sandbox.state(box) == {}:
+                # a step that can write ran, and the copy holds nothing new:
+                # the done hears it once, then spark's word leads it (#82)
+                if not still and n < DO_MAX_STEPS:
+                    still = True
+                    record(s, kind="reasked", ms=ms)
+                    text = NOTHING_CHANGED_AGAIN
+                    continue
+                reply["hint"] = NOTHING_CHANGED % reply["hint"]
             if reply["kind"] == "done":
                 bad = unchecked(reply["hint"], seen)
                 face.done(reply["hint"], bad)
@@ -1378,11 +1559,17 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 skipped.add(command.strip())
                 text = SKIPPED % command
                 continue
+            # the step can write: spark's reading, or the model's flag past
+            # the lowering -- what a run that changed nothing is held to
+            writes = danger(command, cwd) or (command == proposed and reply["danger"])
             if mcp.call_words(command):
+                before = None
                 rc, tail = tool_step(command, box, reply["danger"], face.echo)
             else:
+                before = watch_step(command, cwd, box, writes, slow)
                 rc, tail = run(command, shell, cwd, echo=face.echo, timeout=timeout, box=box)
             steps += 1
+            wrote = wrote or writes
             tail, held, names = hold(tail, command)
             man = man_excerpt(command, rc, tail)
             try:
@@ -1403,7 +1590,8 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                     face.proof_ran(prc, hold(ptail, proof)[0])
             # the record of what ran, on the thread now -- not inside the
             # next request, which a quit or the step limit never sends
-            text = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc, man)
+            text = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc, man,
+                            told(before, cwd, box))
             extra = {}
             if held:
                 print(textmod.held_line(held, names), file=sys.stderr, flush=True)
