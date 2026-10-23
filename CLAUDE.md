@@ -1951,9 +1951,12 @@ and may change freely.
     plugin never sees a frame. A `?` answer streams line by line through
     `text.Anchors`. Every quoted span (double quotes, curly quotes,
     backticks, 3 to 200 characters) is checked against the text on
-    stdin: verbatim, then folded (whitespace, quote marks, case), then
-    trailing punctuation stripped. One that does not anchor is followed
-    by ` [not in the text]` where it stands. A span right after `->`, a
+    stdin, both folded (whitespace, quote marks, case). Trailing
+    punctuation may be stripped, and the span holds at word edges
+    alone (`text.at_edges`). A quote that starts or ends inside a word,
+    "answers 4" against "answers 422", anchors nowhere, in every
+    grounded contract. One that does not anchor is followed by
+    ` [not in the text]` where it stands. A span right after `->`, a
     Unicode arrow or `=>` is the model's proposal. It is not checked,
     not counted, and followed by ` [proposed]`, so a reader can tell a
     quote from a proposal. The turn records `quotes` and `unanchored`.
@@ -2177,8 +2180,8 @@ and may change freely.
     not hold prints nothing, so "a 500 appeared" cannot fire when none
     did. A number anywhere but the reply's start is no line number: the
     model's prose, or a log line's own `worker [3]`. A quote the window
-    holds wins over any number, at word boundaries (`text.anchor`,
-    `whole`). An escaped quote reads as a quote, and a quote the reply's
+    holds wins over any number, at word boundaries (`text.anchor`).
+    An escaped quote reads as a quote, and a quote the reply's
     cap cut short reads up to its last whole word. A log line the model
     copied whole, unquoted, is that line. A reply that says nothing
     matches names no line, whatever number it mentions (`watch.match`).

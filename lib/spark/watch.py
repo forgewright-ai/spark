@@ -138,12 +138,12 @@ def _holds(span, kept):
     span = span.strip()
     if textmod.substantial(span):
         for i in range(len(kept) - 1, -1, -1):
-            if textmod.anchor(span, kept[i], whole=True):
+            if textmod.anchor(span, kept[i]):
                 return i
     m = _REF.match(span)
     if m and 1 <= int(m.group(1)) <= len(kept):
         rest = span[m.end():].strip()
-        if textmod.substantial(rest) and textmod.anchor(rest, kept[int(m.group(1)) - 1], whole=True):
+        if textmod.substantial(rest) and textmod.anchor(rest, kept[int(m.group(1)) - 1]):
             return int(m.group(1)) - 1
     return None
 
@@ -164,8 +164,8 @@ def _copied(row, kept, led):
     is a copy when it is that line's own words, verbatim (text.Ground)."""
     row = row.strip()
     for i in range(len(kept) - 1, -1, -1):
-        if (textmod.substantial(row) and textmod.anchor(row, kept[i], whole=True) if led
-                else textmod.Ground(kept[i], whole=True).verbatim(row)):
+        if (textmod.substantial(row) and textmod.anchor(row, kept[i]) if led
+                else textmod.Ground(kept[i]).verbatim(row)):
             return i
     return None
 
@@ -190,7 +190,7 @@ def match(row, kept):
         rest = row[m.end():]
         for c in _OPEN + "`":
             rest = rest.split(c, 1)[0]
-        if textmod.substantial(rest) and textmod.anchor(rest.strip(), kept[n], whole=True):
+        if textmod.substantial(rest) and textmod.anchor(rest.strip(), kept[n]):
             return n, ""                     # the numbered window's own row, copied
         return n, _REFS.sub(" ", rest)
     return None

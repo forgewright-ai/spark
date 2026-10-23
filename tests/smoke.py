@@ -8424,11 +8424,25 @@ def main():
         t.ok(g.verdict('He proves "the cat sat" happened.')[0] == textmod.GROUNDED
              and g.verdict('He proves "the dog ran" happened.')[0] == textmod.UNGROUNDED,
              "floor: a substantial span still grounds, and still fails honestly")
-        # whole: watch and recall anchor at word boundaries in the folded text
-        t.ok(not textmod.anchor("500", "took 1500ms", whole=True)
-             and textmod.anchor("error 500", "an error 500 came back", whole=True)
-             and not textmod.anchor("error 500", "an error 5001 came back", whole=True),
-             "anchor whole: a span matches at word boundaries, never inside a longer token")
+        # a quote anchors at word edges in every grounded contract (#92):
+        # "answers 4" cut from "answers 422" flips what the text says. A
+        # letter or a digit in any script is a word; an edge that is no
+        # letter or digit needs no boundary ("--force", "path/")
+        t.ok(not textmod.anchor("500", "took 1500ms")
+             and textmod.anchor("error 500", "an error 500 came back")
+             and not textmod.anchor("error 500", "an error 5001 came back"),
+             "anchor: a span matches at word boundaries, never inside a longer token")
+        _g92 = textmod.Ground("On a validation error the service answers 422 with a JSON body.\r\n"
+                              "A ação começa às 9h; use --force in lib/ with care.\r\n")
+        t.ok(_g92.verdict('It says "the service answers 4" here.')[0] == textmod.UNGROUNDED
+             and _g92.verdict('It says "the service answers 422" here.')[0] == textmod.GROUNDED
+             and _g92.verdict('It says "422 with a JSON body. A ação" here.')[0] == textmod.GROUNDED
+             and _g92.verdict('Ela diz "a aç" e só.')[0] == textmod.UNGROUNDED
+             and _g92.verdict('Ela diz "a ação começa" e só.')[0] == textmod.GROUNDED
+             and _g92.verdict('Run "use --force in lib/" there.')[0] == textmod.GROUNDED
+             and _g92.verdict('Run "use --forc" there.')[0] == textmod.UNGROUNDED
+             and textmod.ANCHOR_MARK in _g92.mark('"the service answers 4" is the code'),
+             "ground: a quote cut inside a word grounds nothing, in any script, across a CRLF; an edge that is no word holds")
         # a line that is the source's own words, copied whole with no quote
         # marks, quotes it: a model answering from a spec copies its line
         # (#89, the 422 dropped as "quotes nothing"). A short copy or a
@@ -8451,7 +8465,7 @@ def main():
         _log = ('2026/10/22 21:30:41 [error] upstream timed out, request: "POST /api/checkout HTTP/1.1", '
                 'upstream: "http://192.0.2.5:9000/api/checkout"')
         _ws = io.StringIO()
-        _wg = textmod.Gate(_ws, _log + "\n", keep=lambda _l, v, _m: v == textmod.GROUNDED, whole=True)
+        _wg = textmod.Gate(_ws, _log + "\n", keep=lambda _l, v, _m: v == textmod.GROUNDED)
         _wg.write('Found one: "' + _log.replace('"', '\\"') + '"\n')
         _wg.close()
         t.ok(_wg.kept == 1 and "\\" not in _ws.getvalue() and "[not in the text]" not in _ws.getvalue(),
