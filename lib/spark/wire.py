@@ -27,7 +27,7 @@ Brain = collections.namedtuple("Brain", "url model forge")
 
 
 class BrainError(Exception):
-    """kind: down | loading | auth | bad | timeout | cut ; hint: one line
+    """kind: down | loading | busy | auth | bad | timeout | cut ; hint: one line
     for a human. Three marks say the MODEL ended a reply, not the wire,
     each False unless set: `thought` (it opened a thought where a JSON
     reply was asked), `clean` (and nothing of that reply had reached the

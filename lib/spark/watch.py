@@ -14,7 +14,7 @@
 #     silent           normal, healthy state. Nothing on stdout means
 #                     watching, not stuck; there is no heartbeat, because a
 #                     heartbeat would pollute a piped match stream. A
-#                     transient brain gap (down, loading, timeout, cut)
+#                     transient brain gap (down, loading, busy, timeout, cut)
 #                     skips the window and the watch goes on (session.once);
 #                     stdin closing ends it (exit 0), Ctrl-C ends it (130).
 #   caps              a window is WINDOW_LINES lines or WINDOW_SECS old,

@@ -193,7 +193,7 @@ def _resolve(cfg, fresh):
 
 
 # the kinds of brain failure a long-running loop rides out rather than dies on
-LIVE_TRANSIENT = ("down", "loading", "timeout", "cut")
+LIVE_TRANSIENT = ("down", "loading", "busy", "timeout", "cut")
 
 
 def once(make_session, run):
@@ -201,8 +201,8 @@ def once(make_session, run):
     brain. `make_session()` builds a fresh Session -- so a moved or
     restarted brain is picked up on the next call -- and `run(session)`
     does the request. Returns (True, result) on success, or (False, hint)
-    on a transient failure (the served model down, loading, timing out, or
-    cut off mid-reply): the cache is dropped so the next call re-resolves,
+    on a transient failure (the served model down, loading, busy, timing out,
+    or cut off mid-reply): the cache is dropped so the next call re-resolves,
     and the caller skips this turn and goes on. Any other BrainError (auth,
     a bad response) is a real fault and is raised, as it is for the one-shot
     contracts. The one-shot contracts do not use this: they ask once and

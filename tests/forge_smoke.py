@@ -920,6 +920,31 @@ def page_units(ok):
        "version.newest reads the newest v* tag as git sorts them, no subprocess", (n, want))
 
 
+def session_once_busy(ok):
+    """A queued model is a recoverable gap for both live editing loops."""
+    from unittest.mock import patch
+    from spark import session, wire
+
+    def fail(kind, hint):
+        raise wire.BrainError(kind, hint)
+
+    made = []
+    with patch.object(wire, "drop_cache") as dropped:
+        result = session.once(lambda: made.append(object()) or made[-1],
+                              lambda current: fail("busy", "model queue is full"))
+    ok(result == (False, "model queue is full") and len(made) == 1 and dropped.call_count == 1,
+       "session.once skips a busy model window and drops the cache")
+
+    with patch.object(wire, "drop_cache") as dropped:
+        try:
+            session.once(object, lambda current: fail("auth", "bad token"))
+        except wire.BrainError as error:
+            ok(error.kind == "auth" and dropped.call_count == 0,
+               "session.once still raises non-transient errors")
+        else:
+            ok(False, "session.once still raises non-transient errors")
+
+
 def main():
     fails = 0
 
@@ -931,6 +956,7 @@ def main():
     admin_boundary(ok)
     generation_admission(ok)
     reply_interruptions(ok)
+    session_once_busy(ok)
     verb_runner(ok)
     page_units(ok)
 

@@ -2083,7 +2083,7 @@ and may change freely.
     a journal line under spark's identifier and a bare llama-server log
     line are dropped before the window (`watch.own_line`, `OWN_LINE`). A
     window of only those is no call at all. A transient model gap (down,
-    loading, timeout, cut) skips the window and the watch goes on
+    loading, busy, timeout, cut) skips the window and the watch goes on
     (`session.once`, the shared recovery `spark edit --watch` uses too).
     stdin closing ends it (exit 0), `SIGINT` 130. No ledger: a live
     stream has nothing stable to name. It is local in the strongest

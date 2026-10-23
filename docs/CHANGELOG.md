@@ -6,6 +6,9 @@ The third audit, 2026-10-23, read everything shipped since v1.77. The
 code held; the release chain and a few edges did not. What it found in
 spark, fixed here; the rest are cards.
 
+- S3: a busy model now skips one watch window, so watch and edit --watch
+  continue (#90)
+
 - The release chain trusts no name. `release.yml` verifies every
   release behind a tag against the file of the release before it, back
   to v1.35, the first that carried `allowed-signers`: a tag a write
