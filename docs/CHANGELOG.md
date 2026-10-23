@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.100.1
+
+- S3: in spark-shell's desktop terminal, whose palette sets five slots
+  after the sixteen, the prompt of spark chat and the steps of spark do
+  lost their accent: the color check dropped a 38;5 value whole. It
+  takes the five slots, 38;5;16 to 38;5;20, and drops any other 38;5
+  value as before (#94)
+
 ## v1.100
 
 A trial of spark's use cases on the box and the Mac, with real inputs

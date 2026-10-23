@@ -12698,6 +12698,21 @@ site.cmd_headless([])
             os.environ["SPARK_MUTED_SGR"] = "38;5;2"
             t.ok(_sp.sgr("accent") == "1;94" and _sp.sgr("warn") == "1;31" and _sp.sgr("muted") == "",
                  "sgr: 1;94 and 1;31 pass, a 38;5;2 value is dropped whole", repr((_sp.sgr("accent"), _sp.sgr("muted"))))
+            # spark-shell's desktop terminal sets the five slots after the sixteen from the palette (#94):
+            # 16 to 20 pass, beside bold; any other 38;5 value is still dropped whole
+            os.environ["SPARK_ACCENT_SGR"] = "1;38;5;16"
+            os.environ["SPARK_MUTED_SGR"] = "38;5;17"
+            os.environ["SPARK_WARN_SGR"] = "38;5;21"
+            t.ok(_sp.sgr("accent") == "1;38;5;16" and _sp.sgr("muted") == "38;5;17" and _sp.sgr("warn") == ""
+                 and _sp.paint("*", "accent", _tty) == "\x1b[1;38;5;16m*\x1b[0m",
+                 "sgr: the desktop's slots 38;5;16 to 38;5;20 pass, a 38;5;21 is dropped whole (#94)",
+                 repr((_sp.sgr("accent"), _sp.sgr("muted"), _sp.sgr("warn"), _sp.paint("*", "accent", _tty))))
+            for _bad in ("38;5", "38;5;", "1;38;5;16;5", "38;2;1;2;3"):
+                os.environ["SPARK_ACCENT_SGR"] = _bad
+                t.ok(_sp.sgr("accent") == "", "sgr: " + _bad + " is dropped whole (#94)", repr(_sp.sgr("accent")))
+            os.environ["SPARK_ACCENT_SGR"] = "1;94"
+            os.environ["SPARK_WARN_SGR"] = "1;31"
+            os.environ["SPARK_MUTED_SGR"] = "38;5;2"
             os.environ["SPARK_MUTED_SGR"] = "x;1"
             t.ok(_sp.sgr("muted") == "" and _sp.paint("...", "muted", _tty) == "...",
                  "sgr: a value that is not digits and semicolons is plain")

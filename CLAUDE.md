@@ -99,8 +99,10 @@ for it, and no verb carries the word.
   background, so the accent is bold in the terminal's own foreground.
   Dim is decoration only: the dots, the scanner's brackets, the arrow,
   never text a person has to read. `sgr()` and `paint()` in
-  `lib/spark/__init__.py` keep to 30-37 and 90-97 plus bold and dim. A
-  `38;5` or 24-bit value is dropped whole. A pipe never sees an escape.
+  `lib/spark/__init__.py` keep to 30-37 and 90-97 plus bold and dim.
+  They also take `38;5;16` to `38;5;20`, five slots a desktop's
+  terminal may set from the palette. Any other `38;5` or 24-bit value
+  is dropped whole. A pipe never sees an escape.
   Unset and unawakened, every output is byte for byte what it was. An
   input() prompt (`chat> `) is painted only under GNU readline,
   bracketed in `\001` and `\002`. libedit counts the escape bytes as

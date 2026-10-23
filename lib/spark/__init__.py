@@ -110,18 +110,22 @@ def say(s=""):
 # Colour at the prompt: three optional environment variables, SGR
 # parameter strings (`1;94`); any rc may export them from a palette.
 # Unset = plain, today's output. Console-safe only:
-# bold, dim, their resets and the sixteen colours (30-37, 90-97) -- a
-# `38;5;n` or 24-bit value is dropped whole, never drawn -- and only at
+# bold, dim, their resets and the sixteen colours (30-37, 90-97), and the
+# five slots after them a desktop's terminal may set from the palette
+# (`38;5;16` to `38;5;20`, #94) -- any other `38;5;n` or 24-bit
+# value is dropped whole, never drawn -- and only at
 # a tty: a pipe never sees an escape.
 _SGR_VARS = {"accent": "SPARK_ACCENT_SGR", "muted": "SPARK_MUTED_SGR", "warn": "SPARK_WARN_SGR",
              "ok": "SPARK_OK_SGR", "trouble": "SPARK_TROUBLE_SGR", "you": "SPARK_YOU_SGR"}
 _SGR_OK = frozenset([0, 1, 2, 22] + list(range(30, 38)) + list(range(90, 98)))
+_SGR_SLOTS = frozenset(range(16, 21))   # 38;5;N: the slots a desktop's terminal sets from the palette, its accent and muted in 16 and 17
 
 
 def sgr(role, fallback=True, stream=None):
     """The SGR parameters for `role` (accent, muted, warn, ok, trouble,
     you), or '' when the variable is unset, empty, or names anything
-    outside the console-safe set. Unset, an awakened machine whose colour
+    outside the console-safe set and the five slots of a desktop's
+    terminal (38;5;16 to 38;5;20). Unset, an awakened machine whose colour
     part is active on `stream` (stdout by default) falls back to the
     built-in palette (look.DEFAULT_SGR); an unawakened one stays plain,
     as it always was."""
@@ -132,8 +136,14 @@ def sgr(role, fallback=True, stream=None):
     if not v or not all(c in "0123456789;" for c in v):
         return ""
     parts = v.split(";")
-    if not all(p and int(p) in _SGR_OK for p in parts):
-        return ""
+    i = 0
+    while i < len(parts):
+        if parts[i:i + 2] == ["38", "5"] and i + 2 < len(parts) and parts[i + 2].isdigit() and int(parts[i + 2]) in _SGR_SLOTS:
+            i += 3
+            continue
+        if not parts[i] or int(parts[i]) not in _SGR_OK:
+            return ""
+        i += 1
     return v
 
 
