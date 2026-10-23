@@ -1,0 +1,154 @@
+{
+ "app-aerc": {
+  "docs": {}
+ },
+ "app-micro-part": {
+  "docs": {}
+ },
+ "app-newsboat": {
+  "docs": {}
+ },
+ "app-w3m": {
+  "docs": {}
+ },
+ "app-w3m-read": {
+  "docs": {}
+ },
+ "dev-docstrings": {
+  "docs": {}
+ },
+ "dev-json": {
+  "docs": {}
+ },
+ "dev-quote": {
+  "docs": {}
+ },
+ "dev-rename": {
+  "docs": {}
+ },
+ "dev-review": {
+  "docs": {}
+ },
+ "hostile-binary": {
+  "docs": {}
+ },
+ "hostile-inject": {
+  "docs": {}
+ },
+ "hostile-long-line": {
+  "docs": {}
+ },
+ "hostile-secret": {
+  "docs": {}
+ },
+ "hostile-two": {
+  "docs": {}
+ },
+ "learn-absent": {
+  "docs": {}
+ },
+ "learn-define": {
+  "docs": {}
+ },
+ "learn-drill": {
+  "docs": {}
+ },
+ "learn-number": {
+  "docs": {}
+ },
+ "new-changelog": {
+  "docs": {
+   "docs/CHANGELOG.md": "9bd1a181572baba022c6933d25a0b63197e57c0c6a47322898d30f0ad926fdc2"
+  }
+ },
+ "new-client": {
+  "docs": {
+   "docs/INSTALL.md": "f25a89ac95e95dbfa24ff9b42c22ec3bbaf40b2b3dccc69ea79260a524314a0e"
+  }
+ },
+ "new-key": {
+  "docs": {
+   "docs/CHEATSHEET.txt": "4cd67487834054ee2cbe8e734c25c0cd73a663026ed2a0033fb1323dc9c0eae6"
+  }
+ },
+ "new-sends": {
+  "docs": {
+   "README.md": "a9d80788f75b8e29bd4e48e78f6a42cd68660cebd8b57cffeba68cbe1e9e1d5d"
+  }
+ },
+ "office-absent": {
+  "docs": {}
+ },
+ "office-crlf": {
+  "docs": {}
+ },
+ "office-end": {
+  "docs": {}
+ },
+ "office-latin1": {
+  "docs": {}
+ },
+ "office-mail": {
+  "docs": {}
+ },
+ "office-open": {
+  "docs": {}
+ },
+ "office-pay": {
+  "docs": {}
+ },
+ "office-pt-deposit": {
+  "docs": {}
+ },
+ "office-pt-early": {
+  "docs": {}
+ },
+ "office-pt-spell": {
+  "docs": {}
+ },
+ "office-shorter": {
+  "docs": {}
+ },
+ "office-translate": {
+  "docs": {}
+ },
+ "ops-compose": {
+  "docs": {}
+ },
+ "ops-df": {
+  "docs": {}
+ },
+ "ops-journal": {
+  "docs": {}
+ },
+ "ops-nginx": {
+  "docs": {}
+ },
+ "ops-nginx-edit": {
+  "docs": {}
+ },
+ "ops-ping": {
+  "docs": {}
+ },
+ "ops-ps": {
+  "docs": {}
+ },
+ "ops-recall": {
+  "docs": {}
+ },
+ "ops-recall-old": {
+  "docs": {}
+ },
+ "ops-steps": {
+  "docs": {}
+ },
+ "ops-steps-none": {
+  "docs": {}
+ },
+ "ops-web": {
+  "docs": {}
+ },
+ "ops-web-quiet": {
+  "docs": {}
+ }
+}

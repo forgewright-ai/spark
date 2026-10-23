@@ -20,14 +20,21 @@
 #   when it stays     silence is the answer when nothing matches -- the
 #     silent           normal, healthy state. Nothing on stdout means
 #                     watching, not stuck; there is no heartbeat, because a
-#                     heartbeat would pollute a piped match stream. A
-#                     transient brain gap (down, loading, busy, timeout, cut)
-#                     skips the window and the watch goes on (session.once);
-#                     stdin closing ends it (exit 0), Ctrl-C ends it (130).
+#                     heartbeat would pollute a piped match stream. Silence
+#                     never hides a line the model did not see: every line
+#                     goes to the model once, a look the model was too busy
+#                     for (session.once) keeps its lines and is tried again,
+#                     and lines that go unseen are said on stderr. stdin
+#                     closing ends it (exit 0), Ctrl-C ends it (130).
 #   caps              a window is WINDOW_LINES lines or WINDOW_SECS old,
 #                     whichever first, at most WATCH_MAX chars to the model,
-#                     and no more than one model call per MIN_INTERVAL. This
-#                     is what makes it cheap enough to leave running.
+#                     the oldest lines first; a backlog is several windows.
+#                     A live stream gets no more than one model call per
+#                     MIN_INTERVAL -- what makes it cheap enough to leave
+#                     running -- and a backlog of BACKLOG_LOOKS windows at
+#                     most. A file, or a pipe that ended before the first
+#                     look, is not live: its windows go back to back, and
+#                     one that needs more than FILE_LOOKS_MAX is refused.
 #   ledger            none. A live stream keeps no record: there is nothing
 #                     stable to name, and the next line is the only state
 #                     that matters.
@@ -40,6 +47,7 @@ import io
 import os
 import re
 import select
+import stat
 import sys
 import time
 
@@ -58,10 +66,26 @@ MIN_INTERVAL = 10.0     # at most one model call this often -- leave it running
 # identifier is spark's, and a bare llama-server log line, are dropped
 # before the window; a window of only those is no call at all.
 OWN_LINE = re.compile(r"(?:^|\s)spark\[\d+\]:\s|(?:^|\s)\d+\.\d{2}\.\d{3}\.\d{3} [IWEDV] (?:srv|slot|main|load|init|sched|update|launch|que|log)\b")
-WATCH_MAX = 8000        # chars of the window the model sees (newest kept)
+WATCH_MAX = 8000        # chars of the window the model sees
 WATCH_TOKENS = 120      # a match is one short line
 WATCH_TIMEOUT = 60
 MODE = "watch-stream"   # persona.MODES key
+# A finished input (a file, or a pipe that ended before the first look) is
+# read whole, its windows back to back. A look costs 5 to 10 seconds on
+# the reference box (2 k tokens of prefill at 100 to 270 a second, and a
+# short reply), so 60 looks are five to ten minutes: the longest a person
+# waits on one answer. Past that, finding a word in a file is grep's job,
+# and the refusal says so before the first look.
+FILE_LOOKS_MAX = 60
+FILE_BYTES = WATCH_MAX * FILE_LOOKS_MAX     # past this a file is refused unread
+# A live stream that outruns the model keeps at most this many windows of
+# lines waiting, about two minutes of looks at MIN_INTERVAL. A watch
+# further behind than that reports history, not the stream; the oldest
+# lines past it go unseen, and one stderr line says how many.
+BACKLOG_LOOKS = 12
+RETRIES = 3             # a look the model was too busy for, tried again at the end
+DRAIN_WAIT = 0.05       # seconds a read waits for the rest of a burst
+DRAIN_MAX = 2 * FILE_BYTES  # a first read this big and still going is a live stream
 
 WATCH_USAGE = """spark watch -- one line when a stream matches what you ask
 
@@ -79,20 +103,49 @@ def own_line(line):
     return bool(OWN_LINE.search(line))
 
 
-def _window(lines):
-    """The lines the model sees: the newest whole lines whose numbered text
-    fits WATCH_MAX. One line longer than that alone keeps its tail."""
-    width = len("[%d] " % len(lines)) + 1
+def _take(lines):
+    """The next window from the oldest of `lines`: (the window, how many
+    lines it took). At most WINDOW_LINES whole lines whose numbered text
+    fits WATCH_MAX; a line longer than that is a window of its own, its
+    tail kept."""
+    width = len("[%d] " % WINDOW_LINES) + 1
     kept, size = [], 0
-    for line in reversed(lines):
+    for line in lines[:WINDOW_LINES]:
         if kept and size + len(line) + width > WATCH_MAX:
             break
         if not kept and len(line) + width > WATCH_MAX:
-            line = line[-(WATCH_MAX - width):]
+            return [line[-(WATCH_MAX - width):]], 1
         kept.append(line)
         size += len(line) + width
-    kept.reverse()
-    return kept
+    return kept, len(kept)
+
+
+def windows(lines):
+    """`lines` cut into windows, oldest first: every line in one of them."""
+    out, i = [], 0
+    while i < len(lines):
+        kept, n = _take(lines[i:])
+        out.append(kept)
+        i += n
+    return out
+
+
+def _full(pending):
+    """Does `pending` hold more than one window: one is ready to look at."""
+    return bool(pending) and len(windows(pending[:WINDOW_LINES + 1])) > 1
+
+
+def _bound(pending, looks):
+    """Drop the oldest of `pending`, in place, past `looks` windows of
+    lines or characters. Returns how many went."""
+    width = len("[%d] " % WINDOW_LINES) + 1
+    size = sum(len(l) + width for l in pending)
+    n = 0
+    while pending and (len(pending) - n > looks * WINDOW_LINES or size > looks * WATCH_MAX):
+        size -= len(pending[n]) + width
+        n += 1
+    del pending[:n]
+    return n
 
 
 def _numbered(kept):
@@ -210,11 +263,11 @@ def _due(n_lines, opened, now, secs=WINDOW_SECS):
     return n_lines > 0 and (n_lines >= WINDOW_LINES or (opened is not None and now - opened >= secs))
 
 
-def evaluate(cfg, shell, instruction, lines):
-    """One look at a window: the matched line(s) to stdout, or nothing.
-    Returns True when a line was printed (a match), False otherwise --
-    including a transient brain gap, which skips the window silently."""
-    kept = _window(lines)
+def evaluate(cfg, shell, instruction, kept):
+    """One look at the window `kept`: the matched line(s) to stdout, or
+    nothing. Returns (looked, hint): looked is False after a transient
+    brain gap with nothing named, so the caller keeps the lines for
+    another try, and hint says why."""
     reply = io.StringIO()
     fence = textmod.Fence(reply, newline=None)
 
@@ -222,10 +275,11 @@ def evaluate(cfg, shell, instruction, lines):
         return s.ask_stream(instruction, "Lines:\n" + _numbered(kept), fence.feed,
                             max_tokens=WATCH_TOKENS, timeout=WATCH_TIMEOUT)
 
-    # a reply cut mid-line (the cap, a dropped stream) is still read: what
-    # it names or quotes before the cut is real
-    session.once(lambda: session.Session(cfg, MODE, shell, "", role="ember"), run)
+    looked, hint = session.once(lambda: session.Session(cfg, MODE, shell, "", role="ember"), run)
     fence.close()
+    # a reply cut mid-line (the cap, a dropped stream) is still read: what
+    # it names or quotes before the cut is real, and a window it named a
+    # line in is not looked at twice
     said = set()
     for row in reply.getvalue().splitlines():
         hit = match(row, kept)
@@ -235,7 +289,7 @@ def evaluate(cfg, shell, instruction, lines):
         sys.stdout.write(say_match(hit[1], kept[hit[0]]) + "\n")
     if said:
         sys.stdout.flush()
-    return bool(said)
+    return looked or bool(said), hint
 
 
 def cmd_watch(args):
@@ -254,34 +308,17 @@ def cmd_watch(args):
     fd = sys.stdin.fileno()
     win_secs = float(os.environ.get("SPARK_WATCH_SECS") or WINDOW_SECS)   # a test seam
     min_gap = float(os.environ.get("SPARK_WATCH_INTERVAL") or MIN_INTERVAL)
-    # monotonic() starts near 0 on some platforms (Apple's 3.9): the first
-    # window must never wait the interval out
-    lines, opened, last_call = [], None, -min_gap
-    tail = b""
     try:
-        while True:
-            ready, _, _ = select.select([fd], [], [], win_secs)
-            now = time.monotonic()
-            if ready:
-                # drain what arrived: readline() buffers up to 8 kB, so the
-                # rest of a burst would wait for the NEXT arrival to be seen
-                # -- select watches the fd, not the TextIOWrapper's buffer
-                chunk = os.read(fd, 65536)
-                if not chunk:                    # EOF: look at the tail, then done
-                    if tail and not own_line(tail.decode("utf-8", "replace")):
-                        lines.append(tail.decode("utf-8", "replace"))
-                    if lines:
-                        evaluate(cfg, shell, instruction, lines)
-                    return 0
-                tail += chunk
-                parts = tail.split(b"\n")
-                tail = parts.pop()               # a partial line waits for its end
-                lines.extend(p for p in (q.decode("utf-8", "replace") for q in parts) if not own_line(p))
-                if lines and opened is None:
-                    opened = now
-            if _due(len(lines), opened, now, win_secs) and now - last_call >= min_gap:
-                evaluate(cfg, shell, instruction, lines)
-                lines, opened, last_call = [], None, now
+        st = os.fstat(fd)
+        if stat.S_ISREG(st.st_mode):
+            # a file is not live: read whole, its windows back to back
+            if st.st_size > FILE_BYTES:
+                return _too_big(-(-st.st_size // WATCH_MAX), st.st_size)
+            data = _read_all(fd)
+            if len(data) > FILE_BYTES:              # it grew while we read
+                return _too_big(-(-len(data) // WATCH_MAX), len(data))
+            return _finished(cfg, shell, instruction, _lines(data, True)[0], min_gap)
+        return _live(cfg, shell, instruction, fd, win_secs, min_gap)
     except wire.BrainError as e:
         # a transient gap was already ridden out (session.once); this is a
         # rotated token or a broken server -- one line, not a traceback
@@ -289,3 +326,133 @@ def cmd_watch(args):
         return 1
     except KeyboardInterrupt:
         return 130
+
+
+def _read_all(fd):
+    """A regular file to its end, or FILE_BYTES and one more read."""
+    out = b""
+    while len(out) <= FILE_BYTES:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        out += chunk
+    return out
+
+
+def _lines(data, eof):
+    """(lines, tail): the whole lines of `data`, the brain's own dropped,
+    and the partial line after the last newline -- a line of its own at
+    the end of the input."""
+    parts = data.split(b"\n")
+    tail = parts.pop()
+    if eof and tail:
+        parts.append(tail)
+        tail = b""
+    lines = [l for l in (p.decode("utf-8", "replace") for p in parts) if not own_line(l)]
+    return lines, tail
+
+
+def _too_big(looks, size):
+    """The refusal before the first look: a finished input past the looks a
+    file may take, and what fits instead."""
+    print("%s watch -- %s on stdin would take about %d looks of the model, past the %d a file may take: "
+          "grep finds a line in it at once, spark read --part N reads 16 kB of it, and "
+          "tail -f FILE | spark watch WORDS watches what comes next"
+          % (MARK, "%.1f MB" % (size / 1e6) if size >= 1e6 else "%d kB" % max(1, size // 1000), looks,
+             FILE_LOOKS_MAX), file=sys.stderr)
+    return 2
+
+
+def _finished(cfg, shell, instruction, lines, min_gap, bound=False):
+    """A finished input, every window back to back. A look the model was
+    too busy for is tried again RETRIES times, min_gap apart; past that,
+    one line names the lines never looked at, exit 1. `bound` (the end of
+    a live stream) keeps the newest FILE_LOOKS_MAX windows and says how
+    many went unseen; else an input past them is refused unread."""
+    wins = windows(lines)
+    if len(wins) > FILE_LOOKS_MAX:
+        if not bound:
+            return _too_big(len(wins), sum(len(l) + 1 for l in lines))
+        _unseen(sum(len(w) for w in wins[:-FILE_LOOKS_MAX]))
+        wins = wins[-FILE_LOOKS_MAX:]
+    for i, kept in enumerate(wins):
+        tries = 0
+        while True:
+            looked, hint = evaluate(cfg, shell, instruction, kept)
+            if looked:
+                break
+            tries += 1
+            if tries > RETRIES:
+                left = sum(len(w) for w in wins[i:])
+                print("! %d line%s never looked at -- %s" % (left, " was" if left == 1 else "s were", hint),
+                      file=sys.stderr)
+                return 1
+            time.sleep(min_gap)
+    return 0
+
+
+def _unseen(n):
+    """The one line that says lines went by and the model never saw them."""
+    if n:
+        print("! %d line%s went by unseen: the stream outran the model -- a file reads whole as "
+              "spark watch WORDS < FILE" % (n, "" if n == 1 else "s"), file=sys.stderr, flush=True)
+    return 0
+
+
+def _live(cfg, shell, instruction, fd, win_secs, min_gap):
+    """A live stream: a window when it is full or old enough, one look per
+    min_gap at most, the oldest lines first. A look the model was too
+    busy for keeps its lines for the next. A backlog past BACKLOG_LOOKS
+    windows loses its oldest lines, said on stderr. A pipe that ended
+    before the first look was a finished input all along."""
+    # monotonic() starts near 0 on some platforms (Apple's 3.9): the first
+    # window must never wait the interval out
+    pending, opened, last_call, looked_once, dropped = [], None, -min_gap, False, 0
+    tail = b""
+    while True:
+        now = time.monotonic()
+        wait = win_secs
+        if pending:
+            # a look needs both, the window due (full, or old enough) and
+            # the interval since the last call run out: wait for the later
+            # one, never spin in select while the other runs out
+            due_in = 0.0 if (_due(len(pending), opened, now, win_secs) or _full(pending)) else opened + win_secs - now
+            wait = min(win_secs, max(0.0, last_call + min_gap - now, due_in))
+        ready, _, _ = select.select([fd], [], [], wait)
+        eof = False
+        if ready:
+            # drain what arrived: readline() buffers up to 8 kB, so the
+            # rest of a burst would wait for the NEXT arrival to be seen
+            # -- select watches the fd, not the TextIOWrapper's buffer;
+            # and the rest of a burst still on its way is waited for a
+            # moment, so a backlog is cut with all of it in sight
+            data = b""
+            while len(data) < DRAIN_MAX:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    eof = True
+                    break
+                data += chunk
+                if not select.select([fd], [], [], DRAIN_WAIT)[0]:
+                    break
+            lines, tail = _lines(tail + data, eof)
+            if lines and opened is None:
+                opened = time.monotonic()
+            pending.extend(lines)
+            if not eof:
+                dropped += _bound(pending, BACKLOG_LOOKS)    # memory stays bounded between looks
+        if eof:
+            if not looked_once and not dropped:
+                return _finished(cfg, shell, instruction, pending, min_gap)
+            dropped = _unseen(dropped)
+            return _finished(cfg, shell, instruction, pending, min_gap, bound=True)
+        now = time.monotonic()
+        if not (_due(len(pending), opened, now, win_secs) or _full(pending)) or now - last_call < min_gap:
+            continue
+        dropped = _unseen(dropped + _bound(pending, BACKLOG_LOOKS))
+        kept, n = _take(pending)
+        looked, _hint = evaluate(cfg, shell, instruction, kept)
+        last_call, looked_once = now, True
+        if looked:
+            del pending[:n]
+            opened = (opened if pending else None)

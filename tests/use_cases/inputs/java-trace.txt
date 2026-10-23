@@ -1,0 +1,16 @@
+2026-10-21 14:03:52.118 ERROR 4412 --- [nio-8080-exec-7] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception [Request processing failed: java.lang.NullPointerException: Cannot invoke "com.shop.cart.Discount.apply(java.math.BigDecimal)" because "discount" is null] with root cause
+
+java.lang.NullPointerException: Cannot invoke "com.shop.cart.Discount.apply(java.math.BigDecimal)" because "discount" is null
+	at com.shop.cart.CartService.total(CartService.java:88)
+	at com.shop.cart.CartService.checkout(CartService.java:132)
+	at com.shop.web.CheckoutController.submit(CheckoutController.java:57)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:255)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:188)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:1583)

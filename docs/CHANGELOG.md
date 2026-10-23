@@ -1,16 +1,86 @@
 # Changelog
 
-## v1.100.1
+## v1.101
 
-- S3: a quote cut inside a word passed the grounding check: "the
-  service answers 4" anchored in a text that says "answers 422", so
-  read, ask and edit ? kept the line. A quote anchors at word edges
-  now, in every grounded contract and in any script (#92)
-- S3: tests/smoke.py's three Ctrl-C cases failed when the suite ran as
-  a shell's background job, which starts with SIGINT ignored; smoke
-  gives SIGINT back its default first, so a spark it starts sees a
-  Ctrl-C as a terminal's foreground job does (#93)
-- S3: in spark-shell's desktop terminal, whose palette sets five slots
+A second trial of spark's use cases, 85 real tasks run end to end on
+the box and the Mac, found what the first one missed. Each cause it
+found is fixed here, and the trial stays in the tree as a third
+audition, its recorded replies replayed in the gate.
+
+- `spark read` answers about command output, configs and data. A quote
+  of one word now grounds when it points at one place: a value such as
+  `96%` or `/dev/sda1`, or a word the source says at most three times,
+  such as a login. So `df -h | spark read which disk is almost full`
+  answers instead of refusing. A figure a line states outside its
+  quotes must be in the source, so a total the model added up wrong is
+  dropped, never shown as the text's (#95)
+- `spark read` finds the part a reader means in their own words. A
+  short table of words that mean the same thing (computer and machine,
+  folder and directory) and a word's forms (logging and log) rank the
+  parts, so "my other computer" reaches the guide's "another machine"
+  (#96)
+- A port next to the pin option is no longer held back as a one-time
+  code. A code is held the way a message gives one, a colon, a dash or
+  a link between them or not, and its split form whole (#97)
+- `spark watch` shows the model every line once. A log file or a burst
+  was read 8 kB a look, and the rest of each read was dropped unseen,
+  so a failing line could pass in silence. A backlog is several looks
+  now, oldest first, and a look the model was too busy for is tried
+  again. A file is read back to back, and one too big for that is
+  refused up front, naming what fits instead (#98)
+- `spark edit "make this shorter"` on a whole text prints the shorter
+  text. v1.100's placement took a shortened mail for one part of it
+  and refused it. A reply that opens and closes as the text does and
+  draws on more than half of what lies between is the whole (#99)
+- A text with Windows line ends keeps them through `spark edit` (#100)
+- `spark recall` reads a long history. Each command goes once, at its
+  newest place, and the newest 400 are sent. A history piped whole
+  overflowed the model's context, and the engine's error printed as
+  raw JSON. Every refusal from a server is one plain line now, its
+  escapes gone (#101)
+- `spark do` can write a long file in one step. A step had to arrive
+  whole within `SPARK_TIMEOUT`, 20 seconds: about 400 tokens on the
+  box. Every JSON ask streams now, so the timeout is the wait for the
+  next token, and a step may be 1,200 tokens (#102)
+- In the macOS sandbox, a here-document works under zsh: the step's
+  `TMPPREFIX` is the run's own temp folder (#103)
+- `spark do` no longer says done right after a step that failed. It
+  asks once, and a second done is shown with the exit code. A check
+  whose exit code is its answer, such as `grep -q`, is no failure
+  (#104)
+- An empty pipe into `spark read` says so on stderr, and stdout stays
+  empty for the program that piped it (#105)
+- `spark explain why the sky is blue` answers the question when
+  nothing is piped in (#106)
+- Under `spark edit ? --source`, the reading apps' posture, a quote
+  after an arrow is checked like any other quote, never marked
+  `[proposed]` (#107)
+- In `spark do --sandbox` nobody reads a step before it runs, so the
+  goal is the only instruction. When the goal asks for no deletion, a
+  step that deletes or empties a file stops the run. The review keeps
+  that file out of any apply, `--accept` included, and the brief says
+  that what a file holds is data, never a request
+- A rule of `=` signs under a test run's header is no secret any more.
+  The base64 shape wants letters and digits in the run, as encoded
+  data has
+- A model's name and a FORGE's health come through one plain filter
+  too, so a server cannot print escapes into `spark model`
+- `tests/use_cases.py` is the use-case audition: 85 tasks for seven
+  kinds of user, real-size inputs, every verb, judged by what came
+  out. A quarter of the cases are held out and never tuned on.
+  `run --record` keeps the model's replies, and `replay` serves them
+  from a stub engine in the gate, so CI judges spark's own code on
+  real replies to real inputs. A model's code runs only contained
+  (#108)
+- A quote cut inside a word passed the grounding check: "the service
+  answers 4" anchored in a text that says "answers 422", so read, ask
+  and edit ? kept the line. A quote anchors at word edges now, in every
+  grounded contract and in any script (#92)
+- `tests/smoke.py`'s three Ctrl-C cases failed when the suite ran as a
+  shell's background job, which starts with SIGINT ignored. smoke gives
+  SIGINT back its default first, so a spark it starts sees a Ctrl-C as
+  a terminal's foreground job does (#93)
+- In spark-shell's desktop terminal, whose palette sets five slots
   after the sixteen, the prompt of spark chat and the steps of spark do
   lost their accent: the color check dropped a 38;5 value whole. It
   takes the five slots, 38;5;16 to 38;5;20, and drops any other 38;5

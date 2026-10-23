@@ -1,0 +1,19 @@
+x invoicer.service - Invoicer web API
+     Loaded: loaded (/etc/systemd/system/invoicer.service; enabled; preset: enabled)
+     Active: failed (Result: exit-code) since Tue 2026-10-20 07:41:12 UTC; 3min 2s ago
+   Duration: 1.204s
+    Process: 18812 ExecStart=/opt/invoicer/bin/invoicer --config /etc/invoicer/config.toml (code=exited, status=1/FAILURE)
+   Main PID: 18812 (code=exited, status=1/FAILURE)
+        CPU: 1.077s
+
+Oct 20 07:41:10 apps1 systemd[1]: Started invoicer.service - Invoicer web API.
+Oct 20 07:41:11 apps1 invoicer[18812]: 2026-10-20T07:41:11Z INFO  loading config from /etc/invoicer/config.toml
+Oct 20 07:41:11 apps1 invoicer[18812]: 2026-10-20T07:41:11Z INFO  connected to database at 203.0.113.12:5432
+Oct 20 07:41:12 apps1 invoicer[18812]: 2026-10-20T07:41:12Z ERROR failed to start HTTP server: listen tcp 0.0.0.0:8080: bind: address already in use
+Oct 20 07:41:12 apps1 invoicer[18812]: 2026-10-20T07:41:12Z INFO  shutting down
+Oct 20 07:41:12 apps1 systemd[1]: invoicer.service: Main process exited, code=exited, status=1/FAILURE
+Oct 20 07:41:12 apps1 systemd[1]: invoicer.service: Failed with result 'exit-code'.
+Oct 20 07:41:12 apps1 systemd[1]: invoicer.service: Scheduled restart job, restart counter is at 5.
+Oct 20 07:41:12 apps1 systemd[1]: invoicer.service: Start request repeated too quickly.
+Oct 20 07:41:12 apps1 systemd[1]: invoicer.service: Failed with result 'exit-code'.
+Oct 20 07:41:12 apps1 systemd[1]: Failed to start invoicer.service - Invoicer web API.

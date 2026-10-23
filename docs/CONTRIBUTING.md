@@ -50,6 +50,12 @@ The audition's held-out questions never change. Never tune a help
 row, a brief or the knowledge on them. A change to the line reports
 the held-out score beside the other.
 
+A change to how a verb treats a model's reply, or to a brief any verb
+uses, runs the third audition too. `tests/use_cases.py run --record`
+runs 85 real tasks against a live model, and its table goes in the pull
+request, before and after. Its held-out cases follow the same rule.
+`keep` then updates the recorded replies the gate replays.
+
 ## Validation boundaries
 
 Four kinds of evidence stay apart: fixtures, real isolation, model
@@ -109,6 +115,11 @@ on Linux with bubblewrap and on macOS. The harness runs once a week and
 on request against the pinned artifacts, fetched by their hashes and
 kept in the actions cache. Its record is an artifact, on failure too.
 A pull request never runs them.
+
+The use-case audition keeps its two halves apart too. Its replay in the
+gate is a fixture: real replies, recorded once, judge spark's code with
+no model. Its live run is held-out quality, like the line audition's,
+and only it says how a model answers today.
 
 ## Branch model
 

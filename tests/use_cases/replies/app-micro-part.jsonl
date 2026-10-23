@@ -1,0 +1,1 @@
+{"stream": true, "content": "    def remove(self, sku, qty=1):\n        if sku not in self.lines:\n            raise KeyError(f\"SKU '{sku}' not found in cart\")\n        line = self.lines[sku]\n        line.qty -= qty\n        if line.qty <= 0:\n            del self.lines[sku]", "finish": "stop"}

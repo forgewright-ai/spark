@@ -1,0 +1,1 @@
+{"stream": true, "content": "[English, YAML configuration]\nThe web service uses \"restart: unless-stopped\" to handle restarts.\nThe worker service uses \"restart: on-failure\" for its restarts.\nThe db service uses \"restart: always\" to keep running.", "finish": "stop"}

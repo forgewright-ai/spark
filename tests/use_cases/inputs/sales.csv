@@ -1,0 +1,17 @@
+date,store,product_family,amount_usd
+2026-01-05,Lakeview,coffee,980
+2026-01-12,Loop,coffee,1120
+2026-01-19,Pilsen,pastry,430
+2026-01-26,Lakeview,pastry,610
+2026-02-02,Loop,coffee,1040
+2026-02-09,Pilsen,coffee,720
+2026-02-16,Lakeview,coffee,1310
+2026-02-23,Loop,pastry,560
+2026-03-02,Lakeview,coffee,1200
+2026-03-09,Loop,coffee,950
+2026-03-16,Lakeview,pastry,1430
+2026-03-23,Pilsen,coffee,610
+2026-03-30,Loop,pastry,1010
+2026-04-06,Pilsen,pastry,540
+2026-04-13,Lakeview,coffee,1280
+2026-04-20,Loop,coffee,990

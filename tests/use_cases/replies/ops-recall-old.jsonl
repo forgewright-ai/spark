@@ -1,0 +1,1 @@
+{"stream": true, "content": "{\n  \"candidates\": [\n    \"mogrify -resize 1600x1600 -quality 85 ~/Pictures/trip-2026/*.jpg\"\n  ]\n}", "finish": "stop"}

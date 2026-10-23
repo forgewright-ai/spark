@@ -7,6 +7,7 @@ import collections
 import json
 import os
 import re
+import stat
 import time
 import urllib.error
 import urllib.parse
@@ -188,7 +189,7 @@ def forge_health(url, timeout=HEALTH_TIMEOUT, cfg=None):
     try:
         with urllib.request.urlopen(urllib.request.Request(url + "/api/health", headers=headers), timeout=timeout) as r:
             d = json.load(r)
-        return d if isinstance(d, dict) and d.get("forge") is True else None
+        return _plain_tree(d) if isinstance(d, dict) and d.get("forge") is True else None
     except urllib.error.HTTPError:
         return None
     except (urllib.error.URLError, OSError, ValueError):
@@ -271,7 +272,7 @@ def models(cfg, url, timeout=HEALTH_TIMEOUT, forge=False):
     try:
         req = urllib.request.Request(url + "/v1/models", headers=_headers(cfg, forge=forge))
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.load(r)
+            d = _plain_tree(json.load(r))
         out = []
         for e in d["data"]:
             st = e.get("status") if isinstance(e.get("status"), dict) else {}
@@ -589,6 +590,45 @@ def _sent(url, data):
     return {"out_bytes": len(data), "dest": dest_of(url)}
 
 
+def _plain(said, limit=160):
+    """What a server sent, fit for a one-line hint: escapes, control and
+    bidi characters gone (text.printable), whitespace folded, cut at a
+    word. A hint reaches the terminal raw (die, faced), so an OSC 52 or
+    a clear screen in a server's message must never ride it. Anything
+    that is not a string is no text."""
+    if not isinstance(said, str):
+        return ""
+    said = " ".join(textmod.printable(said).split())
+    if len(said) > limit:
+        said = said[:limit - 4].rsplit(" ", 1)[0] + " ..."
+    return said
+
+
+def _plain_tree(d):
+    """A server's JSON answer with every string in it made plain: a name,
+    a model or a version from /api/health or /v1/models is printed, and
+    must carry no escape either. Keys stay as they came."""
+    if isinstance(d, str):
+        return _plain(d, 200)
+    if isinstance(d, dict):
+        return {k: _plain_tree(v) for k, v in d.items()}
+    if isinstance(d, list):
+        return [_plain_tree(v) for v in d]
+    return d
+
+
+def _engine_error(url, code, err, detail):
+    """An engine's refusal in one plain line, never its JSON (#101).
+    llama-server answers {"error": {"code", "message", "type"}}; one that
+    the context cannot hold says how big the request was and how big the
+    context is. Any other body is its first line, cut."""
+    n, ctx = err.get("n_prompt_tokens"), err.get("n_ctx")
+    if err.get("type") == "exceed_context_size_error" and isinstance(n, int) and isinstance(ctx, int):
+        return "the request is %d tokens, more than the model's context of %d -- send less" % (n, ctx)
+    said = _plain(err.get("message") if isinstance(err.get("message"), str) else detail)
+    return "%s answered HTTP %d%s" % (url, code, ": " + said if said else "")
+
+
 def _send(cfg, url, data, timeout, forge=False, sent=None):
     """POST `data` to the chat endpoint: the open response, or BrainError.
     `sent`, when given, is called with _sent(url, data) once the server
@@ -618,14 +658,16 @@ def _send(cfg, url, data, timeout, forge=False, sent=None):
             pass
         try:
             err = json.loads(detail).get("error", {})
-            if err.get("kind"):
-                kind = "loading" if err["kind"] in ("loading", "down") else err["kind"]
-                raise BrainError(kind, err.get("hint") or "the server is coming back -- ask again in a moment")
-        except ValueError:
-            pass
+        except (ValueError, AttributeError):
+            err = {}
+        if not isinstance(err, dict):
+            err = {}
+        if isinstance(err.get("kind"), str) and err["kind"]:
+            kind = "loading" if err["kind"] in ("loading", "down") else _plain(err["kind"], 20)
+            raise BrainError(kind, _plain(err.get("hint")) or "the server is coming back -- ask again in a moment")
         if e.code in (502, 504):
             raise BrainError("loading", "the server is restarting -- ask again in a moment")
-        raise BrainError("bad", "%s answered HTTP %d %s" % (url, e.code, detail[:200]))
+        raise BrainError("bad", _engine_error(url, e.code, err, detail))
     except urllib.error.URLError as e:
         reason = str(getattr(e, "reason", e))
         if "timed out" in reason:
@@ -830,29 +872,12 @@ def chat_grammar(cfg, url, messages, grammar, max_tokens=400, temperature=0.2, f
     """One JSON object held by `grammar`, parsed: chat_json for a grammar
     made elsewhere (tools_gbnf). (reply, timings)."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
-            "stream": False, "cache_prompt": True, "grammar": grammar,
+            "stream": True, "cache_prompt": True, "grammar": grammar,
             "chat_template_kwargs": dict(NO_THINKING)}
     body.update(NO_THINK_BUDGET)
     if model is not None:
         body["model"] = model
-    data = _encode(body)
-    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
-        try:
-            d = json.load(r)
-            choice = d["choices"][0]
-            text = choice["message"]["content"]
-        except OSError as e:
-            if "timed out" in str(e):
-                raise BrainError("timeout", "%s went quiet for %ss mid-reply" % (url, timeout or cfg.timeout))
-            raise BrainError("cut", "%s dropped mid-reply (%s)" % (url, e))
-        except (ValueError, KeyError, IndexError):
-            raise BrainError("bad", "%s returned something that is not a chat completion" % url)
-    try:
-        return json.loads(text), dict(timings_of(d), **_sent(url, data))
-    except (ValueError, TypeError):
-        if isinstance(choice, dict) and choice.get("finish_reason") == "length":
-            raise BrainError("bad", CUT_OUT % max_tokens)
-        raise BrainError("bad", "the model did not return JSON: %s" % str(text or "")[:80].replace("\n", " "))
+    return _json_reply(cfg, url, body, max_tokens, timeout, forge)
 
 
 def _json_body(body, schema):
@@ -881,36 +906,40 @@ def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge
     """One JSON object shaped by `schema`, parsed. `model` names the role
     the request is for (spark | ember); the caller decides, the wire
     only carries it. None sends no model field at all. `timeout` (seconds)
-    overrides SPARK_TIMEOUT for this one request. The request asks for no
+    overrides SPARK_TIMEOUT for this one request: the wait for the next
+    token, since the reply streams (_json_reply). The request asks for no
     thinking (NO_THINKING). `identity` False asks a FORGE for the chat
     model bare (contract 9): no soul and no remembered facts in front."""
     body = _json_body({"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
-                       "stream": False, "cache_prompt": True}, schema)
+                       "stream": True, "cache_prompt": True}, schema)
     if model is not None:
         body["model"] = model
     if forge and not identity:
         body["identity"] = False
+    return _json_reply(cfg, url, body, max_tokens, timeout, forge)
+
+
+def _json_reply(cfg, url, body, max_tokens, timeout, forge):
+    """A JSON ask (chat_json, chat_grammar), streamed and joined: (the
+    object, timings). Streamed, because a server sends the headers of a
+    request in one piece only when the whole reply is written, and the
+    socket timeout then limits the whole generation: a 60-line step at
+    20 tokens a second never arrived within 20 s (#102). Streamed, the
+    timeout is the wait for the next token. The first reasoning delta
+    ends the reply (THOUGHT_OUT), as it does for chat_stream's schema;
+    the cap cutting the object says so (CUT_OUT)."""
     data = _encode(body)
-    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
-        try:
-            d = json.load(r)
-            choice = d["choices"][0]
-            text = choice["message"]["content"]
-        except OSError as e:
-            if "timed out" in str(e):
-                raise BrainError("timeout", "%s went quiet for %ss mid-reply" % (url, timeout or cfg.timeout))
-            raise BrainError("cut", "%s dropped mid-reply (%s)" % (url, e))
-        except (ValueError, KeyError, IndexError):
-            raise BrainError("bad", "%s returned something that is not a chat completion" % url)
+    wait = timeout or cfg.timeout
+    with _send(cfg, url, data, wait, forge=forge) as r:
+        text, timings, thought = _read_reply(r, url, wait, None, True)
     try:
-        return json.loads(text), dict(timings_of(d), **_sent(url, data))
+        return json.loads(text), dict(timings, **_sent(url, data))
     except (ValueError, TypeError):
-        msg = choice.get("message") if isinstance(choice, dict) else None
-        if isinstance(msg, dict) and _thought_out(text, choice.get("finish_reason"), msg.get("reasoning_content")):
+        if _thought_out(text, timings.get("finish"), thought):
             raise BrainError("bad", THOUGHT_OUT)
-        if isinstance(choice, dict) and choice.get("finish_reason") == "length":
+        if timings.get("finish") == "length":
             raise BrainError("bad", CUT_OUT % max_tokens)
-        raise BrainError("bad", "the model did not return JSON: %s" % str(text or "")[:80].replace("\n", " "))
+        raise BrainError("bad", "the model did not return JSON: %s" % _plain(text, 80))
 
 
 def timings_of(d):
@@ -972,69 +1001,122 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         body["id_slot"] = slot
     if extra:
         body.update(extra)
-    out, timings, done, thought = [], {}, False, False
     data = _encode(body)
+    wait = timeout or cfg.timeout
     try:
-        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge, sent=sent)
+        r = _send(cfg, url, data, wait, forge=forge, sent=sent)
     except BrainError as e:
         if slot is None or e.kind != "bad":
             raise
         debug("the server refused id_slot (%s): asked again without it" % e.hint[:80])
         body.pop("id_slot", None)
         data = _encode(body)
-        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge, sent=sent)
+        r = _send(cfg, url, data, wait, forge=forge, sent=sent)
     with r:
-        try:
-            for raw in r:
-                line = raw.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if payload == "[DONE]":
-                    done = True
-                    break
+        text, timings, thought = _read_reply(r, url, wait, on_delta, schema is not None)
+    if schema is not None and _thought_out(text, timings.get("finish"), thought):
+        # the net under the stop in _read_reply: a reply that reached its
+        # end with a thought seen, the cap spent and no JSON
+        raise _thought(not text)
+    return text, dict(timings, **_sent(url, data))
+
+
+def _read_reply(r, url, wait, on_delta, json_ask):
+    """The reply on the open response `r`, read as it comes: (text,
+    timings, thought). SSE is read chunk by chunk, each delta to
+    `on_delta` (None: nobody shows it); a body that opens with `{` is a
+    server (a stub, a proxy) that answered a streamed request in one JSON
+    completion, read whole. `json_ask`:
+    the first reasoning delta ends the reply at once -- BrainError `bad`,
+    THOUGHT_OUT, marked `thought`, and `clean` when no chunk had gone to
+    on_delta. Leaving the response closes the socket, which is how the
+    server learns to stop writing a thought nobody will read. Without it
+    (chat, explain) a thought is the model's own business and the stream
+    runs on. Every reply read is noted for SPARK_RECORD (_record)."""
+    out, timings, done, thought, sse = [], {}, False, False, False
+    try:
+        lines = iter(r)
+        for raw in lines:
+            line = raw.decode("utf-8", errors="replace").strip()
+            if not sse and line.startswith("{"):
+                # the whole completion in one JSON body: a server (a stub,
+                # a proxy) that answered a streamed request in one piece
                 try:
-                    chunk = json.loads(payload)
-                except ValueError:
-                    continue
-                if "timings" in chunk:
-                    timings = timings_of(chunk)
-                try:
-                    fin = chunk["choices"][0].get("finish_reason")
-                    if fin:
-                        timings["finish"] = fin      # "stop", or "length": the cap ended it
-                except (KeyError, IndexError, TypeError, AttributeError):
-                    pass
-                try:
-                    part = chunk["choices"][0]["delta"]
-                    delta = part.get("content") or ""
-                    thinking = bool(part.get("reasoning_content"))
-                except (KeyError, IndexError, TypeError, AttributeError):
-                    continue
-                if thinking:
-                    thought = True
-                    if schema is not None:
-                        # stop at the thought: the cap would be spent on
-                        # it and the reply come back empty at the end.
-                        # The raise leaves `with r`, the socket closes,
-                        # and the server drops the task (as _Stop does)
-                        debug("the model opened a thought where JSON was asked: the stream stopped there")
-                        raise _thought(not out)
-                if delta:
-                    out.append(delta)
+                    d = json.loads((raw + b"".join(lines)).decode("utf-8", errors="replace"))
+                    choice = d["choices"][0]
+                    msg = choice.get("message") or {}
+                    text = msg.get("content") or ""
+                    if not isinstance(text, str):
+                        raise TypeError("content is not text")
+                except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+                    raise BrainError("bad", "%s returned something that is not a chat completion" % url)
+                timings = timings_of(d)
+                if isinstance(choice.get("finish_reason"), str):
+                    timings["finish"] = choice["finish_reason"]
+                thought = bool(msg.get("reasoning_content"))
+                if text:
+                    out.append(text)
+                    if on_delta:
+                        on_delta(text)
+                done = True
+                break
+            if not line.startswith("data:"):
+                continue
+            sse = True
+            payload = line[5:].strip()
+            if payload == "[DONE]":
+                done = True
+                break
+            try:
+                chunk = json.loads(payload)
+            except ValueError:
+                continue
+            if "timings" in chunk:
+                timings = dict(timings_of(chunk), **({"finish": timings["finish"]} if "finish" in timings else {}))
+            try:
+                fin = chunk["choices"][0].get("finish_reason")
+                if fin and isinstance(fin, str):
+                    timings["finish"] = fin      # "stop", or "length": the cap ended it
+            except (KeyError, IndexError, TypeError, AttributeError):
+                pass
+            try:
+                part = chunk["choices"][0]["delta"]
+                delta = part.get("content") or ""
+                if not isinstance(delta, str):
+                    delta = ""                   # a content that is not text is none
+                thinking = bool(part.get("reasoning_content"))
+            except (KeyError, IndexError, TypeError, AttributeError):
+                continue
+            if thinking:
+                thought = True
+                if json_ask:
+                    # stop at the thought: the cap would be spent on it
+                    # and the reply come back empty at the end. The raise
+                    # leaves `with r`, the socket closes, and the server
+                    # drops the task (as _Stop does)
+                    debug("the model opened a thought where JSON was asked: the stream stopped there")
+                    raise _thought(not out)
+            if delta:
+                out.append(delta)
+                if on_delta:
                     on_delta(delta)
-        except OSError as e:
-            # the socket died or went quiet MID-REPLY (a server restarted
-            # under the answer, a model that stalled past the timeout):
-            # _send's try covers the connect only, so this is the read's
-            # own one-line answer -- never a traceback in a chat
-            if isinstance(e, BrokenPipeError):
-                # on_delta's own write failed: the reader's pipe closed
-                # (`spark ... | head`), not the brain. bin/spark ends it
-                raise
-            if "timed out" in str(e):
-                raise BrainError("timeout", "%s went quiet for %ss mid-reply -- the answer above is incomplete" % (url, timeout or cfg.timeout))
-            raise BrainError("cut", "%s dropped mid-reply (%s) -- the answer above is incomplete" % (url, e))
+    except OSError as e:
+        # the socket died or went quiet MID-REPLY (a server restarted
+        # under the answer, a model that stalled past the timeout):
+        # _send's try covers the connect only, so this is the read's
+        # own one-line answer -- never a traceback in a chat
+        _record(out, None)
+        if isinstance(e, BrokenPipeError):
+            # on_delta's own write failed: the reader's pipe closed
+            # (`spark ... | head`), not the brain. bin/spark ends it
+            raise
+        if "timed out" in str(e):
+            raise BrainError("timeout", "%s went quiet for %ss mid-reply -- the answer above is incomplete" % (url, wait))
+        raise BrainError("cut", "%s dropped mid-reply (%s) -- the answer above is incomplete" % (url, e))
+    except BrainError:
+        _record(out, None)
+        raise
+    _record(out, timings.get("finish") if done else None)
     if not done:
         # a severed connection is not an end of stream: readline() answers
         # b"" and the loop simply stops, so half an answer would come back
@@ -1042,9 +1124,40 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         # FORGE proxying its bytes) closes with [DONE]; its absence means
         # the reply was cut off, and the caller must say so.
         raise BrainError("cut", "%s stopped mid-reply -- the answer above is incomplete" % url)
-    text = "".join(out)
-    if schema is not None and _thought_out(text, timings.get("finish"), thought):
-        # the net under the stop above: a reply that reached its end with
-        # a thought seen, the cap spent and no JSON
-        raise _thought(not out)
-    return text, dict(timings, **_sent(url, data))
+    return "".join(out), timings, thought
+
+
+def _record(out, finish):
+    """SPARK_RECORD, a test seam: when it names a file, every model reply
+    read (_read_reply) appends one JSON line there, 0600 --
+    {"stream": true, "content", "finish"}, ASCII -- what the use-case audition
+    replays in CI (tests/use_cases.py replay). The reply's text alone:
+    nothing of the request, no URL, no token, no timings. `finish` is
+    the server's finish_reason, None for a reply cut or failed. A reply
+    with no request answered (an HTTP refusal) is no record: the replay
+    serves the next one to the request that follows."""
+    path = os.environ.get("SPARK_RECORD")
+    if not path:
+        return
+    # never a reply's failure: an unwritable path, a lone surrogate, a file
+    # that is not ours are each a debug line, and the reply goes on
+    try:
+        line = (json.dumps({"stream": True, "content": "".join(out), "finish": finish}) + "\n").encode("ascii")
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | vault.PRIVATE_FLAGS, 0o600)
+    except (OSError, ValueError, TypeError) as e:
+        debug("SPARK_RECORD: %s" % e)
+        return
+    try:
+        st = os.fstat(fd)
+        # O_NOFOLLOW refused a symlink; a hard link or another's file is
+        # refused here, on the opened file, before anything is changed
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != os.getuid():
+            debug("SPARK_RECORD: %s is not a file of ours alone -- nothing written" % path)
+            return
+        if st.st_mode & 0o077:
+            os.fchmod(fd, 0o600)
+        os.write(fd, line)
+    except OSError as e:
+        debug("SPARK_RECORD: %s" % e)
+    finally:
+        os.close(fd)

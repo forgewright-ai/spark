@@ -140,6 +140,42 @@ def _printable_feed(feed, data):
     return lambda chunk: feed(p.feed(chunk))
 
 
+def _crlf(data):
+    """Does every line of the text end CRLF (a file written on Windows)?"""
+    ends = data.count("\n")
+    return bool(ends) and data.count("\r\n") == ends
+
+
+def _as_crlf(text):
+    """`text` with every line ending CRLF, never a CR doubled."""
+    return text.replace("\r\n", "\n").replace("\n", "\r\n")
+
+
+class _CRLF:
+    """A rewrite streamed to `stream` (a --part selection) with every
+    line ending CRLF, the way the text's own lines end: the model writes
+    LF. A CR that ends one chunk waits for the next, so a CRLF split
+    across two chunks is never doubled."""
+
+    def __init__(self, stream):
+        self.stream, self.cr = stream, ""
+
+    def write(self, s):
+        s, self.cr = self.cr + s, ""
+        if s.endswith("\r"):
+            s, self.cr = s[:-1], "\r"
+        self.stream.write(_as_crlf(s))
+
+    def flush(self):
+        self.stream.flush()
+
+    def close(self):
+        if self.cr:
+            self.stream.write(self.cr)
+            self.cr = ""
+        self.stream.flush()
+
+
 _WORD = re.compile(r"\w{3,}")
 _HEADING = re.compile(r"(#{1,6}) ")
 PLACE_LIKE = 0.6        # a reply's unit is like one of the text's at this similarity of its characters,
@@ -255,6 +291,19 @@ def _part_again(data, first, again):
     return None, "unplaced"
 
 
+def _draws_inner(mine, at, rare):
+    """Does a reply that opens and ends with the text's own opening and
+    closing draw on what lies between them: more than half of the text's
+    inner units, and two at least, found by a unit of the reply's middle
+    or by their own words in it? Fewer is the fragment shape: the opening,
+    the part asked about and the closing, with the rest gone (a mail's
+    one paragraph, a file's one function), never a shorter whole."""
+    inner = range(1, len(rare) - 1)
+    said = set(_WORD.findall(" ".join(mine[1:-1]).lower()))
+    found = {k for k in at[1:-1] if k in inner} | {k for k in inner if rare[k] & said}
+    return len(found) >= 2 and len(found) * 2 > len(inner)
+
+
 def _place(data, reply):
     """A rewrite of the whole text, made sure to be whole: (text, how).
 
@@ -266,9 +315,11 @@ def _place(data, reply):
     or a part left untouched: ("part"), for the caller to ask once more
     (_part_again). The reply is the whole ("whole") when it is all of the
     text's units unchanged, when it has about as many units as the text,
-    when it spans the text's first unit to its last, when it holds a unit
-    from outside its own run (a merge: not a local edit), or when it is
-    placed nowhere and draws on most of the text (a new text).
+    when it spans the text's first unit to its last, when it opens and
+    ends with them and draws on what lies between (a shorter whole,
+    _draws_inner), when it holds a unit from outside its own run (a
+    merge: not a local edit), or when it is placed nowhere and draws on
+    most of the text (a new text).
     A run of the text's units, each found for sure (_anchor), goes back in
     their place ("spliced") when nothing of the text is missing inside it
     and nothing new sits at an edge the text goes on past. A reply that
@@ -319,6 +370,10 @@ def _place(data, reply):
             sure = False
         last, between = k, 0
     if sure and i == 0 and j == len(src):
+        return reply, "whole"
+    if at[0] == 0 and at[-1] == len(src) - 1 and _draws_inner(mine, at, rare):
+        # it opens with the text's opening and ends with its closing: the
+        # whole text, however much shorter (a mail cut to half its length)
         return reply, "whole"
     if (at[0] is None and i > 0) or (at[-1] is None and j < len(src)):
         sure = False
@@ -583,18 +638,25 @@ def cmd_edit(args):
     # newline would join or split lines
     # an answer's quotes are checked against the text, line by line, and
     # the ones the text does not hold are marked where they stand
-    anchors = textmod.Anchors(sys.stdout, data) if kind == "answer" else None
+    # A reader's source (--source) proposes nothing, so a span after an
+    # arrow there is a quote like any other, checked
+    anchors = textmod.Anchors(sys.stdout, data, proposals=not opts["source"]) if kind == "answer" else None
     # a rewrite of the whole text is held until it ends: it is printed only
     # once it is known to be whole (_place). A selection (--part) and a text
     # written from nothing stream, since their reply is all there is
     held_out = io.StringIO() if kind == "rewrite" and data and not opts["part"] else None
-    fence = textmod.Fence(anchors or held_out or sys.stdout,
+    # a rewrite of a text whose every line ends CRLF ends its lines so too
+    crlf = kind == "rewrite" and _crlf(data)
+    streamed = _CRLF(sys.stdout) if crlf and held_out is None else None
+    fence = textmod.Fence(anchors or held_out or streamed or sys.stdout,
                           newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
 
     def done():
         fence.close()
         if anchors:
             anchors.close()
+        if streamed:
+            streamed.close()
     # --source picks the reading-discussion posture (a published source
     # the reader discusses, not their draft) over the editor's review
     # brief, keeping the kind -- the turn record and the Anchors gate --
@@ -642,7 +704,7 @@ def cmd_edit(args):
         if whole is None:
             s.record(kind=kind, chars=len(data), ms=ms, unplaced=1, **counts)
             die("the reply is not the whole text, and its place in it is not sure; nothing changed -- select the part and ask again")
-        sys.stdout.write(whole)
+        sys.stdout.write(_as_crlf(whole) if crlf else whole)
         sys.stdout.flush()
         if how == "spliced":
             counts["spliced"] = 1

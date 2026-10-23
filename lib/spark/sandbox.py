@@ -83,8 +83,19 @@ PROBE_TIMEOUT = 20
 # a run's id: the time it began and six hex digits -- load() refuses any
 # other shape before it touches the filesystem, so an id is never a path
 ID_SHAPE = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$")
-# what meta.json may hold: numbers and names, never the goal's words
-META_FIELDS = ("id", "thread", "cwd", "start", "os", "state")
+# what meta.json may hold: numbers and names, never the goal's words.
+# `keep`: the goal asked for no deletion, so what the copy lost is
+# refused in the review (lost, KEPT)
+META_FIELDS = ("id", "thread", "cwd", "start", "os", "state", "keep")
+# A run that keeps (its goal asked for no deletion): what the copy lost
+# against the project never applies, however the run is applied (the
+# review, --accept, a program's accept). Lost is a file, a link or a
+# directory gone, or a file emptied, whose bytes are nowhere the copy
+# added or changed (a rename keeps them). Read from what the copy holds,
+# never from the commands that made it.
+KEPT = "the goal asked for no deletion -- refused"
+EMPTY_SHA = hashlib.sha256(b"").hexdigest()
+LOST_WALK = 2000            # a deleted directory's files weighed for a rename at most; past it, lost
 # a run's life: its driver holds the lock while it runs; it waits for a
 # review; applied or discarded, its dir is removed
 STATES = ("running", "waiting", "applied", "discarded")
@@ -538,7 +549,8 @@ def _run_dir(rid):
 
 
 def _save(run):
-    meta = {k: run[k] for k in META_FIELDS}
+    meta = {k: run.get(k) for k in META_FIELDS}
+    meta["keep"] = meta["keep"] is True
     _write_private(os.path.join(run["dir"], "meta.json"), json.dumps(meta, sort_keys=True).encode())
 
 
@@ -557,6 +569,7 @@ def load(rid):
             or meta.get("os") not in ("linux", "macos"):
         raise SandboxError("run %s's record does not read -- spark do --discard %s" % (rid, rid))
     run = {k: meta.get(k) for k in META_FIELDS}
+    run["keep"] = meta.get("keep") is True        # a record from before v1.101 has none
     run["dir"] = d
     return run
 
@@ -617,7 +630,7 @@ def mark(run, state):
     _save(run)
 
 
-def new_run(cwd, thread, platform=None):
+def new_run(cwd, thread, platform=None, keep=False):
     """A new run of the project at cwd, for the sealed thread `thread`,
     state running, its lock held by this process (run["lock"]; release()
     lets go). Refuses (SandboxError) when the run dir would be inside
@@ -645,7 +658,8 @@ def new_run(cwd, thread, platform=None):
             except FileExistsError:
                 continue
         os.chmod(d, 0o700)
-        run = {"id": rid, "thread": thread or "", "cwd": cwd, "start": 0, "os": plat, "state": "running", "dir": d}
+        run = {"id": rid, "thread": thread or "", "cwd": cwd, "start": 0, "os": plat, "state": "running", "dir": d,
+               "keep": bool(keep)}
         try:
             fd = _open_lock(os.path.join(d, RUN_LOCK))
             run["lock"] = fd
@@ -733,8 +747,12 @@ def _hidden(home):
 
 
 def _step_env(home, tmp):
+    # zsh writes a here-document's body under TMPPREFIX (/tmp/zsh), never
+    # TMPDIR: on macOS the profile denies /private/tmp, so it points into
+    # the run's own temp folder too (on Linux /tmp is the step's tmpfs)
     env = {"PATH": os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin",
-           "HOME": home, "LANG": os.environ.get("LANG") or "C.UTF-8", "TMPDIR": tmp}
+           "HOME": home, "LANG": os.environ.get("LANG") or "C.UTF-8", "TMPDIR": tmp,
+           "TMPPREFIX": os.path.join(tmp, "zsh")}
     env.update(STEP_ENV)
     return env
 
@@ -1473,10 +1491,59 @@ def changes(run):
     entries = [e for e in entries if not (e["status"] == "deleted" and
                                           any(e["path"].startswith(g + "/") for g in gone))]
     _mark_git(run, entries)
+    if run.get("keep"):
+        gone = set(lost(run, {e["path"]: (e["status"], e["sha"]) for e in entries}))
+        for e in entries:
+            if e["path"] in gone and e["status"] not in ("held", "refused"):
+                e["status"], e["reason"] = "refused", KEPT
     for e in entries:
         e["control"] = _control(e)
     _budget(entries)
     return entries
+
+
+def lost(run, now, before=None):
+    """The paths the copy lost against the project, read from `now` (the
+    shape state() answers, {path: (status, sha)}): deleted, or a file
+    emptied, with its bytes nowhere the copy added or changed. With
+    `before`, a state from earlier, only what moved since it."""
+    moved = {sha for st, sha in now.values() if st != "deleted" and sha}
+    out = []
+    for p in sorted(now):
+        st, sha = now[p]
+        if before is not None and before.get(p) == (st, sha):
+            continue
+        if st == "deleted" and not _moved(run, p, moved):
+            out.append(p)
+        elif st in ("changed", "binary") and sha == EMPTY_SHA:
+            out.append(p)
+    return out
+
+
+def _moved(run, r, moved):
+    """Are the bytes of the project's `r` -- a file, a link, or every file
+    under a directory -- somewhere in `moved`, the shas the copy added or
+    changed? An empty file loses nothing."""
+    low = os.path.join(run["cwd"], r)
+    try:
+        st = os.lstat(low)
+    except OSError:
+        return True
+    if stat.S_ISLNK(st.st_mode):
+        return os.readlink(low) in moved
+    if stat.S_ISREG(st.st_mode):
+        return st.st_size == 0 or _sha(low) in moved
+    if not stat.S_ISDIR(st.st_mode):
+        return False
+    n = 0
+    for root, _dirs, files in os.walk(low):
+        for f in files:
+            n += 1
+            if n > LOST_WALK:
+                return False
+            if not _moved(run, os.path.relpath(os.path.join(root, f), run["cwd"]), moved):
+                return False
+    return True
 
 
 def state(run):

@@ -1,0 +1,13 @@
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root           1  0.0  0.0 168924 12992 ?        Ss   Oct19   0:04 /sbin/init
+root         412  0.0  0.1  48252 18440 ?        Ss   Oct19   0:01 /lib/systemd/systemd-journald
+systemd+     690  0.0  0.0  25532 13004 ?        Ss   Oct19   0:00 /lib/systemd/systemd-resolved
+root         801  0.0  0.0  15432  9152 ?        Ss   Oct19   0:00 sshd: /usr/sbin/sshd -D
+postgres    1120  0.3  1.6 324808 268204 ?       Ss   Oct19   4:12 /usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main
+postgres    1131  0.0  0.4 324940 70412 ?        Ss   Oct19   0:22 postgres: 16/main: checkpointer
+elastic+    1402 12.4 38.9 9846212 6381240 ?     Ssl  Oct19 182:51 /usr/share/elasticsearch/jdk/bin/java -Xms4g -Xmx4g -XX:+UseG1GC org.elasticsearch.bootstrap.Elasticsearch
+www-data    1730  0.1  0.6 214556 98112 ?        S    Oct19   1:03 nginx: worker process
+app         2210  4.2  7.3 2318904 1197340 ?     Sl   Oct19  61:40 /usr/bin/node /srv/shop/server.js
+app         2244  0.8  2.1 1102208 344120 ?      Sl   Oct19  12:07 /usr/bin/node /srv/shop/worker.js
+redis       2501  0.4  0.5 151216 84520 ?        Ssl  Oct19   6:30 /usr/bin/redis-server 127.0.0.1:6379
+w          30117  0.0  0.0  10072  3584 pts/0    R+   09:12   0:00 ps aux

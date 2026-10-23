@@ -34,6 +34,7 @@ import os
 import platform
 import shutil
 import socket
+import hashlib
 import stat
 import subprocess
 import sys
@@ -1172,11 +1173,56 @@ def test_step_linux_shape():
         check("STEP_ENV: %s=%s" % (k, v), setenv.get(k) == v, setenv)
     check("STEP_ENV: HOME is the (hidden) home, TMPDIR the step's /tmp",
           setenv.get("HOME") == HOME and setenv.get("TMPDIR") == "/tmp", setenv)
+    check("STEP_ENV: zsh's here-documents go to the step's /tmp too (TMPPREFIX)",
+          setenv.get("TMPPREFIX") == "/tmp/zsh", setenv)
     check("STEP_ENV: nothing exported crosses", "exported-value-never-inside" not in " ".join(argv)
           and "SPARK_TEST_EXPORTED" not in setenv)
     check("step: the shell runs last", argv[-3:] == ["sh", "-c", "echo hi"], argv[-3:])
     check("step: step_argv is gone (step(...)[0] is the argv)", not hasattr(sandbox, "step_argv"))
     sandbox.discard(run)
+
+
+def test_lost_keep():
+    """lost() names the paths the copy lost against the project -- a file
+    or link gone, a file emptied -- and leaves a rename (bytes moved) and
+    an add alone. changes() refuses those paths on a keep run. The real
+    overlay delete is covered by test_whiteout_and_opaque and by the real
+    section; here lost() is fed the state map it reads, no bwrap."""
+    root = project({"keep.txt": "keep\n", "old.txt": "old\n", "note.txt": "note\n",
+                    "moved.txt": "moved bytes here\n"})
+    os.symlink("keep.txt", os.path.join(root, "link"))   # a link the copy will delete
+    run = sandbox.new_run(root, "t", platform="linux", keep=True)
+    sha = lambda b: hashlib.sha256(b).hexdigest()
+    moved_sha = sha(b"moved bytes here\n")
+    # the shape state() answers: {path: (status, sha)} for what the copy holds
+    now = {
+        "old.txt": ("deleted", None),            # gone, its bytes nowhere
+        "link": ("deleted", None),               # the link gone
+        "note.txt": ("changed", sandbox.EMPTY_SHA),   # emptied
+        "moved.txt": ("deleted", None),          # gone, but its bytes are added as renamed.txt
+        "renamed.txt": ("added", moved_sha),
+        "added.txt": ("added", sha(b"new\n")),
+    }
+    check("lost(): the gone and the emptied, not the renamed or the added",
+          set(sandbox.lost(run, now)) == {"old.txt", "link", "note.txt"}, sandbox.lost(run, now))
+    check("lost(): with a `before`, only what moved since it",
+          set(sandbox.lost(run, now, before={"old.txt": ("deleted", None)})) == {"link", "note.txt"},
+          sandbox.lost(run, now, before={"old.txt": ("deleted", None)}))
+    sandbox.discard(run)
+    # a plain emptied file on a real upper dir: changes() refuses it on a
+    # keep run, and leaves it a change on a run that may delete
+    root2, run2, up = linux_run({"a.txt": "aaa\n", "b.txt": "bbb\n"}, {"a.txt": ""})
+    sandbox.mark(run2, "waiting")
+    run2 = sandbox.load(run2["id"])              # read back without keep
+    run2["keep"] = True
+    ent = by_path(sandbox.changes(run2))
+    check("changes(): an emptied file is refused on a keep run",
+          ent.get("a.txt", {}).get("status") == "refused" and ent["a.txt"]["reason"] == sandbox.KEPT, ent.get("a.txt"))
+    run2["keep"] = False
+    ent = by_path(sandbox.changes(run2))
+    check("changes(): the same emptied file is a plain change on a delete run",
+          ent.get("a.txt", {}).get("status") == "changed", ent.get("a.txt"))
+    clear_runs()
 
 
 def test_step_mac_shape():
@@ -1215,8 +1261,10 @@ def test_step_mac_shape():
     check("step: the step runs in the clone with the run's home", cwd == os.path.realpath(d + "/clone")
           == sandbox.step_cwd(run) and env["HOME"] == os.path.realpath(d + "/home")
           and env["TMPDIR"] == os.path.realpath(d + "/tmp"))
-    check("STEP_ENV: a clean environment", set(env) == {"PATH", "HOME", "LANG", "TMPDIR"} | {k for k, _ in sandbox.STEP_ENV},
-          sorted(env))
+    check("STEP_ENV: zsh's here-documents go to the run's temp folder (TMPPREFIX), not the /tmp it is denied",
+          env.get("TMPPREFIX") == os.path.join(os.path.realpath(d + "/tmp"), "zsh"), env.get("TMPPREFIX"))
+    check("STEP_ENV: a clean environment",
+          set(env) == {"PATH", "HOME", "LANG", "TMPDIR", "TMPPREFIX"} | {k for k, _ in sandbox.STEP_ENV}, sorted(env))
     check("step: the shell runs last", argv[-3:] == ["zsh", "-c", "echo hi"])
     shutil.rmtree(d)
 
@@ -1293,8 +1341,8 @@ def test_check_row():
 
 
 # ------------------------------------------------------------------ REAL
-def step(run, cmd, timeout=60):
-    argv, cwd, env = sandbox.step(run, "/bin/sh", cmd)
+def step(run, cmd, timeout=60, shell="/bin/sh"):
+    argv, cwd, env = sandbox.step(run, shell, cmd)
     p = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, preexec_fn=sandbox.preexec, start_new_session=True,
                        timeout=timeout)
@@ -1347,6 +1395,17 @@ def test_real():
           and mode_of(os.path.join(root, "run.sh")) & 0o100 and gone(run), (n, problems))
     check("real: the planted hook never reaches the project",
           not os.path.exists(os.path.join(root, ".git/hooks/pre-commit")), problems)
+
+    # zsh writes a here-document's body under TMPPREFIX: the step's
+    # environment points it where the sandbox lets a step write
+    zsh = shutil.which("zsh")
+    if zsh:
+        run = sandbox.new_run(root, "t")
+        rc, out = step(run, "cat > here.txt <<'EOF'\nfrom a here-document\nEOF\ncat here.txt", shell=zsh)
+        check("real: a here-document runs under zsh in the copy", rc == 0 and "from a here-document" in out, out)
+        sandbox.discard(run)
+    else:
+        skip("real: a here-document under zsh", "no zsh here")
 
     # a background writer the step left behind: the review is not what apply would copy
     if IS_MAC:
@@ -1557,7 +1616,7 @@ def main():
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,
               test_detach_lock, test_records, test_ids, test_home_and_root, test_waiting_cap,
-              test_step_linux_shape, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
+              test_step_linux_shape, test_lost_keep, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
     for t in ((test_real,) if args.real_only else tests):
         PHASE = "fixtures"
         try:

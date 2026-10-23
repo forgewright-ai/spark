@@ -510,6 +510,12 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 holds commands the grader accepted: the
                 line's judge may ask again about none of them (precision);
                 its selftest in smoke)
+                use_cases.py + use_cases/ (the tasks people bring to spark, end
+                to end, against a live model: cases.json, 85 tasks for seven
+                kinds of user, 21 held out and never tuned on; inputs/ the
+                texts, code and logs they read; replies/ the model's replies a
+                run --record kept, which replay serves from a stub engine in
+                the gate; its selftest in smoke)
                 forge_probe.py URL (the page's server's gates asked from the wire --
                 wire.probe_gates, the hardening row's probes -- one line per
                 gate, exit 1 when any does not hold; against a real server)
@@ -945,7 +951,10 @@ and may change freely.
    warm; a server that refuses the field is asked again without it. The
    reply is one JSON object (`persona.LINE_SCHEMA`), held by a grammar:
    `wire.gbnf(schema)` rides the request as `grammar`. Every request a
-   schema shapes sends it, and none sends `response_format`.
+   schema shapes sends it, and none sends `response_format`. Each one
+   streams, `wire.chat_json` and `wire.chat_grammar` too. So
+   `SPARK_TIMEOUT` is the wait for the next token, never for the whole
+   reply: a long here-document at 20 tokens a second still arrives.
    llama-server binds a `response_format` schema only after the
    template's thought channel closes. So a model could open a thought,
    spend the whole cap there and answer nothing. A grammar binds from
@@ -966,7 +975,12 @@ and may change freely.
    cap, says `cli.HINT_LOST` in line 2: `the reply was cut before its
    hint -- read the command before Enter`. A reply the cap cut before
    line 1 says so (`wire.CUT_OUT`), never the raw JSON. The wire's own
-   failures keep their reasons.
+   failures keep their reasons. An engine's refusal is one plain line,
+   never its JSON: a request the context cannot hold says its size and
+   the context's (`wire._engine_error`). `SPARK_RECORD=FILE` is a test
+   seam. Each reply read appends one JSON line there, 0600: `stream`,
+   `content` and `finish`, nothing of the request (`wire._record`).
+   `tests/use_cases.py` replays them.
    `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the
    turn's numbers, marked `bench`, and opens no thread. A `danger`
    line's hint may open with `<- <facts> -- `: `persona.blast`'s count
@@ -1018,7 +1032,10 @@ and may change freely.
    flag past the lowering. When one ran and the copy holds nothing new,
    a done is asked again once (`do.NOTHING_CHANGED_AGAIN`), then shown
    as `nothing changed: HINT`. A run that only read ends as it said. A
-   step is a line or a block: two or more lines, kept exactly as
+   done right after a step that exited non-zero is asked again once with
+   its exit code (`do.FAILED_AGAIN`). A second one is shown as `the last
+   step exited N: HINT`, and the run exits 1. A step is a line or
+   a block: two or more lines, kept exactly as
    written and never joined
    (`do.step_text`). A here-document that writes a file is the block
    the brief allows (`persona.MODE_DO`). `do.refused` reads a step
@@ -1105,8 +1122,9 @@ and may change freely.
    `[cwd]` line, so a replayed prefix is the one that was served. Every
    proposal is a turn record through `Session.record`: the server's
    timings, the stem that answered, and a kind. The kinds are `cmd`,
-   `danger`, `done`, `skipped`, `reasked`, `missing`, `stopped` and
-   `quit`, with `held` and `man` as numbers on a step. What a step
+   `danger`, `done`, `skipped`, `reasked`, `missing`, `refused`,
+   `stopped` and `quit`, with `held` and `man` as numbers on a step.
+   What a step
    printed passes `do.hold` before a program sees it or it rides a
    request: `text.SOURCE_SHAPES`, plus spark's own secrets held by their
    contents wherever they appear (`do.own_secrets`). Those are the
@@ -1164,7 +1182,10 @@ and may change freely.
    manager's service config (/opt/homebrew/etc, /usr/local/etc). The
    public files git, openssl, node and clang read stay readable. It
    denies every write but the clone, the run's own home and temp and the
-   null devices, and it denies the terminal. It denies the mach
+   null devices, and it denies the terminal. zsh writes a here-document
+   under `TMPPREFIX`, not `TMPDIR`, so the step's environment points
+   both into the run's temp folder (`sandbox._step_env`). It denies the
+   mach
    services, so a program the step builds cannot reach them either. They
    are Apple events, Launch Services, the clipboard, the keychain
    daemons, Shortcuts and the workflow runner, and login items and
@@ -1184,7 +1205,21 @@ and may change freely.
    `do.WATCH_SECONDS` (2 seconds) during a step: past
    `SANDBOX_MAX_BYTES` (1 GB) the step's group is killed (rc 124).
    Between steps the same cap stops the run (`cap`). A run is 8 steps. A
-   danger step runs, contained, and is named. A step's own group is
+   danger step runs, contained, and is named. Only the goal is an
+   instruction, and nobody reads a sandboxed step before it runs. So a
+   step that deletes files (`persona.deletes`, a named line each) runs
+   only when the goal asked for a deletion (`do.DELETE_WORDS`). Else it
+   is held: one line says so, the model hears why (`do.UNASKED_DELETE`),
+   and the turn's kind is `refused`. The same step again ends the run.
+   `persona.deletes` is the cheap pre-check; the guard is the copy
+   itself. After each step spark reads what the copy lost against the
+   project (`sandbox.lost`: a file or link gone, or a file emptied,
+   whose bytes are nowhere the copy added). On a keep run that stops the
+   run and the review refuses those paths (`sandbox.KEPT`), so no apply,
+   `--accept` or a program's accept ever drops them. A rename keeps the
+   bytes, so it is no loss. A run whose goal asked for a deletion keeps
+   none of this.
+   A step's own group is
    killed when it ends, so a background writer cannot outlive it. Its
    echo passes `sandbox.visible`: output nobody confirmed cannot redraw
    the screen the review is read on, and a refusal's paths pass it too.
@@ -1265,7 +1300,8 @@ and may change freely.
    that looks like a secret is one `answer` line naming the shape, and
    nothing is sent either. `text.SECRET_SHAPES` holds a private key
    block, an AWS, GitHub, Slack or `sk-` token, a `password=` or
-   `token:` line, and a 64+ run of base64. The widgets hook the
+   `token:` line, and a 64+ run of base64 that mixes letters and
+   digits. The widgets hook the
    bracketed paste: bash rebinds the paste-begin sequence, zsh wraps
    `bracketed-paste`. Two or more lines into an empty prompt get the
    answer in the hint row. The paste itself always lands in the buffer
@@ -1903,6 +1939,11 @@ and may change freely.
     when it is all of the text's units unchanged, or has about as many
     units as the text. So does a reply that spans the text's first unit
     to its last, or holds a unit from outside its own run (a merge).
+    So does a shorter whole. It opens with the text's opening unit and
+    ends with its closing one, and it draws on more than half of the
+    units between, two at least (`edit._draws_inner`). Fewer is a
+    fragment with the rest gone: the opening, the part asked about and
+    the closing are refused.
     Fewer of the text's own units, unchanged, is a deletion or a part
     left untouched, and the reply alone cannot tell which. The model
     hears so in one sentence (`persona.EDIT_PART_AGAIN`) and is asked
@@ -1931,7 +1972,10 @@ and may change freely.
     a rewrite ending the way the input ended.
     Every chunk passes `text.Printable` first (`edit._printable_feed`):
     no escape or control character reaches the terminal or the buffer.
-    A carriage return stays when the text on stdin has one.
+    A carriage return stays when the text on stdin has one. When every
+    line of the text ends `CRLF`, every line of a rewrite does too,
+    printed whole or streamed (`edit._crlf`), and no carriage return is
+    doubled.
     An empty text with words is written from nothing (a new file in the
     editor), the reply ending with a newline. Exit 0, 1 when `?` or
     `--at` find no text, a rewrite cannot be placed, or no model
@@ -1961,7 +2005,9 @@ and may change freely.
     ` [not in the text]` where it stands. A span right after `->`, a
     Unicode arrow or `=>` is the model's proposal. It is not checked,
     not counted, and followed by ` [proposed]`, so a reader can tell a
-    quote from a proposal. The turn records `quotes` and `unanchored`.
+    quote from a proposal. Under `--source` a source proposes nothing,
+    so such a span is checked and counted like any other quote. The
+    turn records `quotes` and `unanchored`.
     `--sel A B` is a `?` with stdin the whole file. It sends one window
     of at most 16 kB (`edit._edit_window`). The selection goes whole,
     with head, cut and tail past 12 kB, between the lines `[selection
@@ -1989,14 +2035,18 @@ and may change freely.
     two.
     A one-time code is its digits, whole or split once or twice by a
     space or a hyphen. It stands within 30 characters after or before
-    code, otp, pin, passcode or verification. A link token is every
-    token-like parameter of an http(s) URL. It is found as a pair, the
-    URL first and then its parameters, so no one regex backtracks over a
-    crafted megabyte. A named `s` group is the part held. Each becomes
-    `[held]`. The reading, the context, `--sel`'s offsets, the anchors
-    and the thread's `text_sha` all see the held text: what the model
-    saw. `--name`, `--about` and `--type` ride in the same message and
-    are held the same way. The ledger keeps the name as given. One
+    code, otp, pin, passcode, verification, or the Portuguese codigo
+    (with its accent) or senha. The word stands alone, never an option
+    like `--pin` or the start of "pinned", though a name like `SMS-Code`
+    counts. Digits right after a host's colon are its port, and digits
+    right after a slash a URL's path: neither is a code. A link token is
+    every token-like parameter of an http(s) URL. It is found as a pair,
+    the URL first and then its parameters, so no one regex backtracks
+    over a crafted megabyte. A named `s` group is the part held. Each
+    becomes `[held]`. The reading, the context, `--sel`'s offsets, the
+    anchors and the thread's `text_sha` all see the held text: what the
+    model saw. `--name`, `--about` and `--type` ride in the same message
+    and are held the same way. The ledger keeps the name as given. One
     stderr line says how many and which shapes. The turn records `held`,
     a number. A rewrite, `--at` and a `?` without `--source` send the
     author's own text as it is. `--` ends the options: every argument
@@ -2029,7 +2079,16 @@ and may change freely.
     line). A line whose quotes are not in the source is dropped
     (`text.UNGROUNDED`). So is a line that quotes nothing
     (`text.UNQUOTED`): an unquoted sentence about a source is the
-    model's own knowledge wearing the source's clothes. A line that is
+    model's own knowledge wearing the source's clothes. A quote counts
+    when it is two words or twelve characters, not all stop words
+    (`text.substantial`). One word counts too when the source says it
+    three times at most (`Ground.weighs`, `text.DISTINCT_MAX`). That is
+    a value with a digit, such as `96%` or `/dev/sda1`, or a word, such
+    as a login. A value the source lacks counts as well, so an invented
+    figure is caught. A figure of two digits or more that a line states
+    outside its quotes must be the source's own (`read.unsourced`). A
+    sum the model worked out is its claim, not the text's, and drops the
+    line. A line that is
     the source's own words copied whole, 5 words or more
     (`text.VERBATIM_WORDS`), quotes it with no marks
     (`Ground.verbatim`). It is found at word boundaries, from where a
@@ -2059,8 +2118,13 @@ and may change freely.
     `PART_OVERLAP` (400) characters of the one before. `--part N` reads
     that part. Without it spark picks (`read.ranked`): BM25 over the
     parts by the question's words, intake's tokenizer with a camelCase
-    word split, no model. The best part is read first, the next only
-    when it does not answer, `TRIES` (2) at most. Each is a whole
+    word split, no model. A word's forms meet (`read._key`: "logging"
+    and "log", "deleting" and "delete"). A reader's word and the text's
+    word for the same thing count as one term (`read.SAME`, a named line
+    each: computer and machine, folder and directory). The text's word
+    counts at `SAME_WEIGHT` (0.5) of the reader's own, and the term is
+    as rare as its whole line. The best part is read first, the next
+    only when it does not answer, `TRIES` (2) at most. Each is a whole
     request, about 10 s of prefill on a CPU box. A bare question, or
     words no part holds, reads part 1. At a terminal the turn says
     `reading ... part 5 of 6, part 4 does not answer`. Two parts read
@@ -2076,8 +2140,10 @@ and may change freely.
     clear`, and they never suppress: a question asked twice of a source
     is a fair question twice, unlike a note declined in a draft.
     `--ledger [clear] [--name NAME]` lists or drops them. Exit 2 for the
-    usage, a bad `--part`, or empty stdin (the usage plus where a
-    question for spark itself goes). The turn record is numbers: `kind`,
+    usage, a bad `--part`, or empty stdin. At a terminal with nothing
+    piped in, that is the usage plus where a question for spark itself
+    goes. An empty pipe is one line on stderr naming `2>&1`, and stdout
+    stays empty. The turn record is numbers: `kind`,
     the character count, `ms`, `part`, `parts`, `kept`, `dropped`,
     `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
     line. That is the number the prompt cache moves, and `spark stats`
@@ -2189,12 +2255,18 @@ and may change freely.
     matches names no line, whatever number it mentions (`watch.match`).
     Silence is the answer when nothing matches, and the healthy state. A
     window closes at `WINDOW_LINES` lines or `WINDOW_SECS` old,
-    whichever comes first, at most `WATCH_MAX` characters to the model,
-    whole lines with the newest kept.
-    No more than one call runs per `MIN_INTERVAL`, 10 seconds since
-    v1.45. A chatty journal is one look every 10 seconds, not a pinned
-    GPU, so the watch is cheap enough to leave running. Backlog accrued
-    during a call coalesces into the next window. The watcher never
+    whichever comes first, at most `WATCH_MAX` characters to the model.
+    Every line goes to the model once, the oldest first, so a backlog is
+    several windows. No more than one call runs per `MIN_INTERVAL`, 10
+    seconds since v1.45. A chatty journal is one look every 10 seconds,
+    not a pinned GPU, so the watch is cheap enough to leave running. A
+    live stream that outruns the model keeps `BACKLOG_LOOKS` windows
+    waiting at most. The oldest lines past that go unseen, and one
+    stderr line says how many. A file on stdin, or a pipe that ended
+    before the first look, is a finished input. Its windows go back to
+    back. One that needs more than `FILE_LOOKS_MAX` looks is refused
+    before the first, exit 2, naming grep, `spark read --part N` and
+    `tail -f`. The watcher never
     watches itself. spark's own units log into the journal, and
     spark-serve carries llama-server's every slot and task line. A
     `journalctl -f | spark watch` once fed the model's own inference
@@ -2202,9 +2274,12 @@ and may change freely.
     a journal line under spark's identifier and a bare llama-server log
     line are dropped before the window (`watch.own_line`, `OWN_LINE`). A
     window of only those is no call at all. A transient model gap (down,
-    loading, busy, timeout, cut) skips the window and the watch goes on
-    (`session.once`, the shared recovery `spark edit --watch` uses too).
-    stdin closing ends it (exit 0), `SIGINT` 130. No ledger: a live
+    loading, busy, timeout, cut) keeps the window's lines for the next
+    look (`session.once`, the shared recovery `spark edit --watch` uses
+    too). At the end of the input such a look is tried `RETRIES` times
+    more, and past that one stderr line names the lines never looked at,
+    exit 1. Otherwise stdin closing ends it (exit 0), `SIGINT` 130. No
+    ledger: a live
     stream has nothing stable to name. It is local in the strongest
     sense: the stream never leaves the machine, and the same model the
     prompt line uses answers. The turn record is numbers.
@@ -2237,7 +2312,10 @@ and may change freely.
     - `{"ev":"end","reason","hint","rc"}`, `reason` one of done, cap,
       quit, refused, stopped and error.
     `stopped` is spark stopping the run: a skipped step proposed again,
-    verbatim, after it was re-asked once. A sandboxed run's `end` is its
+    verbatim, after it was re-asked once, or a held delete proposed
+    again. A done after a failed step is `done` rc 1, its hint the exit
+    code's line (contract 4). A held delete is a note. A sandboxed run's
+    `end` is its
     review's, however the steps stopped, and a note says that: `done`
     (applied, discarded, nothing changed), `quit` (the run waits) or
     `error`. Only an `error` before the review skips it, the copy then
