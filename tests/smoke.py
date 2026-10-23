@@ -6898,6 +6898,12 @@ def tls_cases(t):
 
 
 def main():
+    # a Ctrl-C case sends SIGINT to a spark it started, as a terminal's
+    # Ctrl-C reaches its foreground job. A shell's background job (`&`)
+    # starts with SIGINT ignored, and a child keeps an ignored signal
+    # ignored: those cases would test the launcher, not spark (#93)
+    if signal.getsignal(signal.SIGINT) == signal.SIG_IGN:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
     srv, url = start_stub()
     t = T()
     config_parity_cases(t)

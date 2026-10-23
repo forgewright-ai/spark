@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.100.1
+
+- S3: tests/smoke.py's three Ctrl-C cases failed when the suite ran as
+  a shell's background job, which starts with SIGINT ignored; smoke
+  gives SIGINT back its default first, so a spark it starts sees a
+  Ctrl-C as a terminal's foreground job does (#93)
+
 ## v1.100
 
 A trial of spark's use cases on the box and the Mac, with real inputs
