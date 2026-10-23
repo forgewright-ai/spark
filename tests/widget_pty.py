@@ -145,6 +145,8 @@ case $line in
   *slow-think*) sleep 2; printf 'cmd\techo SLOW-CMD\nslow hint\n' ;;
   *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
   *proof-me*) printf 'cmd\ttrue\nruns true\nproof\ttest -d .\n' ;;
+  # a hint that spells an escape: the text must reach the screen as text
+  *escape-me*) printf 'cmd\techo ESCAPE-CMD\nthe hint says \\e[2J and \\a and \\x1b here\n' ;;
   *) if [ "${SPARK_EXPLAIN_RC:-}" = 127 ]; then
          printf 'cmd\tbrew install the-tool\ninstalls the missing tool\n'
      else printf 'cmd\techo EXECUTED-MARK\nA hint about it\n'; fi ;;
@@ -1679,6 +1681,16 @@ def main(shell, widget):
         sh.send("\r")
         ok(sh.expect("EXECUTED-MARK\r\n") or sh.expect("EXECUTED-MARK\n"), "second Enter runs the landed command", since())
         ok(asked() == 1, "second Enter did not ask again")
+        sh.expect(prompt)
+
+        # 1a. a hint that spells an escape reaches the screen as the text it
+        # is: never decoded by the shell on its way out (v1.99)
+        since = sh.mark()
+        sh.send("escape-me?\r")
+        ok(sh.expect("the hint says \\e[2J and \\a and \\x1b here"), "an escape spelled in a hint stays spelled", since()[-300:])
+        ok("\x1b[2J" not in since() and "\x07" not in since(), "no escape or bell was decoded from the hint", repr(since()[-300:]))
+        sh.send("\x15")
+        sh.settle()
         sh.expect(prompt)
 
         # 1b. `?? words` is a question too: the widget hands it on, both marks kept

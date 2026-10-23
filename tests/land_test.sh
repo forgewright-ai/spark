@@ -34,6 +34,11 @@ echo "land_test: $T"
 cat > "$T/bin/gh" <<'EOF'
 #!/bin/sh
 case "$1 ${2:-}" in
+    api\ *branch=main*)
+                printf '%s\n' "$2" >> "$STUB/asked"
+                [ "$(cat "$STUB/count")" != down ] || exit 1
+                [ -s "$STUB/landed" ] || { printf '{"workflow_runs": []}\n'; exit 0; }
+                printf '{"workflow_runs": [{"head_branch": "main", "created_at": "%s"}, {"head_branch": "try/x", "created_at": "2000-01-01T00:00:00Z"}]}\n' "$(cat "$STUB/landed")" ;;
     api\ *)     printf '%s\n' "$2" >> "$STUB/asked"
                 [ "$(cat "$STUB/count")" != down ] || exit 1
                 cat "$STUB/count" ;;
@@ -112,6 +117,23 @@ rc=0; out=$(SPARK_GH="$T/bin/absent" SPARK_CURL="$T/bin/curl" sh "$W/tests/land.
 echo 1 > "$T/count"
 rc=0; out=$(land --passed "$c1" "$T/origin.git") || rc=$?
 [ "$rc" -eq 3 ] && ok "--passed: a remote that is not on github.com is exit 3" || bad "--passed not github: rc $rc: $out"
+
+# --- --landed-at: when the commit reached main, by GitHub's clock ----------
+: > "$T/landed"
+rc=0; out=$(land --landed-at "$c1" example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "no ci.yml run of .* on main -- not landed" \
+    && ok "--landed-at: no run on main is exit 1, not landed" || bad "--landed-at none: rc $rc: $out"
+grep -q "head_sha=$c1&branch=main" "$T/asked" && ok "--landed-at asks ci.yml's runs of that sha on main" || bad "--landed-at asked: $(cat "$T/asked")"
+echo 2001-02-03T04:05:06Z > "$T/landed"
+rc=0; out=$(land --landed-at "$c1" example/scratch) || rc=$?
+[ "$rc" -eq 0 ] && [ "$out" = 981173106 ] && ok "--landed-at prints the first main run's epoch, a try branch's run not counted" || bad "--landed-at epoch: rc $rc: $out"
+echo down > "$T/count"
+rc=0; out=$(land --landed-at "$c1" example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 2 ] && printf '%s\n' "$out" | grep -q "could not ask GitHub when" && ok "--landed-at: gh down is exit 2, could not ask" || bad "--landed-at down: rc $rc: $out"
+echo 0 > "$T/count"
+rc=0; out=$(land --landed-at zzz example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 2 ] && ok "--landed-at: a bad sha is exit 2" || bad "--landed-at bad sha: rc $rc: $out"
+
 
 # --- the guard ---------------------------------------------------------------
 echo 0 > "$T/count"; : > "$T/asked"

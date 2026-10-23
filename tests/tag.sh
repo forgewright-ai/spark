@@ -19,11 +19,19 @@
 # well. --now skips both. A two-part heading is a major, which a person
 # tags: nothing is done.
 #
-# Its own gates, whatever CI said: no protected path differs from the
-# tag it patches (tests/patch_test.py --protected is the one list);
+# Its own gates, whatever CI said: the tag it patches is itself a
+# release, signed by a key the installed spark trusts (its allowed-signers
+# at $HOME/.spark, or SPARK_TAG_SIGNERS; this clone's own file only when
+# no spark is installed) and named as its object says -- a tag anyone with
+# a write token could push is no base for a patch; no protected path
+# differs from the tag it patches (tests/patch_test.py --protected is the
+# one list);
 # every bullet's issue exists on GitHub, is labelled `approved` and
 # carries the bullet's severity (the public API through curl, no
-# token); ci.yml passed for the exact commit (tests/land.sh --passed).
+# token); ci.yml passed for the exact commit (tests/land.sh --passed);
+# the cooling hours are counted from when the commit reached main by
+# GitHub's clock (tests/land.sh --landed-at), never from a date the
+# committer wrote.
 # Then the tag is signed by the key this clone's git config names
 # (gpg.format ssh, user.signingkey) and pushed as refs/tags/vX.Y.Z; a
 # refused push undoes it. Exit 0 tagged or nothing to do, 1 refused, 2
@@ -93,6 +101,15 @@ case $patch in ''|*[!0-9]*) no "$top is not a vX.Y.Z heading"; exit 1 ;; esac
 if [ "$patch" -eq 1 ]; then base=v$mm; else base=v$mm.$((patch - 1)); fi
 git rev-parse -q --verify "refs/tags/$base" >/dev/null 2>&1 \
     || { no "$tag patches $base, and no such tag exists -- nothing tagged"; exit 1; }
+# ... and that tag is a release: signed by a key the installed spark
+# trusts, named as its object says. The fence below compares against it,
+# so a tag that is not a release would make any commit a patch
+signers=${SPARK_TAG_SIGNERS:-$HOME/.spark/allowed-signers}
+[ -f "$signers" ] || signers=$PWD/allowed-signers
+git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$signers" verify-tag "$base" >/dev/null 2>&1 \
+    || { no "$base is not signed by a key the installed allowed-signers trust -- not a release, nothing tagged"; exit 1; }
+named=$(git cat-file tag "$base" 2>/dev/null | sed -n '/^$/q; s/^tag //p')
+[ "$named" = "$base" ] || { no "the tag object $base points to is named '$named' -- nothing tagged"; exit 1; }
 
 # the section's bullets, each joined into one line: `- S<n>: ... (#N)`
 bullets=$(git show "$sha:docs/CHANGELOG.md" | awk -v h="$top" '
@@ -130,7 +147,7 @@ for b in $bullets; do
     sev=${b#- }; sev=${sev%%:*}
     n=${b##*(#}; n=${n%)}
     case $n in ''|*[!0-9]*) no "the bullet for $sev names no issue: $head"; exit 1 ;; esac
-    json=$("$CURL" -fsS -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$repo/issues/$n" 2>/dev/null) \
+    json=$("$CURL" -fsS -m 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$repo/issues/$n" 2>/dev/null) \
         || { no "could not read issue #$n from GitHub -- nothing tagged"; exit 1; }
     labels=$(printf '%s' "$json" | python3 -c 'import json, sys
 print(" ".join(l.get("name", "") for l in json.load(sys.stdin).get("labels", [])))' 2>/dev/null) \
@@ -153,9 +170,13 @@ elif [ -n "$why" ]; then :
 elif [ "$today" = "$weekday" ]; then why="the weekly day"
 else say "$tag waits for weekday $weekday, today is $today: ${sevs}-- S3 and S4 ship weekly, --now ships today"; exit 0
 fi
-# the cooling hours: a fix rests on main before its tag
+# the cooling hours: a fix rests on main before its tag, counted from when
+# it reached main by GitHub's clock (its first ci.yml run there) -- a
+# commit header is the committer's to write
 if [ "$now" -eq 0 ]; then
-    age=$(( $(date +%s) - $(git log -1 --format=%ct "$sha") ))
+    landed=$(sh "$here/land.sh" --landed-at "$sha" 2>/dev/null) \
+        || { no "could not ask GitHub when $short reached main -- nothing tagged"; exit 1; }
+    age=$(( $(date +%s) - landed ))
     if [ "$age" -lt $((cool * 3600)) ]; then
         say "$tag waits: main at $short is $((age / 60)) min old, a fix rests $cool hours before its tag (--now skips the wait)"
         exit 0

@@ -30,7 +30,9 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROTECTED = (".github/", ".githooks/", "allowed-signers", "get", "tests/land.sh", "tests/tag.sh",
-             "tests/gate.sh", "tests/patch_test.py", "models.env", "distro/",
+             "tests/gate.sh", "tests/patch_test.py", "models.env", "engine.env", "voice.env", "distro/",
+             "bootstrap.sh", "lib/spark/update.py", "lib/spark/version.py", "lib/spark/facts.py",
+             "lib/spark/forge/fonts/",
              "home/.config/spark/completion.bash", "home/.config/spark/completion.zsh")
 FREE = ("tests/", "docs/CHANGELOG.md")       # not counted against the size cap
 PATCH_MAX_LINES = 400
@@ -241,9 +243,10 @@ def selftest():
                 f.write("# Changelog\n\n%s\n\n%s\n\n" % (heading, bullet) + base_log.split("\n", 2)[2])
 
         ok(judge(clone) is None, "a two-part top heading is a major: na")
-        write_log("## v9.9.1", "- S3: the version line read a patch tag as\n  nothing; it reads it now (#7)")
-        ver = os.path.join(clone, "lib", "spark", "version.py")
-        with open(ver, "a", encoding="utf-8") as f:
+        write_log("## v9.9.1", "- S3: the status line read a patch tag as\n  nothing; it reads it now (#7)")
+        # a harmless change: cli.py, not a protected path (version.py is one since v1.99)
+        fix = os.path.join(clone, "lib", "spark", "cli.py")
+        with open(fix, "a", encoding="utf-8") as f:
             f.write("\n# the fix\n")
         g("add", "-A")
         g("commit", "-q", "-m", "v9.9.1")
@@ -264,10 +267,10 @@ def selftest():
         found = judge(clone)
         ok(any("`spark help` differs" in x for x in found), "a help row changed is a finding: %s" % found)
         g("checkout", "--", "bin")
-        write_log("## v9.9.1", "- the version line read a patch tag as nothing (#7)")
+        write_log("## v9.9.1", "- the status line read a patch tag as nothing (#7)")
         found = judge(clone)
         ok(any("not '- S<n>: ... (#N)'" in x for x in found), "a bullet without a severity is a finding: %s" % found)
-        write_log("## v9.9.1", "- S3: the version line read a patch tag as\n  nothing; it reads it now (#7)")
+        write_log("## v9.9.1", "- S3: the status line read a patch tag as\n  nothing; it reads it now (#7)")
         big = os.path.join(clone, "lib", "spark", "_big.py")
         with open(big, "w", encoding="utf-8") as f:
             f.write("".join("# line %d\n" % i for i in range(PATCH_MAX_LINES + 1)))

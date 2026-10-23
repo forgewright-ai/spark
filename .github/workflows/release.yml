@@ -1,7 +1,9 @@
 # spark release -- a v* tag on a green commit becomes a GitHub Release whose
 # notes are that version's CHANGELOG section. The tag must be on main,
 # named as its object says, and signed by a key in the PREVIOUS release's
-# allowed-signers (what spark update and get verify before they move),
+# allowed-signers (what spark update and get verify before they move) --
+# and that release by the one before it, back to the first that carried
+# the file: a tag a write token pushed unsigned is no link in the chain --
 # and must agree with the code: the `## vX.Y` heading,
 # and `spark ver` (which derives the version from the tag itself, via git
 # describe -- lib/spark/version.py) saying the same thing. The release
@@ -65,7 +67,19 @@ jobs:
           name=$(git cat-file tag "$GITHUB_REF_NAME" | sed -n '/^$/q; s/^tag //p')
           [ "$name" = "$GITHUB_REF_NAME" ] \
             || { echo "release: the tag object $GITHUB_REF_NAME points to is named '$name'"; exit 1; }
-          echo "release: $GITHUB_REF_NAME signed by a key in $from"
+          # the chain behind it: every release back verifies against the
+          # file of the release before it, to the first that carried one.
+          # A tag pushed unsigned, or signed by a key only its own tree
+          # trusts, breaks the chain, and nothing is released on it
+          t=${prev:-}
+          while [ -n "$t" ] && p=$(git describe --abbrev=0 --match 'v[0-9]*' "$t^{commit}^" 2>/dev/null) \
+                && git cat-file -e "$p:allowed-signers" 2>/dev/null; do
+            git show "$p:allowed-signers" > "$keys"
+            git -c gpg.ssh.allowedSignersFile="$keys" verify-tag "$t" >/dev/null 2>&1 \
+              || { echo "release: $t, a release behind $GITHUB_REF_NAME, is not signed by a key in $p's allowed-signers -- the chain is broken (CLAUDE.md, Releasing)"; exit 1; }
+            t=$p
+          done
+          echo "release: $GITHUB_REF_NAME signed by a key in $from; the chain behind it verified back to ${t:-$GITHUB_REF_NAME}"
       - name: the tag agrees with the CHANGELOG
         run: |
           v=${GITHUB_REF_NAME#v}

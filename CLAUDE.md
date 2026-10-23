@@ -2765,6 +2765,7 @@ sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsi
 sh tests/gate.sh fast           # what a commit runs: privacy, syntax, shellcheck, the docs
 sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI runs it per commit
 sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
+sh tests/land.sh --landed-at SHA   # when it reached main, by GitHub's clock: the rest a patch counts
 ```
 
 ### Host-dependent test fixtures
@@ -2808,7 +2809,10 @@ The git tag is the release: one control, not two. There is no `VERSION`
 constant. `spark ver` derives it from git (`lib/spark/version.py`,
 cached): `1.0` exactly at a tag, `1.0+3` 3 commits past it. A major
 is an architecture break only: a feature inside the standing shape is
-a minor, however large. A release tag is signed. `spark update`
+a minor, however large. The minor counts on past 99: after `v1.99`
+comes `v1.100`, not `v2.0`. Every version reader parses numbers and
+orders by version, so a third digit is one more number. A release tag
+is signed. `spark update`
 verifies its ssh signature against the installed tree's
 `allowed-signers`. `get` verifies against its own copy of that file
 (`SIGNERS`, docs_test holds the two equal), and `release.yml` against
@@ -2828,17 +2832,27 @@ machine signs it. `tests/tag.sh` is that machine's rule. It tags
 `origin/main` when the CHANGELOG's top heading has three parts. With
 an S1 or S2 bullet in the section, the turn comes once the fix has
 rested 6 hours on `main`. With S3 and S4 alone, it comes on Sunday. The
-rest gives a person time to see the issue and the commit. `--now` is a
+rest gives a person time to see the issue and the commit. It is
+counted from when the commit reached `main` by GitHub's clock, the
+created time of its first `ci.yml` run there (`tests/land.sh
+--landed-at`). A date the committer wrote never counts. `--now` is a
 person's word and skips the wait. The tagger keeps its own gates,
-whatever CI said. No protected path may differ from the tag it patches.
+whatever CI said. The tag it patches must itself be a release. It is
+signed by a key the installed spark's `allowed-signers` trusts
+(`~/.spark`, or `SPARK_TAG_SIGNERS`), and named as its object says. A
+tag anyone with a write token could push is no base for a patch. No
+protected path may differ from the tag it patches.
 Each bullet's issue must exist on GitHub, be `approved` and carry the
 bullet's severity. And `ci.yml` must have passed for the exact commit.
 A patch section opens
 only when the top heading is the newest tag. So `main` stays one line
 and every tag sits on it. `tests/patch_test.py` is the fence, in the
 fast gate and in CI. Under a three-part heading, no protected path
-changes: the workflows, the hooks, the keys, `get`, the landing and
-tagging scripts, the model and distro tables, the completion files.
+changes. Those are the workflows, the hooks, the keys, `get` and
+`bootstrap.sh`, the landing and tagging scripts, the updater and the
+version reader. The engine, voice, model and distro tables, the web
+fonts and the completion files are protected too. A pin or an updater
+change is a major a person tags.
 `spark help` and the check row count stay as they were. The diff
 outside `tests/` and the CHANGELOG is at most 400 lines, and every
 bullet is `- S<n>: ... (#N)`. The second line of `allowed-signers` is

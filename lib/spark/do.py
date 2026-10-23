@@ -591,8 +591,12 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
             chunk = os.read(fd, 65536)
             text = decode(chunk, final=not chunk)
             if echo and text:
-                sys.stdout.write(show(text))
-                sys.stdout.flush()
+                try:
+                    sys.stdout.write(show(text))
+                    sys.stdout.flush()
+                except BrokenPipeError:
+                    echo = False
+                    _stdout_gone()
             tail = (tail + text)[-OUTPUT_TAIL:]
             if not chunk:
                 break
@@ -612,6 +616,24 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
 
 
 TOOL_IN_SANDBOX = "a tool acts outside the sandbox's copy -- not run; run it without --sandbox"
+_STDOUT_GONE = [False]        # the reader of stdout closed mid-run
+
+
+def _stdout_gone():
+    """The reader of stdout closed mid-run (`spark do ... | head`, a driver
+    that stopped reading). From here nothing more is said on stdout, the
+    step that ran is still recorded and landed on the thread, and the run
+    ends as a pipe death would: cmd_do raises the error again at its end,
+    for bin/spark to end on. Before v1.99 the echo's own error unwound the
+    loop before the record, so a step that ran was nowhere on the thread."""
+    if not _STDOUT_GONE[0]:
+        _STDOUT_GONE[0] = True
+        try:
+            sys.stdout = open(os.devnull, "w")
+        except OSError:
+            pass
+
+
 
 
 def tool_step(command, box=None, sure=False, echo=True):
@@ -628,8 +650,11 @@ def tool_step(command, box=None, sure=False, echo=True):
     server, tool, words = mcp.call_words(command)
     rc, out = mcp.call_line(server, tool, words=words, sure=sure, tty=False)
     if echo and out:
-        sys.stdout.write(out.rstrip("\n") + "\n")
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(out.rstrip("\n") + "\n")
+            sys.stdout.flush()
+        except BrokenPipeError:
+            _stdout_gone()
     return rc, out[-OUTPUT_TAIL:]
 
 
@@ -1359,10 +1384,13 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 rc, tail = run(command, shell, cwd, echo=face.echo, timeout=timeout, box=box)
             steps += 1
             tail, held, names = hold(tail, command)
-            face.ran(rc, tail)
             man = man_excerpt(command, rc, tail)
-            if man:
-                face.man(man)
+            try:
+                face.ran(rc, tail)
+                if man:
+                    face.man(man)
+            except BrokenPipeError:
+                _stdout_gone()          # the record below still lands
             proof, prc, pchoice = (reply.get("proof") if rc == 0 else ""), None, ""
             if proof:
                 # contract 4's proof line: one read-only check that the
@@ -1603,6 +1631,10 @@ def _run_box(face, cfg, goal, text, shell, cwd, mcwd, box, timeout, driver):
     face.begin(driver, box, cwd, thread)
     try:
         rc, reason, hint = _drive(face, cfg, thread, goal, text, shell, mcwd, box, timeout)
+        if _STDOUT_GONE[0]:
+            if box is not None:
+                _leave(face, box)           # the run waits for spark do --review: nobody is reading
+            raise BrokenPipeError(32, "Broken pipe")      # bin/spark ends on it, the records already landed
     except (KeyboardInterrupt, SystemExit):
         if box is not None:
             _leave(face, box)

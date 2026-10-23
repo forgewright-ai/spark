@@ -1042,6 +1042,7 @@ def test_bounded_context():
 # entry here that matches nothing, fails the suite.
 BARE_WRITERS = (
     "chaos.py: * -- the drills write scratch homes of their own",
+    "do.py: _stdout_gone -- /dev/null, a device: where stdout goes once its reader is gone",
     "check.py: make_fixture -- fixtures in a scratch home",
     "check.py: _stub -- a stub program for the fixtures",
     "check.py: knowledge_fixture -- a fixture",

@@ -111,7 +111,10 @@ def _children(b, i, end):
 def _time(b, tag, s, e):
     t = b[s:e].decode("ascii", "replace")
     if tag == 0x17:                       # UTCTime YYMMDDHHMMSSZ
-        yy = int(t[:2])
+        try:
+            yy = int(t[:2])
+        except ValueError:
+            raise TlsError("the certificate's validity does not read")
         t = ("20%02d" if yy < 50 else "19%02d") % yy + t[2:]
     elif tag != 0x18:                     # GeneralizedTime YYYYMMDDHHMMSS[.f]Z
         raise TlsError("the certificate's validity does not read")

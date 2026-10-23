@@ -374,14 +374,14 @@ _spark_face() {
 # the resting face, alone in spark's row: the same frame _spark_say draws
 _spark_idle_draw() {
     _spark_paint "$1" ${#1}
-    print -n -- $'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
+    print -rn -- $'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
     _spark_faced=1
 }
 # and gone again: only a row the resting face stands in is cleared
 _spark_unface() {
     [[ -n $_spark_faced ]] || return 0
     _spark_faced=''
-    print -n -- $'\e7\e['"$_spark_height"$'A\r\e[2K\e8'
+    print -rn -- $'\e7\e['"$_spark_height"$'A\r\e[2K\e8'
 }
 
 # --- the hint row: the blank line above the prompt --------------------------
@@ -400,7 +400,7 @@ _spark_say() {
     (( ${#t} > COLUMNS - 2 )) && t=${t[1,COLUMNS-3]}$_spark_d
     _spark_paint "$t" $_spark_fn
     _spark_faced=''
-    print -n -- $'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
+    print -rn -- $'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
 }
 
 # The line streams (contract 4): line 1 -- the command, its danger known --
@@ -711,7 +711,7 @@ _spark_failed() {
     if [[ -n $_spark_faced ]]; then       # no Enter ended the last prompt: its face still stands
         _spark_faced=''
         (( _spark_bl == 1 && _spark_height + 1 < ${LINES:-0} )) \
-            && print -n -- $'\e7\e['"$(( _spark_height + 1 ))"$'A\r\e[2K\e8'
+            && print -rn -- $'\e7\e['"$(( _spark_height + 1 ))"$'A\r\e[2K\e8'
     fi
     _spark_fresh=1                        # a prompt is coming: the resting face may go above it
     [[ -n $_spark_al_due || $SPARK_DIR/alert -nt $SPARK_DIR/widgets/$$ ]] && _spark_al_due=1

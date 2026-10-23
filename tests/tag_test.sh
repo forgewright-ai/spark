@@ -27,11 +27,15 @@ ok() { printf '  ok   %s\n' "$1"; }
 bad() { printf '  FAIL %s\n' "$1"; fail=1; }
 echo "tag_test: $T"
 
-# the stub gh: `api` prints the count in $T/count, or fails on "down"
+# the stub gh: `api` prints the count in $T/count, or fails on "down"; the
+# runs-on-main query (--landed-at) answers one run created at $T/landed,
+# or fails when that file says down
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/sh
-case "$1" in
-    api) [ "$(cat "$STUB/count")" != down ] || exit 1; cat "$STUB/count" ;;
+case "$1 ${2:-}" in
+    api\ *branch=main*) [ "$(cat "$STUB/landed")" != down ] || exit 1
+                        printf '{"workflow_runs": [{"head_branch": "main", "created_at": "%s"}]}\n' "$(cat "$STUB/landed")" ;;
+    api\ *) [ "$(cat "$STUB/count")" != down ] || exit 1; cat "$STUB/count" ;;
     *)   exit 2 ;;
 esac
 STUB
@@ -55,11 +59,14 @@ issue() {
 }
 export STUB="$T" SPARK_GH="$T/bin/gh" SPARK_CURL="$T/bin/curl" SPARK_TAG_COOL=0
 echo 1 > "$T/count"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$T/landed"      # the commit reached main just now
 HUB=https://github.com/example/scratch
 
-# the scratch key and the signers file it is trusted by
+# the scratch key and the signers file it is trusted by: the installed
+# spark's, as tag.sh reads it (SPARK_TAG_SIGNERS)
 ssh-keygen -q -t ed25519 -N '' -C t -f "$T/key"
 printf 'spark-release namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$T/key.pub")" > "$T/signers"
+export SPARK_TAG_SIGNERS="$T/signers"
 
 # the clone: tag.sh and land.sh from the tree under test, an origin whose
 # URL is on github.com and whose bytes are a bare repository here
@@ -89,11 +96,18 @@ log v9.9
 rc=0; out=$(tagsh) || rc=$?
 [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'a major (## v9.9): a person tags it$' && [ "$(at refs/tags/v9.9)" = none ] \
     && ok "a two-part heading is a major: said, nothing tagged" || bad "major: rc $rc: $out"
+# the release it will patch: first as a tag anyone with a write token could
+# push, unsigned -- no base for a patch; then signed by the key
 git -C "$W" tag -a -m v9.9 v9.9 && git -C "$W" push -q origin v9.9
 
-# --- S3 alone: the issue, the fence, then the weekly day ------------------
+# --- S3 alone: the base, the issue, the fence, then the weekly day ---------
 log v9.9.1 '- S3: a wording fixed (#7)'
 m=$(git -C "$W" rev-parse HEAD)
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: v9.9 is not signed by a key the installed allowed-signers trust -- not a release, nothing tagged" ] \
+    && [ "$(at refs/tags/v9.9.1)" = none ] && ok "an unsigned tag as the base: refused, nothing tagged (v1.99)" || bad "unsigned base: rc $rc: $out"
+git -C "$W" tag -d v9.9 >/dev/null && git -C "$W" push -q origin :refs/tags/v9.9
+git -C "$W" tag -s -m v9.9 v9.9 && git -C "$W" push -q origin v9.9
 rc=0; out=$(tagsh --now) || rc=$?
 [ "$rc" -eq 1 ] && [ "$out" = "! tag: could not read issue #7 from GitHub -- nothing tagged" ] && [ "$(at refs/tags/v9.9.1)" = none ] \
     && ok "an issue GitHub does not answer for: refused, nothing tagged" || bad "issue missing: rc $rc: $out"
@@ -123,6 +137,20 @@ rc=0; out=$(SPARK_TAG_COOL=6 tagsh --weekday "$today") || rc=$?
     && [ "$(at refs/tags/v9.9.1)" = none ] && ok "a fresh fix rests the cooling hours" || bad "cool: rc $rc: $out"
 rc=0; out=$(SPARK_TAG_COOL=6 tagsh --dry-run --now) || rc=$?
 [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^tag: would tag v9.9.1" && ok "--now skips the cooling hours" || bad "cool --now: rc $rc: $out"
+# the rest is counted from GitHub's clock, not the commit's: a commit dated
+# seven hours back by its committer still waits, and a landing time GitHub
+# cannot give refuses
+old=$(git -C "$W" rev-parse HEAD)
+GIT_COMMITTER_DATE="$(( $(date +%s) - 7 * 3600 )) +0000" git -C "$W" commit -q --amend --no-edit && git -C "$W" push -q -f origin main
+m=$(git -C "$W" rev-parse HEAD)
+rc=0; out=$(SPARK_TAG_COOL=6 tagsh --weekday "$today") || rc=$?
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^tag: v9.9.1 waits: main at .* is 0 min old" \
+    && [ "$(at refs/tags/v9.9.1)" = none ] && ok "a back-dated commit still rests: the clock is the landing's, not the committer's (v1.99)" || bad "back-dated: rc $rc: $out"
+echo down > "$T/landed"
+rc=0; out=$(SPARK_TAG_COOL=6 tagsh --weekday "$today") || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: could not ask GitHub when $(printf '%s' "$m" | cut -c1-7) reached main -- nothing tagged" ] \
+    && ok "a landing time GitHub cannot give: refused, nothing tagged" || bad "landed down: rc $rc: $out"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$T/landed"
 echo 0 > "$T/count"
 rc=0; out=$(tagsh --now) || rc=$?
 [ "$rc" -eq 1 ] && [ "$out" = "! tag: ci.yml has not passed for main at $(printf '%s' "$m" | cut -c1-7) -- nothing tagged" ] \

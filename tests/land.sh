@@ -10,7 +10,14 @@
 #                                 the one check "ci.yml passed for this
 #                                 commit": the pre-push hook, this script
 #                                 and release.yml all ask it here
+#   sh tests/land.sh --landed-at SHA [OWNER/REPO | URL]
+#                                 when that commit reached main, as the epoch
+#                                 of its first ci.yml run on main: GitHub's
+#                                 clock, which no commit header can set
+#                                 (tests/tag.sh counts the rest from it)
 #
+# --landed-at prints the epoch and exits 0, 1 when no run on main exists
+# for that commit, 2 could not ask, 3 the remote is not on github.com.
 # --passed exits 0 passed, 1 not passed, 2 could not ask (no gh and no
 # curl, no network, a bad sha), 3 the remote is not on github.com. Without
 # gh, --passed asks the public API through curl: a public repository
@@ -21,7 +28,7 @@
 set -eu
 GH=${SPARK_GH:-gh}
 CURL=${SPARK_CURL:-curl}
-usage() { echo "usage: sh tests/land.sh [--dry-run] | --passed SHA [OWNER/REPO | URL]" >&2; exit 2; }
+usage() { echo "usage: sh tests/land.sh [--dry-run] | --passed SHA [OWNER/REPO | URL] | --landed-at SHA [OWNER/REPO | URL]" >&2; exit 2; }
 say() { printf 'land: %s\n' "$*"; }
 no() { printf '! land: %s\n' "$*"; }
 
@@ -52,7 +59,7 @@ passed() {
     if command -v "$GH" >/dev/null 2>&1; then
         n=$("$GH" api "$q" --jq '[.workflow_runs[] | select(.event != "pull_request")] | length' 2>/dev/null) || return 2
     elif command -v "$CURL" >/dev/null 2>&1; then
-        n=$("$CURL" -fsS -H 'Accept: application/vnd.github+json' "https://api.github.com/$q" 2>/dev/null \
+        n=$("$CURL" -fsS -m 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/$q" 2>/dev/null \
             | python3 -c 'import json, sys
 print(len([r for r in json.load(sys.stdin).get("workflow_runs", []) if r.get("event") != "pull_request"]))' 2>/dev/null) || return 2
     else
@@ -61,6 +68,46 @@ print(len([r for r in json.load(sys.stdin).get("workflow_runs", []) if r.get("ev
     case $n in ''|*[!0-9]*) return 2 ;; 0) return 1 ;; esac
     return 0
 }
+
+# landed_at SHA REPO: the epoch of the first ci.yml run of that commit on
+# main. Every push to main runs ci.yml, so that run's created_at is when
+# the commit reached main by GitHub's clock. Prints it; 1 when no run on
+# main exists (not landed, or not yet), 2 could not ask.
+landed_at() {
+    case $1 in *[!0-9a-f]*|'') return 2 ;; esac
+    [ "${#1}" -eq 40 ] || return 2
+    q="repos/$2/actions/workflows/ci.yml/runs?head_sha=$1&branch=main"
+    if command -v "$GH" >/dev/null 2>&1; then
+        json=$("$GH" api "$q" 2>/dev/null) || return 2
+    elif command -v "$CURL" >/dev/null 2>&1; then
+        json=$("$CURL" -fsS -m 30 -H 'Accept: application/vnd.github+json' "https://api.github.com/$q" 2>/dev/null) || return 2
+    else
+        return 2
+    fi
+    printf '%s' "$json" | python3 -c 'import calendar, json, sys, time
+try:
+    runs = [r for r in json.load(sys.stdin).get("workflow_runs", []) if r.get("head_branch") == "main" and r.get("created_at")]
+except (ValueError, AttributeError):
+    sys.exit(2)
+if not runs:
+    sys.exit(1)
+print(calendar.timegm(time.strptime(min(r["created_at"] for r in runs), "%Y-%m-%dT%H:%M:%SZ")))'
+}
+
+if [ "${1:-}" = --landed-at ]; then
+    [ $# -ge 2 ] && [ $# -le 3 ] || usage
+    sha=$2
+    where=${3:-${GITHUB_REPOSITORY:-$(git config --get remote.origin.url || true)}}
+    repo=$(repo_of "$where") || { no "not a github.com repository: nothing to ask"; exit 3; }
+    rc=0; landed_at "$sha" "$repo" || rc=$?
+    short=$(printf '%s' "$sha" | cut -c1-7)
+    case $rc in
+        0) ;;
+        1) no "no ci.yml run of $short on main -- not landed" >&2 ;;
+        *) no "could not ask GitHub when $short reached main -- gh auth status, or the network" >&2 ;;
+    esac
+    exit "$rc"
+fi
 
 if [ "${1:-}" = --passed ]; then
     [ $# -ge 2 ] && [ $# -le 3 ] || usage

@@ -859,9 +859,9 @@ def page_units(ok):
     import re as _re
     from spark import REPO, config, forgeserve, qr, run, version
     rv = forgeserve.RUN_VERBS
-    ok(rv["update"] is None and rv["serve"](["https", "own"]) and not rv["serve"](["https", "off"])
-       and not rv["serve"](["https"]) and rv["serve"]([]) and rv["serve"](["--login", "--new"]),
-       "RUN_VERBS: update, and serve https own, are the page's; https off and bare https stay the terminal's")
+    ok(rv["update"]([]) and rv["update"](["--dry-run"]) and not rv["update"](["--converge"]) and rv["serve"](["https", "own"])
+       and not rv["serve"](["https", "off"]) and not rv["serve"](["https"]) and rv["serve"]([]) and rv["serve"](["--login", "--new"]),
+       "RUN_VERBS: update (bare or --dry-run), and serve https own, are the page's; --converge, https off and bare https stay the terminal's")
     rs = forgeserve.RESTARTS
     ok(rs["update"]([]) and rs["serve"](["https", "own"]) and not rs["serve"](["--login", "--new"]) and "model" not in rs,
        "RESTARTS names the verbs whose stream ends with the page: update, serve https")

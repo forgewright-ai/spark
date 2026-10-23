@@ -1,5 +1,66 @@
 # Changelog
 
+## v1.99
+
+The third audit, 2026-10-23, read everything shipped since v1.77. The
+code held; the release chain and a few edges did not. What it found in
+spark, fixed here; the rest are cards.
+
+- The release chain trusts no name. `release.yml` verifies every
+  release behind a tag against the file of the release before it, back
+  to v1.35, the first that carried `allowed-signers`: a tag a write
+  token pushed unsigned, or signed by a key only its own tree trusts,
+  breaks the chain and nothing is released on it. `tests/tag.sh`
+  verifies the tag it patches against the installed spark's
+  `allowed-signers` (`~/.spark`, or `SPARK_TAG_SIGNERS`) and its
+  object's name before the fence compares against it
+- The patch fence protects the updater and the pins too: `engine.env`,
+  `voice.env`, `bootstrap.sh`, `lib/spark/update.py`, `version.py`,
+  `facts.py` and the web fonts join `PROTECTED`. A change to what an
+  update trusts or downloads is a major a person tags
+- The tagger's rest is counted from GitHub's clock. `tests/land.sh
+  --landed-at SHA` prints when a commit reached `main`, the created time
+  of its first `ci.yml` run there, and `tests/tag.sh` counts the 6 hours
+  from that, never from a commit date the committer wrote. A time
+  GitHub cannot give refuses the tag
+- The zsh widget prints the model's words with `print -r`: a hint or an
+  answer that spells `\e[2J` or `\a` reaches the screen as the text it
+  is. Before, zsh decoded the backslash into the escape itself, past
+  spark's own filter. bash's `printf '%s'` never did
+- A token rotation's session cookie is `Secure` over https, as the
+  login's is. Before, the rotated cookie could ride a plain-http
+  request to the same host, the root's link on the next port among them
+- `spark user login` sends its token through spark's one opener: a
+  redirect off the box's origin never carries the bearer, and the typed
+  trust (`--pin`, the box's own root) applies, so the relock reaches a
+  box under https. Before, the request used Python's default opener
+- The MCP client resolves a server's program once, when the list is
+  read, and starts that path: a link swapped between the check and the
+  start cannot put another file in its place. The trusted chain reads
+  the url of `origin` alone, not any remote in the clone's config. A
+  call line wrapped in `timeout N`, `command`, `nice` or `env K=V` is
+  read as the call line it is, and carries the `!` mark
+- `spark do` with its reader gone mid-step (`| head`, a driver that
+  stopped reading) still records the step and lands it on the thread,
+  then ends as a pipe death would. Before, the echo's own error ended
+  the loop first and the step that ran was nowhere
+- The page's audit record of a verb that restarts it (`update`, `serve
+  https own`) is written before the verb, since the restart stops the
+  server before a record after it could be. `update` from the page
+  takes the bare verb or `--dry-run`, nothing else. `forge.log` keeps
+  printable text, 512 characters a line: the request path in it is a
+  peer's own bytes, and the log is tailed to a terminal
+- A certificate whose validity does not read is one refused line from
+  `spark client`, not a traceback
+- The six web fonts are pinned by sha256 in the docs test; zizmor is
+  installed by its wheel's hash; the tagger's and the landing's `curl`
+  calls time out at 30 s
+- README's "What leaves this machine" names what an MCP server is
+  handed
+- After v1.99 comes v1.100, not v2.0. A major is an architecture break
+  only, and the minor counts on. Every version reader parses numbers
+  and orders by version, so a third digit is one more number
+
 ## v1.98
 
 A faster first line from `spark read` (#78): one request a read, the

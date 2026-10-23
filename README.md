@@ -209,6 +209,11 @@ it on a new install. What each command sends:
   path. With a question, the matching lines of your manuals, 600
   characters at most. With MCP servers on the list, the names and
   titles of their tools, 1.5 kB at most.
+- `mcp call` and a tool step of `do`: the arguments you typed or
+  confirmed go to that server. It is a program on this machine, and
+  may be a network client of its own: `spark stats --sends` does not
+  count what it sends on. A credential it asks for goes to it alone,
+  never to the model.
 - `chat`: your soul, your remembered facts and the conversation.
 - `do`: each step's output (the last 4 kB) and the folder's path. After
   a refused option, a few lines of that command's man page. A tool's

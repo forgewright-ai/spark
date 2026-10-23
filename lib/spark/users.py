@@ -515,6 +515,7 @@ def _box_user(url, token):
     '' when it refuses, is down, or is no page server at all."""
     import json
     import urllib.request
+    from . import wire  # noqa: F401 -- the one opener: a bearer stays on its origin, the typed trust applies
     req = urllib.request.Request(url.rstrip("/") + "/api/me",
                                  headers={"Authorization": "Bearer " + token})
     try:

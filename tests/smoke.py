@@ -2096,6 +2096,19 @@ def redirect_cases(t):
         t.ok(kind == "bad" and hint == "%s answered HTTP 302, %s" % (base, wire.REDIRECT_REFUSED) and 1 < len(seen) < 12
              and on_origin(len(seen)),
              "redirect: a loop is bounded by urllib and says the same line", hint)
+        # spark user login's own request (users._box_user, the relock of a
+        # reinstalled box) in a process that imported no wire: the opener
+        # must still be the one (v1.99); before, urllib's default followed
+        # the 302 to the other origin with the bearer
+        seen.clear()
+        source.target, source.status = other + "/api/me?moved", 302
+        p = subprocess.run([sys.executable, "-c",
+                            "import sys; sys.path.insert(0, sys.argv[1]); from spark import users; "
+                            "print(repr(users._box_user(sys.argv[2], sys.argv[3])))",
+                            os.path.join(REPO, "lib"), base, token],
+                           capture_output=True, text=True, timeout=30, env=dict(os.environ, SPARK_API_KEY=""))
+        t.ok(p.returncode == 0 and p.stdout.strip() == "''" and on_origin(1) and seen[0][2] == "/api/me",
+             "redirect: spark user login's /api/me request never follows the bearer to another origin", repr((p.stdout, p.stderr[-200:], seen)))
     finally:
         if saved is None:
             os.environ.pop("SPARK_API_KEY", None)
@@ -2573,6 +2586,15 @@ def pipe_cases(t, env, home):
     t.ok(rc == -13 and got and "Traceback" not in err and "mid-reply" not in err and "dropped" not in err,
          "pipe: a chat reply whose reader closes mid-stream ends quietly, never 'dropped mid-reply'",
          repr((rc, got, err[-300:])))
+    # spark do with its reader gone after the first byte (v1.99): the step
+    # that ran is still on the thread, and the verb ends as a pipe death
+    before = set(glob.glob(os.path.join(home, ".local", "state", "spark", "**", "threads", "*.sealed"), recursive=True))
+    rc, got, err = closed_reader(["do", "say", "hello"], first=1, extra={"SPARK_DO_STDIN": "1", "PYTHONUNBUFFERED": "1"}, stdin="\n")
+    new = [p for p in glob.glob(os.path.join(home, ".local", "state", "spark", "**", "threads", "*.sealed"), recursive=True) if p not in before]
+    lines = read_thread(home, max(new, key=os.path.getmtime)) if new else []
+    t.ok(rc == -13 and got and "Traceback" not in err and any("STEP-ONE" in json.dumps(m) for m in lines),
+         "pipe: spark do whose reader closes mid-run still lands the step's record, then ends quietly",
+         repr((rc, got, err[-300:], [json.dumps(m)[:120] for m in lines[-2:]])))
 
     # the face's thread on a terminal that is gone: lost, silent, over
     from spark import text as textmod

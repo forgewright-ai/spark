@@ -122,9 +122,11 @@ Two kinds of release come off `main`. A major, `v1.88`, is a planned
 piece of work, tagged by a person. A patch, `v1.88.1`, is one or more
 reported bugs fixed, tagged by a machine with a release key:
 `tests/tag.sh` is the rule it follows. An S1 or S2 fix is tagged once
-it has rested 6 hours on `main`, an S3 or S4 fix on Sunday. The tagger
-checks for itself that no protected path changed and that each fix's
-issue exists, is approved and carries its severity. A patch opens only
+it has rested 6 hours on `main` by GitHub's clock, an S3 or S4 fix on
+Sunday. The tagger checks for itself that the release it patches is
+signed by a key the installed spark trusts. It checks that no
+protected path changed, and that each fix's issue exists, is approved
+and carries its severity. A patch opens only
 when `main` holds
 nothing unreleased. It never adds a command, an option, a key, a check
 row or a help row, and `tests/patch_test.py` refuses one that does.

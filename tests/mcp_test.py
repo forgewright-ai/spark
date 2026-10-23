@@ -191,8 +191,8 @@ while True:
 # --- M6: the list -- named lines, an absolute program, nothing else started
 put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH)
 sp = mcp.spec("stub")
-check("M6: a server is a named line: MCP_SERVER_<NAME>=\"<absolute path> [words]\"",
-      sp.argv == [STUB_PATH, "ok"] and sp.problem == "", vars(sp) if hasattr(sp, "__dict__") else sp.argv)
+check("M6: a server is a named line: MCP_SERVER_<NAME>=\"<absolute path> [words]\" (the program resolved once, v1.99)",
+      sp.argv == [os.path.realpath(STUB_PATH), "ok"] and sp.problem == "", vars(sp) if hasattr(sp, "__dict__") else sp.argv)
 check("H2: a server outside the trusted chain is not trusted by default", not sp.trusted and sp.why == "not trusted", sp.why)
 check("M6: a program that is not an absolute path is not started",
       "not an absolute path" in mcp.program_problem("stub-server"), mcp.program_problem("stub-server"))

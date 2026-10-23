@@ -48,6 +48,13 @@ fails = []
 # core (docs/, not tied to a release); what docs/ holds, exactly; the docs a
 # new user reads (the voice checks below); and every doc
 ROOT_DOCS = ("README.md", "CREDITS.md", "CLAUDE.md", "AGENTS.md")
+# lib/spark/forge/fonts/, each file by the sha256 of upstream's bytes
+FONTS = {"atkinson-hyperlegible-next-latin-ext.woff2": "7dae0c6c66af1aec82e096186aeb1f0e6fa36ab8061ed65422f2b7daf4dd93f3",
+         "atkinson-hyperlegible-next-latin.woff2": "18b2a1a39a2fa298b0ba5390aca68462669826c90925656f1c1f6796e0e1bbaf",
+         "monaspace-neon-400.woff2": "6b6980f24d115e98e96b1a5d06a5a7fe6454de9b216d479a7e6923c0456a5f41",
+         "monaspace-neon-700.woff2": "37f1c50c462e51d871d52c36b190628e94c379c7157e07e04e1e2f943f07f54f",
+         "monaspace-xenon-400.woff2": "eb34d971e2bf956230ba2e5bd621af7310d4c739057ae7df7b8a38ca95b03cf6",
+         "monaspace-xenon-700.woff2": "c156f532e8ca566d5f5e6854cac1fdb1f614127b2f8b5d6a6d62aa7b29282c14"}
 CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md")
 DOCS_DIR = CORE_IN_DOCS
 CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt")
@@ -401,6 +408,15 @@ def page_words():
     check(len(roots) == 3 and roots[0] >= roots[1] and roots[1] == roots[2],
           "tokens.css: a night block with every token, two day blocks alike")
     check("@font-face" in tokens and tokens.count("url(fonts/") == 6, "tokens.css: six font faces by relative path")
+    # the six files by their sha256: a font is a binary the privacy grep
+    # does not read and every browser parses; these are upstream's bytes
+    # (Monaspace v1.400's webfont release, Fontsource's Atkinson
+    # Hyperlegible Next 5.2.2), and a swap is a finding here
+    import hashlib
+    for name, digest in FONTS.items():
+        with open(os.path.join(ROOT, "lib", "spark", "forge", "fonts", name), "rb") as f:
+            got = hashlib.sha256(f.read()).hexdigest()
+        check(got == digest, "fonts/%s is upstream's file, by sha256 (got %s)" % (name, got[:12]))
     check(read("lib/spark/forge/theme.js").strip() != "", "theme.js is there (the chosen theme before first paint)")
 
 def living():

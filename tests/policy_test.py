@@ -447,6 +447,10 @@ def main():
                     admin = open(state + "/forge-token").read().strip()
                     st, hd, _ = raw(turl, "POST", "/api/login", json.dumps({"token": admin}).encode(), {"Origin": turl})
                     ok(st == 200 and "; Secure" in hd.get("Set-Cookie", ""), "login over TLS with its own origin: 200, a Secure cookie", (st, hd.get("Set-Cookie", "")[-30:]))
+                    # the rotation re-sets the 90-day cookie: Secure there too (v1.99)
+                    st, hd, body = raw(turl, "POST", "/api/user/token", b"{}", {"Origin": turl, "Authorization": "Bearer " + user})
+                    user = (json.loads(body or b"{}") or {}).get("token") or user
+                    ok(st == 200 and "; Secure" in hd.get("Set-Cookie", ""), "a token rotation over TLS: its cookie is Secure as the login's is", (st, hd.get("Set-Cookie", "")[-30:]))
                     st, _, _ = raw(turl, "POST", "/api/login", json.dumps({"token": admin}).encode(), {"Origin": "http://127.0.0.1:%d" % tport})
                     ok(st == 403, "an http Origin on the https page is refused (403)", st)
                     st, hd, _ = raw(turl, "GET", "/", headers={"Host": "fixture.local:%d" % tport})

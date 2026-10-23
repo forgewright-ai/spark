@@ -258,6 +258,10 @@ def program_problem(prog):
 
 CHAIN_ORIGIN = re.compile(r"^\s*url\s*=\s*(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
                           r"forgewright-ai/([a-z-]+?)(?:\.git)?/?\s*$", re.M)
+# the [remote "origin"] section of a git config: its lines up to the next
+# section. A fork's `upstream` naming the organization is not the clone's
+# origin, and no other remote makes a clone the chain
+_ORIGIN_SECTION = re.compile(r"^\s*\[remote \"origin\"\]\s*$(.*?)(?=^\s*\[|\Z)", re.M | re.S)
 
 
 def _origin(path):
@@ -284,7 +288,8 @@ def _origin(path):
         if cfg:
             try:
                 with open(cfg, encoding="utf-8") as f:
-                    m = CHAIN_ORIGIN.search(f.read(65536))
+                    sec = _ORIGIN_SECTION.search(f.read(65536))
+                m = CHAIN_ORIGIN.search(sec.group(1)) if sec else None
             except OSError:
                 return ""
             return m.group(1) if m else ""
@@ -328,6 +333,11 @@ def specs(path=None):
             continue
         name = m.group(1).lower()
         argv = val.split()
+        # the program is resolved once, here, and that path is what the
+        # checks read and what is started: a link swapped between the two
+        # would otherwise start a file the checks never saw
+        if argv and os.path.isabs(argv[0]):
+            argv[0] = os.path.realpath(argv[0])
         problem = program_problem(argv[0]) if argv else "no program"
         trust = kv.get(key + TRUST_SUFFIX, "")
         member = chain_member(argv[0]) if argv else ""
@@ -458,7 +468,7 @@ class Server:
         self.q = queue.Queue(maxsize=QUEUE_MAX)
         self.gone = ""
         self.caps = {}
-        argv = [os.path.realpath(sp.argv[0])] + sp.argv[1:]     # the program the checks read, never a link swapped since
+        argv = list(sp.argv)                 # resolved once when the list was read: the program the checks read
         try:
             self.p = subprocess.Popen(argv, cwd=HOME, env=env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                       stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
@@ -1204,7 +1214,11 @@ def brief_tools():
             "KEY=VALUE for each argument: " + "; ".join(parts) + ".")
 
 
-CALL_WORDS = re.compile(r"(?:^|[;&|(`{\n]\s*|\b(?:then|do|else|env|exec|nohup|time)\s+)(?:\S*/)?spark\s+mcp\s+call\s+([a-z][a-z0-9_]{0,31})\s+([a-z][a-z0-9_]{0,63})\b")
+# a call line wrapped in a shell word that runs the next word -- `timeout 5`,
+# `command`, `nice`, `env K=V`, `nohup`, `time`, `exec` -- is the same line
+CALL_WORDS = re.compile(r"(?:^|[;&|(`{\n]\s*|\b(?:then|do|else|exec|nohup|time|command)\s+"
+                        r"|\btimeout\s+(?:\S+\s+){1,4}|\bnice\s+(?:-n\s*\S+\s+)?|\benv\s+(?:\S+=\S*\s+)*)"
+                        r"(?:\S*/)?spark\s+mcp\s+call\s+([a-z][a-z0-9_]{0,31})\s+([a-z][a-z0-9_]{0,63})\b")
 
 
 def line_danger(command):

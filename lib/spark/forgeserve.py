@@ -62,6 +62,7 @@ DO_COMMAND_MAX = 4096           # /api/do/run: a longer line is 400 before any p
                                 # (a 100 kB line pinned a thread for seconds in is_dangerous);
                                 # a block (several lines) has do.DO_BLOCK_MAX
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
+LOG_LINE_MAX = 512          # one log line at most: the request path is a peer's bytes
 MAX_CONNECTIONS = 64            # connections handled at once; one more is a 503 and closed at once,
                                 # so a flood of idle sockets cannot spawn a thread each without end
 EVENTS_PER_USER = 4             # /api/events streams one requester holds open; one more is 429
@@ -99,7 +100,8 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # token on show).
 RUN_VERBS = {"model": None, "ember": None, "bench": None, "on": None, "off": None,
              "serve": lambda a: a in ([], ["--login", "--new"], ["https", "own"]),
-             "stop": None, "remember": None, "forget": None, "update": None,
+             "stop": None, "remember": None, "forget": None,
+             "update": lambda a: a in ([], ["--dry-run"]),
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
 # the verbs that end with the page's own restart: their stream stops
@@ -363,7 +365,11 @@ _log_lock = threading.Lock()
 
 def log(line):
     """One line into forge.log (0600, rotated at 1 MB). Never a token,
-    never a body."""
+    never a body; printable and at most LOG_LINE_MAX characters, since the
+    request path in it is a peer's own bytes and the log is tailed to a
+    terminal (spark forge start)."""
+    from . import text as textmod
+    line = textmod.printable(line, keep="")[:LOG_LINE_MAX]
     with _log_lock:
         try:
             state_dir()
@@ -1653,7 +1659,8 @@ class Handler(BaseHTTPRequestHandler):
         matrix = qr.encode(link) if "<" not in link else None
         log("%s user token rotated %s" % (self._ip(), self.user))
         self._audit("user token", name=self.user)
-        return self._json(200, {"token": new, "link": link, "qr": matrix or []}, {"Set-Cookie": set_cookie(sid)})
+        return self._json(200, {"token": new, "link": link, "qr": matrix or []},
+                          {"Set-Cookie": set_cookie(sid, self.server.scheme == "https")})
 
     def _thread_of(self, body):
         """The thread a body names, checked against the requester's own
@@ -1955,9 +1962,16 @@ class Handler(BaseHTTPRequestHandler):
         env.pop("TMUX", None)
         self._sse()
         argv = [sys.executable, os.path.join(REPO, "bin", "spark"), verb] + args
+        restarts = RESTARTS.get(verb, lambda a: False)(args)
+        if restarts:
+            # the verb ends with the page's own restart, which stops this
+            # server before a record after it could be written: the record
+            # goes first, without an rc (the next start is its outcome)
+            self._audit("run", verb=verb)
         with self.server.run_lock:
             rc = run_verb(argv, env, lambda s: self._emit("line", {"s": s}))
-        self._audit("run", verb=verb, rc=rc)
+        if not restarts:
+            self._audit("run", verb=verb, rc=rc)
         return self._emit("done", {"rc": rc})
 
 

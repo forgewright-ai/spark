@@ -224,7 +224,9 @@ Overdue. Each run looks at the open issues labelled `approved` or
 than 8 days, gets `needs-human` and one comment, once.
 
 The tagger keeps its own gates, whatever CI said. A fix rests 6 hours
-on `main` before its tag. No protected path may differ from the tag it
+on `main` before its tag, counted from when it reached `main` by
+GitHub's clock. The tag it patches is itself a release, signed by a key
+the installed spark trusts. No protected path may differ from the tag it
 patches. Each bullet's issue must exist, be `approved` and carry the
 bullet's severity. A patch that fails one of them is never tagged.
 
