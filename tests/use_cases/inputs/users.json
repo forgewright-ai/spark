@@ -1,0 +1,15 @@
+{
+  "page": 1,
+  "per_page": 50,
+  "total": 8,
+  "users": [
+    {"id": 101, "login": "mbeck", "name": "Mira Beck", "roles": ["admin", "billing"], "active": true, "last_login": "2026-10-20T08:14:00Z"},
+    {"id": 102, "login": "tsantos", "name": "Tiago Santos", "roles": ["editor"], "active": true, "last_login": "2026-10-19T17:02:00Z"},
+    {"id": 103, "login": "lchen", "name": "Li Chen", "roles": ["admin"], "active": true, "last_login": "2026-10-21T06:40:00Z"},
+    {"id": 104, "login": "kdubois", "name": "Karine Dubois", "roles": ["viewer"], "active": false, "last_login": "2026-03-02T11:25:00Z"},
+    {"id": 105, "login": "oadeyemi", "name": "Ola Adeyemi", "roles": ["billing", "admin"], "active": true, "last_login": "2026-10-18T09:55:00Z"},
+    {"id": 106, "login": "rnakamura", "name": "Ren Nakamura", "roles": ["editor", "viewer"], "active": true, "last_login": "2026-10-21T10:03:00Z"},
+    {"id": 107, "login": "pkowalski", "name": "Piotr Kowalski", "roles": ["administrator-trainee"], "active": true, "last_login": "2026-10-15T14:30:00Z"},
+    {"id": 108, "login": "gruiz", "name": "Gabriela Ruiz", "roles": ["viewer"], "active": true, "last_login": "2026-10-12T16:48:00Z"}
+  ]
+}

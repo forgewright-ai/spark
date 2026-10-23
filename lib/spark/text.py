@@ -1073,14 +1073,15 @@ def open_quote(line):
     return '"' in rest or "`" in rest or "\u201c" in rest
 
 
-def quotes(line):
+def quotes(line, proposals=True):
     """[(span, start, end)] -- every quoted span on one line (double
     quotes, curly double quotes or backticks; 3..200 chars) with the index
     of its opening mark and the one just past its closing mark. A span
     right after an arrow (`"was" -> "should be"`) is the model's own
-    proposal, not a quote of the text: left out."""
+    proposal, not a quote of the text: left out, unless `proposals` is
+    False (a reader's source, where nothing is proposed)."""
     return [(quoted(m), m.start(), m.end()) for m in QUOTE.finditer(line)
-            if not PROPOSAL.search(line[:m.start()])]
+            if not (proposals and PROPOSAL.search(line[:m.start()]))]
 
 
 _MARKS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "'": '"'})
@@ -1280,7 +1281,10 @@ SECRET_SHAPES = (
     ("a Slack token", r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
     ("an API key", r"\bsk-[A-Za-z0-9]{20,}"),
     ("a credential line", r"(?i)\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\b\s*[=:]\s*(?P<s>\S{8,})"),
-    ("a long base64 run", r"[A-Za-z0-9+/=]{64,}"),
+    # encoded data mixes letters and digits; a rule of "=" under a test
+    # run's header, or one long word, holds neither and is no secret.
+    # Read from the run's start alone, so a long blob costs one scan
+    ("a long base64 run", r"(?<![A-Za-z0-9+/=])(?=[A-Za-z0-9+/=]*[0-9])(?=[A-Za-z0-9+/=]*[A-Za-z])[A-Za-z0-9+/=]{64,}"),
 )
 
 # a source -- a page, a mail, a feed item the reader discusses (`spark
@@ -1294,17 +1298,31 @@ SECRET_SHAPES = (
 # match inside each OUTER match -- a URL found first, then each of its
 # parameters, so no pattern ever scans the text for both at once (one
 # regex doing both backtracks for seconds on a crafted megabyte).
-_OTP_WORD = r"\b(?:code|otp|pin|passcode|verification)"
+# the word that names a code, as a word: not an option (`--pin`, ` -code`)
+# and not the start of another word ("pinned", "codec"). A dash a letter
+# leads is part of a name, not an option: "SMS-Code", "PIN-Code". The
+# Portuguese a reader's bank writes too: "código", "senha"
+_OTP_WORD = r"(?<!\w)(?<!--)(?<!\s-)(?<!^-)(?:code|otp|pin|passcode|verification|c\u00f3digo|senha)s?(?![^\W_])"
 # 4-8 digits, or split once or twice by a space or a hyphen (482 913,
-# 48-29-13); never part of a longer digit run
-_OTP_DIGITS = r"(?<!\d)(?P<s>\d{4,8}|\d{2,4}(?:[ -]\d{2,4}){1,2})(?!\d)"
+# 48-29-13); never part of a longer digit run. The split form is tried
+# first, so "1234-5678" is held whole, not its first half
+_OTP_DIGITS = r"(?<!\d)(?P<s>\d{2,4}(?:[ -]\d{2,4}){1,2}|\d{4,8})(?!\d)"
+# what may stand between the word and its digits: up to 30 characters and
+# no digit. A code may follow a link ("Your passcode for https://bank is
+# 482913"): a hold that hides too much hides a span, a code that gets
+# through is a code sent
+_OTP_GAP = r"[^\d]{0,30}?"
+# digits that are an address's, never a code's: right after a host's
+# colon (its port, "HOST:8443") or a slash (a path, "/docs/2048")
+_OTP_NOT_ADDRESS = r"(?<![\w\]]:)(?<!/)"
 SOURCE_SHAPES = SECRET_SHAPES + (
     # the digits within ~30 chars after the word that names them:
-    # "Your verification code is 482913", "PIN: 48-29-13"
-    ("a one-time code", "(?i)" + _OTP_WORD + r"[^\d]{0,30}?" + _OTP_DIGITS),
+    # "Your verification code is 482913", "PIN: 48-29-13". Right after
+    # the word, a colon is the message's own separator ("code:482913")
+    ("a one-time code", "(?i)" + _OTP_WORD + r"(?:\s*[:=#]\s*|" + _OTP_GAP + _OTP_NOT_ADDRESS + ")" + _OTP_DIGITS),
     # ... or before it: "482913 is your verification code",
     # "G-482 913 is your Google verification code"
-    ("a one-time code", "(?i)" + _OTP_DIGITS + r"[^\d]{0,30}?" + _OTP_WORD),
+    ("a one-time code", "(?i)" + _OTP_NOT_ADDRESS + _OTP_DIGITS + _OTP_GAP + _OTP_WORD),
     # the value (12+ chars) of every token-like parameter of an http(s)
     # URL: ?token=, &key=, #access_token=, ?reset=, &sig=, &oobCode=,
     # ?resetToken=, &otp=, ?X-Amz-Signature=, &auth= -- each one held
@@ -1497,6 +1515,14 @@ GROUNDED, UNGROUNDED, UNQUOTED = "grounded", "ungrounded", "unquoted"
 # not in "limited to 100", and "retry a request" cut from "does not retry
 # a request" grounds nothing.
 VERBATIM_WORDS = 5
+# One word under the floor still points at a place in the source when the
+# source says it at most this many times: a value holding a digit ("96%",
+# "443", "/dev/sda1": a size, a port, a device), or a word ("mbeck" or
+# "admin" in an API's answer). "water" in a chapter about water, or "200"
+# in an access log, is what the text is full of, and proves as little as
+# "the". Command output, a config file and an API's JSON say their facts
+# in such tokens (#95).
+DISTINCT_MAX = 3
 _LIST_MARK = re.compile(r"^(?:[-*•]|\d{1,2}[.)])\s+")
 _MARK_WORD = re.compile(r"[-*•#>]+|\d{1,2}[.)]")
 _ENDS = re.compile(r"[.!?:;][\"')\]]*$")
@@ -1519,20 +1545,38 @@ class Ground:
     def __init__(self, data):
         self.data = data
         self.folded = fold(data)
+        self.proposals = True   # a span after an arrow is a proposal (mark)
         self._starts = None     # offsets in folded where a line or a sentence starts
 
     def verdict(self, unit):
         """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks]).
-        Only a span past the floor (substantial) counts as grounding
-        evidence: quoting "the" against any English text proves nothing,
-        so a unit whose only spans fail the floor is UNQUOTED -- the
-        contracts that demand a quote refuse it -- unless the whole unit
-        is a verbatim copy of the source."""
-        spans = [q[0] for q in quotes(unit) if substantial(q[0])]
+        Only a span that weighs counts as grounding evidence: quoting
+        "the" against any English text proves nothing, so a unit whose
+        only spans weigh nothing is UNQUOTED -- the contracts that demand
+        a quote refuse it -- unless the whole unit is a verbatim copy of
+        the source."""
+        spans = [q[0] for q in quotes(unit) if self.weighs(q[0])]
         if not spans:
             return (GROUNDED if self.verbatim(unit) else UNQUOTED), []
         misses = [q for q in spans if not anchor(q, self.data, self.folded)]
         return (UNGROUNDED if len(misses) == len(spans) else GROUNDED), misses
+
+    def weighs(self, span):
+        """Does `span` count as grounding evidence in this source: past the
+        floor (substantial), or one word that points at a place -- the
+        source says it, at word edges, at most DISTINCT_MAX times. A value
+        holding a digit that the source lacks counts too, as a miss: a
+        figure the source does not hold is the invention to catch. A stop
+        word never counts, nor a plain word the source lacks."""
+        if substantial(span):
+            return True
+        f = fold(span).strip('.,;:!?"()[]')
+        if not f or " " in f or f in _STOP_WORDS or not re.search(_WORDCH, f):
+            return False
+        n = len(re.findall(at_edges(f), self.folded))
+        if re.search(r"\d", f):
+            return n <= DISTINCT_MAX
+        return 0 < n <= DISTINCT_MAX
 
     def verbatim(self, unit):
         """Is the whole unit, a list mark before it aside, the source's own
@@ -1583,7 +1627,7 @@ class Ground:
             out.append(unit[last:m.start()])
             raw = unit[m.start():m.end()]
             out.append("`%s`" % span if span != m.group(m.lastindex) and "`" not in span else raw)
-            if PROPOSAL.search(unit[:m.start()]):
+            if self.proposals and PROPOSAL.search(unit[:m.start()]):
                 out.append(PROPOSED_MARK)
             elif not anchor(span, self.data, self.folded):
                 out.append(ANCHOR_MARK)
@@ -1649,7 +1693,7 @@ class Gate:
                 self.dropped += 1
                 return
             self.kept += 1
-        qs = quotes(line)
+        qs = quotes(line, self.ground.proposals)
         self.quoted += len(qs)
         self.missed += sum(1 for q, _s, _e in qs
                            if not anchor(q, self.data, self.ground.folded))
@@ -1726,7 +1770,9 @@ class Gate:
 class Anchors(Gate):
     """Contract 10's stream: every line written on, every quoted span the
     text does not hold followed by ANCHOR_MARK where it stands. `quoted`
-    and `missed` count."""
+    and `missed` count. `proposals=False` reads a span after an arrow as
+    a quote too: a reader's source (`? --source`) proposes nothing."""
 
-    def __init__(self, stream, data):
+    def __init__(self, stream, data, proposals=True):
         Gate.__init__(self, stream, data, keep=None)
+        self.ground.proposals = proposals

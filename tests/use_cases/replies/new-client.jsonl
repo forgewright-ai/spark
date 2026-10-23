@@ -1,0 +1,1 @@
+{"stream": true, "content": "[English, technical manual]\n\nTo use a model from another machine, use `spark client URL` \nwhere the URL comes from `spark serve --login` on that machine. \nThen run `spark user login NAME` with the token shown there. \n`spark client` will then say whether this machine answers.", "finish": "stop"}

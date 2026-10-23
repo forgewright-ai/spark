@@ -1,0 +1,1 @@
+{"stream": true, "content": "{\n  \"candidates\": [\n    \"rsync -av --delete ~/Pictures/ nas:/volume1/photos/\"\n  ]\n}", "finish": "stop"}

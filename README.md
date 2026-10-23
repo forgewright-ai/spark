@@ -229,8 +229,8 @@ it on a new install. What each command sends:
 - `ask`: the text, up to 12 kB.
 - `read` and `drill`: the source, 16 kB at a time.
 - `watch`: the stream, 8 kB at a time.
-- `recall` (`Esc r`): the last 400 lines of your shell history, with
-  secrets replaced by `[held]`.
+- `recall` (`Esc r`): the newest commands of your shell history, each
+  once and 400 at most, with secrets replaced by `[held]`.
 - `paste`: a paste of several lines, up to 8 kB. A paste that looks
   like a secret is not sent.
 - `awaken`: the temperament you chose, once.

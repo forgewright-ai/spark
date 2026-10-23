@@ -114,6 +114,29 @@ def part_slice(data, n):
 
 
 _CAMEL = re.compile(r"([a-z0-9])([A-Z])")
+# One thing said in everyday words, a named line each: a reader asks about
+# "my other computer" where the guide says "another machine". The ranking
+# counts a part's word of the same line as the reader's own, at SAME_WEIGHT:
+# the reader's own word still counts the most. One word a line, never two
+# (no "get back"), and only words that mean the same in a manual, a mail and
+# a contract alike: no "list" (a man page's file list), "image" (a disk's),
+# "end" or "make", and no "stop" ("stop root from logging in" is prevent,
+# where sshd's "terminate" is a connection's end).
+SAME = (
+    ("machine", "computer host pc laptop"),
+    ("directory", "folder dir"),
+    ("delete", "remove erase rm unlink"),
+    ("start", "launch begin"),
+    ("show", "display"),
+    ("change", "modify alter"),
+    ("error", "failure fail fault"),
+    ("restore", "recover recovery"),
+    ("picture", "photo pic"),
+    ("price", "cost fee"),
+    ("disk", "drive"),
+    ("copy", "duplicate cp"),
+)
+SAME_WEIGHT = 0.5
 
 
 def _terms(s):
@@ -124,33 +147,62 @@ def _terms(s):
     return intake.words(_CAMEL.sub(r"\1 \2", s))
 
 
+def _key(term):
+    """A term with a doubled last consonant and then a closing e off, so a
+    word's forms meet: intake's stem takes "deleting" and "deleted" to
+    "delet" and leaves "delete", and takes "logging" to "logg"."""
+    if len(term) > 3 and term[-1] == term[-2] and term[-1] not in "aeiou":
+        term = term[:-1]
+    return term[:-1] if len(term) > 3 and term.endswith("e") else term
+
+
+def _same_of():
+    """{key: the keys of its SAME line}, the words keyed as a part's are."""
+    out = {}
+    for head, rest in SAME:
+        keys = frozenset(_key(t) for w in [head] + rest.split() for t in _terms(w))
+        for k in keys:
+            out[k] = keys
+    return out
+
+
 def ranked(data, question):
     """The parts of `data` to read for `question`, best first: BM25 over
     the parts by the question's words, ties to the earlier part, a part
-    holding none of them left out. One part, a bare question, or words
-    no part holds (another language) is [1]."""
+    holding none of them left out. A word of the question's SAME line
+    counts too, at SAME_WEIGHT, and the line is one term to BM25 (its
+    rarity is the line's, not the word's). One part, a bare question, or
+    words no part holds (another language) is [1]."""
     total = parts_of(len(data))
-    asked = list(dict.fromkeys(_terms(question)))
+    asked = list(dict.fromkeys(_key(t) for t in _terms(question)))
     if total == 1 or not asked:
         return [1]
+    same = _same_of()
     counts, lens = [], []
     for n in range(1, total + 1):
         tf = {}
         words = _terms(part_slice(data, n))
         for w in words:
-            tf[w] = tf.get(w, 0) + 1
+            k = _key(w)
+            tf[k] = tf.get(k, 0) + 1
         counts.append(tf)
         lens.append(len(words) or 1)
     avg = sum(lens) / float(total)
+
+    def weight(tf, k):
+        """The question's term `k` in a part: its own count, plus its SAME
+        line's other words at SAME_WEIGHT."""
+        return tf.get(k, 0) + SAME_WEIGHT * sum(tf.get(o, 0) for o in same.get(k, ()) if o != k)
     scores = []
     for i, tf in enumerate(counts):
         score = 0.0
-        for w in asked:
-            if w not in tf:
+        for k in asked:
+            f = weight(tf, k)
+            if not f:
                 continue
-            df = sum(1 for c in counts if w in c)
+            df = sum(1 for c in counts if weight(c, k))
             idf = math.log(1 + (total - df + 0.5) / (df + 0.5))
-            score += idf * tf[w] * (K1 + 1) / (tf[w] + K1 * (1 - B + B * lens[i] / avg))
+            score += idf * f * (K1 + 1) / (f + K1 * (1 - B + B * lens[i] / avg))
         scores.append((score, i + 1))
     return [n for score, n in sorted(scores, key=lambda s: (-s[0], s[1])) if score > 0] or [1]
 
@@ -331,8 +383,11 @@ def cmd_read(args):
         # a pipe that brought nothing: the command before it wrote to
         # stderr (a usage line, an error) or wrote nothing at all -- say
         # that, not the whole usage (ssh -h | spark read ... read as a
-        # misuse of spark read, and explain blamed spark read)
-        say("%s read -- the pipe brought no text (an error? put 2>&1 before the |)" % MARK)
+        # misuse of spark read, and explain blamed spark read). On
+        # stderr: stdout is the answer's, and a reader's wrapper that
+        # piped an empty page must not show this line as its answer
+        print("%s read -- the pipe brought no text (an error? put 2>&1 before the |)" % MARK,
+              file=sys.stderr, flush=True)
         return 2
     if not data:
         # at a terminal with nothing piped in, this is almost always a
@@ -464,6 +519,37 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
                   % ("s" if len(plan) > 1 else "", which, total, "do" if len(plan) > 1 else "does"))
 
 
+# A figure of two digits or more that a line states outside its quotes
+# must be the source's own (`unsourced`): a sum, a count or a date the
+# model worked out is its own claim wearing the source's quote, and a
+# one-word quote grounds a line since v1.101. One digit stays free, as a
+# source writes "two years" where a line says 2.
+FIGURE = re.compile(r"(?<!\w)\d[\d.,]*\d")
+
+
+def figures(text):
+    """The figures in `text`, two digits or more, their separators out:
+    "5,200" and "5200" are one figure, and a decimal part's whole counts
+    too ("4.800,00" holds 4800)."""
+    got = set()
+    for m in FIGURE.finditer(text):
+        n = m.group(0).strip(".,")
+        got.add(re.sub(r"[.,]", "", n))
+        cents = re.match(r"^(.*?)[.,](\d{2})$", n)
+        if cents:
+            got.add(re.sub(r"[.,]", "", cents.group(1)))
+    return {g for g in got if len(g) >= 2}
+
+
+def unsourced(line, have):
+    """The figures `line` states outside its quotes that the source does
+    not hold (`have`, the source's figures)."""
+    bare = line
+    for q in textmod.quotes(line):
+        bare = bare.replace(q[0], " ")
+    return figures(bare) - have
+
+
 def _ask(cfg, part, want, total, text, stream, name="", on_ask=None, thread=None, on_read=None, held=0):
     """One request: `part` (part `want` of `total`) asked `text`, the
     answer through the gate to `stream`, the turn recorded (`held` the
@@ -473,8 +559,11 @@ def _ask(cfg, part, want, total, text, stream, name="", on_ask=None, thread=None
     if on_ask:
         on_ask()
 
-    def keep(_line, verdict, _misses):
-        return verdict == textmod.GROUNDED  # it quotes, and a quote anchors
+    have = figures(part)
+
+    def keep(line, verdict, _misses):
+        # it quotes, a quote anchors, and every figure it states is the source's
+        return verdict == textmod.GROUNDED and not unsourced(line, have)
 
     header = "[part %d of %d]" % (want, total) if total > 1 else ""
     out = _Part(stream, header)

@@ -1,0 +1,46 @@
+services:
+  web:
+    image: ghcr.io/example/shop-web:2.4.1
+    ports:
+      - "8080:3000"
+    environment:
+      DATABASE_URL: postgres://shop@db:5432/shop
+      REDIS_URL: redis://cache:6379/0
+    depends_on:
+      - db
+      - cache
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/example/shop-web:2.4.1
+    command: ["bin/worker", "--queues", "mail,exports"]
+    environment:
+      DATABASE_URL: postgres://shop@db:5432/shop
+      REDIS_URL: redis://cache:6379/0
+    depends_on:
+      - db
+      - cache
+    restart: on-failure
+
+  db:
+    image: postgres:16
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_DB: shop
+    restart: always
+
+  cache:
+    image: redis:7
+
+  backup:
+    image: ghcr.io/example/pg-backup:1.3
+    environment:
+      SCHEDULE: "0 3 * * *"
+      TARGET: /backups
+    volumes:
+      - ./backups:/backups
+
+volumes:
+  dbdata:

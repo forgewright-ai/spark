@@ -269,7 +269,9 @@ The prompt line:
 - A command that deletes is marked `!`.
 - `?? words` follows up on the last answer.
 - `spark off` turns the prompt line off. `spark on` turns it back on.
-- `cmd 2>&1 | explain` says what went wrong, and the fix.
+- `cmd 2>&1 | explain` says what went wrong, and the fix. With nothing
+  piped in, `spark explain words` answers the words, as `spark words`
+  does.
 - `spark <words>` answers in the terminal. `spark @FILE words` asks
   about a file.
 

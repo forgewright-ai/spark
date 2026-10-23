@@ -241,6 +241,9 @@ group_rest() {
     run qr_test.py "$PY" tests/qr_test.py
     # contract 16: the MCP client's gates against a stub server, and spark steps
     run mcp_test.py "$PY" tests/mcp_test.py
+    # the use-case audition's recorded replies, served by a stub engine:
+    # spark's own code judged on real replies to real inputs, no model
+    run use_cases.py "$PY" tests/use_cases.py replay
     run voice_test.py "$PY" tests/voice_test.py
     run docs_test.py "$PY" tests/docs_test.py
     run policy_test.py "$PY" tests/policy_test.py

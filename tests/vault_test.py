@@ -1080,6 +1080,7 @@ BARE_WRITERS = (
     "uninstall.py: strip_rc_line -- the user's own rc file, in place when its directory refuses a temp file",
     "voice.py: _write -- the engine's files keep the archive's modes; O_EXCL and O_NOFOLLOW",
     "voice.py: _stubbed -- the test's own file",
+    "wire.py: _record -- SPARK_RECORD, a test seam: O_NOFOLLOW, and a hard link or another's file is refused before its mode is touched",
 )
 
 

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import signal
+import stat
 import sys
 import time
 
@@ -1602,6 +1603,16 @@ def cmd_ask(words):
     return _stream(mode, q, paths, ctx, line=None if q or paths else "[explain]", cps=cps)
 
 
+def _piped():
+    """Is stdin a pipe or a file: something a command was piped or
+    redirected into, even when it brought nothing."""
+    try:
+        mode = os.fstat(sys.stdin.fileno()).st_mode
+    except (OSError, ValueError, AttributeError):
+        return False                    # no stdin at all
+    return stat.S_ISFIFO(mode) or stat.S_ISREG(mode) or stat.S_ISSOCK(mode)
+
+
 def cmd_explain(words):
     if _help(words, EXPLAIN_USAGE):
         return 0
@@ -1614,6 +1625,14 @@ def cmd_explain(words):
     cmd = os.environ.get("SPARK_EXPLAIN_CMD", "").strip()
     rc = os.environ.get("SPARK_EXPLAIN_RC", "").strip()
     if not ctx and not cmd:
+        if words and not _piped():
+            # nothing piped in, words given: a question that opens with
+            # "explain" (spark explain why the sky is blue), answered as
+            # bare spark WORDS answers it (#106). A terminal, /dev/null or
+            # no stdin (a script, cron) is nothing piped. An empty pipe or
+            # file is: `make 2>&1 | explain why` that printed nothing keeps
+            # the refusal, never a diagnosis made up from no output
+            return _stream("answer", " ".join(["explain"] + words).strip(), line=None, cps=cps)
         die("explain reads what is piped in -- cmd 2>&1 | explain")
     if cmd:
         if rc.isdigit() and rc != "0":
@@ -1677,12 +1696,40 @@ def speed(t):
     return secs
 
 
+# what a history on stdin is cut to before it rides the request: the same
+# command typed again is one line, at its newest place, then the newest
+# RECALL_LINES of those (the widgets' own count: fc -ln -400), within
+# RECALL_MAX characters. A history piped in whole was sent whole, and a
+# long one overran the context (#101).
+RECALL_LINES = 400
+RECALL_MAX = 16000
+
 RECALL_USAGE = """spark recall -- find a command you ran by what it did
 
   <history> | spark recall <words>   the history on stdin; up to 5 lines
                                      of it that match, best first (Esc r
                                      at the prompt does this)
 """
+
+
+def newest_history(history):
+    """(the lines recall sends, how many different commands there were):
+    each command once, at its newest place, oldest first, then the newest
+    RECALL_LINES of them within RECALL_MAX characters."""
+    newest = {}
+    for i, l in enumerate(history.splitlines()):
+        if l.strip():
+            newest[l.strip()] = i
+    lines = [l for l, _i in sorted(newest.items(), key=lambda kv: kv[1])]
+    kept, size = [], 0
+    for l in reversed(lines[-RECALL_LINES:]):
+        if len(l) + 1 > RECALL_MAX:
+            continue                # one line past the whole budget is never sent; the rest still goes
+        if size + len(l) + 1 > RECALL_MAX:
+            break
+        size += len(l) + 1
+        kept.append(l)
+    return kept[::-1], len(lines)
 
 
 def cmd_recall(args):
@@ -1705,19 +1752,22 @@ def cmd_recall(args):
         print("! no history on stdin", file=sys.stderr)
         return 1
     cfg = config.load()
+    orig, distinct = newest_history(history)
+    if len(orig) < distinct:
+        print("* the newest %d of %d different commands were read" % (len(orig), distinct),
+              file=sys.stderr, flush=True)
     # the history is held back line by line before it rides the request
     # (an `export TOKEN=...` the user once typed is not the model's): a
     # held line keeps its place, so an answer quoting it maps back to the
     # line that ran, and that one, the user's own text, is printed
-    orig = history.splitlines()
     sent, held, names = [], 0, []
     for l in orig:
         spans, found = textmod.held_spans(l)
         sent.append(textmod.hold_spans(l, spans) if spans else l)
         held += len(spans)
         names += found
+    history = "\n".join(sent) + "\n"
     if held:
-        history = "\n".join(sent) + ("\n" if history.endswith("\n") else "")
         print(textmod.held_line(held, textmod.shape_order(names)), file=sys.stderr, flush=True)
     prompt = "What I am looking for: %s\n\nMy shell history:\n%s" % (intent, history)
     try:

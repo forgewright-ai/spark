@@ -1,0 +1,8 @@
+{"tools": [
+ {"name": "out_level", "title": "Set the speaker volume", "inputSchema": {"type": "object", "properties": {"level": {"type": "integer", "minimum": 0, "maximum": 100}}, "required": ["level"]}},
+ {"name": "out_mute", "title": "Mute the speakers", "inputSchema": {"type": "object", "properties": {}}},
+ {"name": "mic_mute", "title": "Mute the microphone", "inputSchema": {"type": "object", "properties": {}}},
+ {"name": "display_brightness", "title": "Set the screen brightness", "inputSchema": {"type": "object", "properties": {"level": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["level"]}},
+ {"name": "desktop_lock", "title": "Lock the screen", "inputSchema": {"type": "object", "properties": {}}},
+ {"name": "wifi_connect", "title": "Join a Wi-Fi network", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}
+]}

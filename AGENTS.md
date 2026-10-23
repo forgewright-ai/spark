@@ -350,6 +350,42 @@ when no turn did. `SPARK_LINE_BENCH_HISTORY=FILE` is a `??` pair's
 first turn, as the history a bench turn otherwise lacks. All 3 are for
 measuring only.
 
+`tests/use_cases.py` is the use-case audition.
+`tests/use_cases/cases.json` holds 85 tasks people bring to spark, for
+seven kinds of user. `inputs/` holds the texts, code and logs they read,
+written or generated for it. Each case runs the real command against the
+live model and is judged by what came out. That is the facts the answer
+holds, quotes and figures that are in the source, and the share of a
+text an edit kept. It is also code that still compiles, and the files a
+sandboxed task left. `run` keeps every answer, `report DIR` grades a
+kept run again with today's checks, and `selftest` proves the checks
+with no model. It runs with the machine's own settings and never sets
+`SPARK_HISTORY`, since off prunes every thread. A `do` case's steps run
+in spark's sandbox, and a run it left waiting is discarded. After an
+accepted task the copy holds a model's code. So every `after` check runs
+contained: bwrap on Linux, spark do's own profile on macOS, no network
+and no write outside the case's copy. A machine with no sandbox skips
+the case and says why.
+
+The live run is not in the gate, and its replay is. `run --record` keeps
+each case's model replies, the replies alone, through wire's
+`SPARK_RECORD` tap. `keep DIR` copies those of the cases that passed
+into `tests/use_cases/replies/`, a public tree. It leaves out a bare
+question, chat and explain, whose replies may say the machine's soul and
+facts. It refuses a recording that holds what the commit gate refuses.
+`replay` serves them from a stub engine on loopback, one a request, and
+grades what came out with today's checks. So the gate judges spark's own
+code on real replies to real inputs. Not replayed: do, line and Ctrl-C
+cases, a machine's manuals, and a watch on a live command. A case that
+read one of spark's docs replays only while that doc is unchanged. A
+recording that runs out names the request: record it again where the
+model runs, after any change to a brief.
+
+21 cases are held out, split `held`. Never tune a brief, a check or a
+rule on them. Their score prints on a line of its own, and `selftest`
+fails when one is reworded, added or dropped. The selftest runs in
+smoke.
+
 ## Contracts
 
 The interfaces between parts live in `CLAUDE.md`, "Contracts": `spark

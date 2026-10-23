@@ -1,0 +1,2 @@
+{"stream": true, "content": "{\n  \"language\": \"English\",\n  \"kind\": \"documentation\"\n}", "finish": "stop"}
+{"stream": true, "content": "The tent costs $129.00 and shipping is not free.\n\nPrice: \"$129.00\"\nShipping: \"Orders under $150 ship for $7.95\" (standard) or \"$19.95\" (express).", "finish": "stop"}
