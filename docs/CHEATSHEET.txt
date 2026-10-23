@@ -77,6 +77,7 @@ READING AND WRITING
   spark ask [words]               what the text does not answer
   spark read [words]              an answer, every line quoting the text
   spark read --part N             part N of a long text
+  spark read --warm               send the text ahead; the answer comes sooner
   spark drill [--name NAME]       practice questions. --name keeps a schedule
   cmd | spark watch <words>       one line when the stream matches
   cmd | spark reveal [N]          show piped text at N characters a second

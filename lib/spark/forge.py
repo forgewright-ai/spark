@@ -1995,7 +1995,8 @@ def _slash_read(cfg, thread, args):
     if thread is None:
         thread = new_thread(cfg)      # made first: the turn record names it, so /last shows this turn
     try:
-        readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start, thread=thread)
+        readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start, thread=thread,
+                       on_read=readmod.told(busy))
     except (readmod.Refused, wire.BrainError) as e:
         busy.stop()
         if wrap.started:

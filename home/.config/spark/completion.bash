@@ -66,6 +66,7 @@ _spark_complete() {
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off boot share https own status --login --audit" ;;
         chat)    words="--thread" ;;
+        read)    words="--part --name --ledger --warm" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;

@@ -16,10 +16,22 @@
 #                     composed here, never asked of the model: no "the
 #                     text does not say, but generally ...". On stderr,
 #                     exit 1, stdout untouched: a client tells "no
-#                     answer" from "an answer" by the exit code. At a
-#                     terminal stderr also shows the reading pass as it
-#                     runs (`reading ... English, essay`); a pipe sees
-#                     nothing of it.
+#                     answer" from "an answer" by the exit code.
+#   the reading       one request a read. The answer's first line is the
+#                     model's reading of the source, `[Language, kind]`,
+#                     taken out here before the fence and the gate
+#                     (Reading): at a terminal stderr shows it
+#                     (`reading ... English, essay`), stdout never sees
+#                     it, and it is neither kept nor dropped. A first
+#                     line that quotes is an answer line.
+#   the wait          the source stands first in the request and the
+#                     words last, so the engine's prompt cache holds the
+#                     source across questions: a second question about
+#                     the same source costs its own tokens. --warm sends
+#                     that request without the words, for one token, and
+#                     prints nothing: a client calls it the moment the
+#                     text is known, before the reader types, and the
+#                     question's request then processes only its own.
 #   caps              READ_MAX chars a part; past that the source is
 #                     parts (each carrying PART_OVERLAP chars of the one
 #                     before) and `--part N` reads one -- refused with
@@ -35,6 +47,7 @@
 #                     clear` are the only ways out. No suppression: a
 #                     question asked twice of a source is a fair
 #                     question twice, unlike a note declined in a draft.
+#                     A warm writes none.
 #   what leaves       the source's text and the question, to the model
 #                     this machine answers from. No name, no path, no
 #                     cwd: --name stays in the ledger on this machine.
@@ -54,6 +67,7 @@ MODE = "read-source"    # persona.MODES key
 READ_TOKENS = 500
 READ_TIMEOUT = 180
 OPEN_MAX = 60           # chars of the source the refusal line shows
+ASKS = "The reader asks:"      # the words' label, last in the request
 
 READ_USAGE = """spark read -- answers from a text, quoted from it
 
@@ -63,6 +77,8 @@ READ_USAGE = """spark read -- answers from a text, quoted from it
                               a part)
   --name NAME                 a name to keep the questions under
   --ledger [clear] [--name NAME]  the questions asked; clear forgets them
+  --warm                      send the text ahead and print nothing: the
+                              next question about it is answered sooner
 
   A line that does not quote the text is dropped. When the text does not
   answer, spark shows how it opens and exits 1. Secrets are held back.
@@ -114,9 +130,82 @@ class _Part:
         self.stream.flush()
 
 
+QUOTE_MARKS = "\"'`“”‘’"
+READING_MAX = 60        # chars: a first line past it is the answer's
+
+
+def reading_of(line):
+    """`Language, kind` when `line` is the model's reading of the source,
+    else None: the bracketed line the brief asks for, or a bare line of
+    at most four words with a comma. A line that quotes, runs past
+    READING_MAX or ends like a sentence is the answer's."""
+    s = line.strip()
+    if not s or len(s) > READING_MAX or any(q in s for q in QUOTE_MARKS):
+        return None
+    if s.startswith("[") and s.endswith("]"):
+        inner = s[1:-1].strip()
+        return inner if inner and "[" not in inner and "]" not in inner else None
+    if "," in s and len(s.split()) <= 4 and not s.endswith((":", ".", "!", "?")):
+        return s
+    return None
+
+
+class Reading:
+    """The answer's first line, taken out of the stream before the fence
+    and the gate: the model's reading of the source (reading_of), told
+    to `on_read` once and never written on. A first line that is no
+    reading is the answer's and goes on whole, and so does a line that
+    runs past READING_MAX before its newline, as it comes. A reply with
+    no newline is one line: close() judges it the same way."""
+
+    def __init__(self, stream, on_read=None):
+        self.stream, self.on_read = stream, on_read
+        self.buf, self.done, self.reading = "", False, ""
+
+    def feed(self, delta):
+        if self.done:
+            self.stream.feed(delta)
+            return
+        self.buf += delta
+        if "\n" in self.buf:
+            line, rest = self.buf.split("\n", 1)
+            self.buf, self.done = "", True
+            if not self._take(line):
+                self.stream.feed(line + "\n")
+            if rest:
+                self.stream.feed(rest)
+        elif len(self.buf) > READING_MAX + 2:
+            held, self.buf, self.done = self.buf, "", True
+            self.stream.feed(held)
+
+    def _take(self, line):
+        reading = reading_of(line)
+        if reading is None:
+            return False
+        self.reading = reading
+        if self.on_read:
+            self.on_read(reading)
+        return True
+
+    def close(self):
+        if not self.done and self.buf and not self._take(self.buf):
+            self.stream.feed(self.buf)
+        self.buf, self.done = "", True
+
+
+def told(busy):
+    """What the reading's line does at a terminal: the pulse cleared,
+    then `reading ... Portuguese, fiction` on stderr (session._tell: a
+    tty only, nothing in a pipe)."""
+    def tell(reading):
+        busy.stop()
+        session._tell(session.READING_LINE + " " + reading + "\n")
+    return tell
+
+
 def _args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
-    opts = {"name": "", "part": None, "ledger": None}
+    opts = {"name": "", "part": None, "ledger": None, "warm": False}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
@@ -124,6 +213,8 @@ def _args(args):
             opts["ledger"] = "clear" if rest[:1] == ["clear"] else "list"
             if opts["ledger"] == "clear":
                 rest.pop(0)
+        elif a == "--warm":
+            opts["warm"] = True
         elif a in ("--name", "--part"):
             if not rest:
                 raise ValueError(a)
@@ -185,12 +276,25 @@ def cmd_read(args):
         say(READ_USAGE.rstrip())
         say("\n  to ask spark: spark %s" % (" ".join(words) or "<words>"))
         return 2
+    if opts["warm"]:
+        # the text sent ahead: nothing printed, nothing kept, exit 0
+        try:
+            warm(config.load(), data, want)
+        except Refused as e:
+            if e.code == 2:
+                say("%s read -- %s" % (MARK, e.hint))
+                return 2
+            die(e.hint)
+        except wire.BrainError as e:
+            die(e.hint)
+        return 0
     # the wait at a terminal: a pulse from the request to the first kept
     # line, only where a person watches (text.wait); a reader's wrapper
     # pipes stdout and never sees a frame
     busy = textmod.wait("read")
     try:
-        answer(config.load(), data, " ".join(words), _Waited(sys.stdout, busy), want, name, on_ask=busy.start)
+        answer(config.load(), data, " ".join(words), _Waited(sys.stdout, busy), want, name,
+               on_ask=busy.start, on_read=told(busy))
     except Refused as e:
         busy.stop()
         if e.code == 2:
@@ -229,21 +333,12 @@ class Refused(Exception):
         self.hint, self.code = hint, code
 
 
-def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=None):
-    """Contract 11's core, one law for every caller (spark read, the
-    chat's /read): the source `data` held back, cut to the part `want`,
-    read, asked `question` (bare: what it covers), and every line of the
-    answer through the gate before it reaches `stream` -- a line that
-    does not quote the source, or whose quotes are not in it, never gets
-    there. `on_ask()` runs once, after the reading pass, right before the
-    request. `thread` (the chat's /read) rides the turn record, so `/last`
-    there finds the words. Returns the gate's kept count, never 0:
-    nothing kept is Refused, with the source's own opening words. Refused before
-    anything is sent for a part that is not there; wire.BrainError and
-    KeyboardInterrupt pass through, the stream closed first."""
-    # a source is someone else's text: what looks like a secret in it (a
-    # key, a token, a one-time code) is held back here, before the parts,
-    # the reading, the gate and the model see it -- they all see [held]
+def _cut(data, want):
+    """(part, want, total, held, names): the source held back -- every
+    span that looks like a secret becomes [held] before the parts, the
+    gate and the model see it -- and cut to the part `want`. Refused for
+    a long source with no part named (exit 1) and for a part that is not
+    there (exit 2), before anything is sent."""
     spans, names = textmod.held_spans(data)
     held = len(spans)
     if held:
@@ -256,13 +351,36 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
         raise Refused("the source is %d part%s; there is no part %d"
                       % (total, "" if total == 1 else "s", want), 2)
     want = want or 1
-    part = part_slice(data, want)
+    return part_slice(data, want), want, total, held, names
+
+
+def context_of(part, question=""):
+    """The request's text: the source first under its own label, the
+    words last under theirs. So the engine's prompt cache holds the
+    source across questions, and a warm's request is this one without
+    the words."""
+    return "Source:\n" + part + "\n\n" + ASKS + ((" " + question) if question else "")
+
+
+def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=None, on_read=None):
+    """Contract 11's core, one law for every caller (spark read, the
+    chat's /read): the source `data` held back, cut to the part `want`,
+    asked `question` (bare: what it covers), and every line of the
+    answer through the gate before it reaches `stream` -- a line that
+    does not quote the source, or whose quotes are not in it, never gets
+    there. The answer's first line is the model's reading of the source,
+    taken out before the gate (Reading) and told to `on_read(reading)`.
+    `on_ask()` runs once, right before the request. `thread` (the chat's
+    /read) rides the turn record, so `/last` there finds the words.
+    Returns the gate's kept count, never 0: nothing kept is Refused, with
+    the source's own opening words. Refused before anything is sent for
+    a part that is not there; wire.BrainError and KeyboardInterrupt pass
+    through, the stream closed first."""
+    part, want, total, held, names = _cut(data, want)
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     text = question.strip() or "What does this source cover?"
     if held:        # said once nothing can refuse any more: the source is on its way
         print(textmod.held_line(held, names), file=sys.stderr, flush=True)
-    read, tail = session.reading(cfg, part, shell)
-    context = read + "Source:\n" + part + tail
     if on_ask:
         on_ask()
 
@@ -273,14 +391,16 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
     out = _Part(stream, header)
     gate = textmod.Gate(out, part, keep)
     fence = textmod.Fence(gate, newline=None)
+    first = Reading(fence, on_read)
 
     def done():
+        first.close()
         fence.close()
         gate.close()
     t0 = time.monotonic()
     try:
         s = session.Session(cfg, MODE, shell, "", role="ember")
-        _out, _ms = s.ask_stream(text, context, fence.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
+        _out, _ms = s.ask_stream("", context_of(part, text), first.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
     except (wire.BrainError, KeyboardInterrupt):
         done()
         raise
@@ -293,13 +413,31 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=
             ledger.keep(ledger.KIND_READ, name, note, cfg)
         except (ledger.Refused, OSError):
             log_exc("read ledger")
-    # Both times start before answer setup and end at kept output.
-    # The reading pass has its own turn; ledger writes are not output.
-    first = {"first_ms": int((out.first - t0) * 1000)} if out.first is not None else {}
+    # Both times start before the answer's session setup; ledger writes
+    # are not output.
+    first_ms = {"first_ms": int((out.first - t0) * 1000)} if out.first is not None else {}
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
              kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed,
-             **dict(first, **({"held": held} if held else {}), **({"thread": thread} if thread else {})))
+             **dict(first_ms, **({"held": held} if held else {}), **({"thread": thread} if thread else {})))
     if not gate.kept:
         where = "part %d of %d" % (want, total) if total > 1 else "the source"
         raise Refused('%s does not answer -- it opens: "%s"' % (where, opening(part)))
     return gate.kept
+
+
+def warm(cfg, data, want=None):
+    """The text sent ahead (--warm): the same source, held back and cut
+    to the same part, in the answer's request shape without the words,
+    for one token. The engine's slot then holds the source, and the
+    question's request processes only its own tokens. Nothing is
+    printed, the turn is kind `warm`, numbers only, and no ledger record
+    is written. Refused as answer() is for a part that is not there.
+    Returns the part count."""
+    part, want, total, held, _names = _cut(data, want)
+    shell = os.path.basename(os.environ.get("SHELL") or "sh")
+    t0 = time.monotonic()
+    s = session.Session(cfg, MODE, shell, "", role="ember")
+    s.ask_stream("", context_of(part), lambda _delta: None, max_tokens=1, timeout=READ_TIMEOUT)
+    s.record(kind="warm", chars=len(part), ms=int((time.monotonic() - t0) * 1000), part=want, parts=total,
+             **({"held": held} if held else {}))
+    return total

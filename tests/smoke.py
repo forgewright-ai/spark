@@ -449,17 +449,20 @@ READ_TEXT = ("The gate opens at nine and closes at noon.\n"
 
 
 def read_pieces(user=""):
-    """spark read's reply (contract 11), line by line: a preamble that
-    quotes nothing, a grounded claim (arriving split mid-quote), a claim
-    whose quote is invented, and a second grounded claim. Two survive;
-    two are dropped, each by its own rule. STATE['read_none'] plays the
-    model whose every line fails the law; a `what repeats` question is
-    the parts case, answered with a quote every part of `big` holds."""
+    """spark read's reply (contract 11), line by line: the reading the
+    brief asks for first (taken out before the gate, never on stdout),
+    a preamble that quotes nothing, a grounded claim (arriving split
+    mid-quote), a claim whose quote is invented, and a second grounded
+    claim. Two survive; two are dropped, each by its own rule.
+    STATE['read_none'] plays the model whose every line fails the law; a
+    `what repeats` question is the parts case, answered with a quote
+    every part of `big` holds."""
     if STATE.get("read_none"):
-        return ("It is about a gate.\n", 'It costs "ten dollars" to enter.\n')
+        return ("[Portuguese, fiction]\n", "It is about a gate.\n", 'It costs "ten dollars" to enter.\n')
     if "what repeats" in user:
-        return ('It repeats "word word" throughout.\n',)
-    return ("Here is what it says:\n",
+        return ("[Portuguese, fiction]\n", 'It repeats "word word" throughout.\n')
+    return ("[Portuguese, fiction]\n",
+            "Here is what it says:\n",
             'It opens "at nine" and clo', 'ses "at noon".\n',
             'Entry costs "five dollars" for everyone.\n',
             'Children go "free for children".\n')
@@ -919,10 +922,6 @@ def read_timing_cases(t):
             ("all lines dropped", ['No quote here.\n'], None, 0, 1)):
         clock, records = [0.0], []
 
-        def reading(*args):
-            clock[0] += 2  # its own turn, outside the answer's interval
-            return "", ""
-
         def brain(*args):
             clock[0] += 0.25  # session construction is visible to the reader
             return "http://127.0.0.1:1", "stub", False
@@ -943,7 +942,6 @@ def read_timing_cases(t):
         with patch.object(reader.time, "monotonic", side_effect=lambda: clock[0]), \
                 patch.object(reader.time, "time", side_effect=lambda: -clock[0]), \
                 patch.object(reader.ledger, "keep", side_effect=ledger_keep), \
-                patch.object(session, "reading", side_effect=reading), \
                 patch.object(session, "_resolve", side_effect=brain), \
                 patch.object(session.Session, "_messages", return_value=[]), \
                 patch.object(session.Session, "answered_model", return_value="stub"), \
@@ -8421,16 +8419,20 @@ def main():
         rc, out, _ = spark("read", "how", "I", "use", "ssh", stdin="")
         t.ok(rc == 2 and out.count("\n") == 1 and "the pipe brought no text" in out and "2>&1" in out,
              "read from an empty pipe says so in one line and names 2>&1, exit 2", out)
+        _n0 = len(STATE["bodies"])
         rc, out, err = spark("read", "when", "does", "it", "open", stdin=READ_TEXT)
         t.ok(rc == 0 and out == ('It opens "at nine" and closes "at noon".\n'
                                  'Children go "free for children".\n'),
-             "read: grounded claims survive; a line that quotes nothing and an "
+             "read: grounded claims survive; the reading line, a line that quotes nothing and an "
              "invented quote do not", repr(out) + err)
         t.ok(STATE.get("model") == "ember", "read: the request names the ember role", str(STATE.get("model")))
-        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
-        t.ok(umsg.startswith("when does it open\n\nYou read this as: Portuguese, fiction.\nSource:\n")
-             and "[cwd" not in umsg and "Output:" not in umsg,
-             "read: the reading is restated, the source carries its own label, no cwd", repr(umsg[:110]))
+        _qb = STATE["bodies"][-1]       # the question's request
+        umsg = _qb["messages"][-1]["content"]
+        t.ok(len(STATE["bodies"]) == _n0 + 1 and _qb.get("max_tokens") == 500
+             and umsg.startswith("Source:\nThe gate opens at nine")
+             and umsg.endswith("\n\nThe reader asks: when does it open")
+             and "You read this as" not in umsg and "[cwd" not in umsg and "Output:" not in umsg,
+             "read: one request; the source first under its own label, the words last, no cwd", repr(umsg[:110]))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("mode") == "read-source" and lt.get("kind") == "read" and lt.get("kept") == 2
@@ -8440,17 +8442,64 @@ def main():
         t.ok(isinstance(lt.get("first_ms"), int) and 0 <= lt["first_ms"] <= lt.get("ms", 0),
              "read: the turn keeps the wait to the first kept line", json.dumps(lt)[:200])
         rt = json.loads(open(turns[-1]).read().splitlines()[-2]) if turns else {}
-        t.ok(rt.get("mode") == "edit-read" and rt.get("kind") == "reading" and rt.get("chars") == len(READ_TEXT[:800])
-             and isinstance(rt.get("ms"), int) and not any(k in rt for k in ("line", "answer", "context")),
-             "read: the reading pass is a turn of its own, numbers only, right before the answer's", json.dumps(rt)[:200])
-        rb = STATE["bodies"][-2]        # the reading pass, right before the answer
-        t.ok(rb.get("model") == "spark" and "grammar" in rb and rb.get("temperature") == 0,
-             "read: the reading pass is greedy, so the restated reading is the same bytes on the same source",
-             "%s %s" % (rb.get("model"), rb.get("temperature")))
+        t.ok(rt.get("kind") != "reading", "read: no reading turn before the answer's", json.dumps(rt)[:200])
+        from spark import read as readmod
+        # the reading line: taken out of the stream before the gate, told
+        # once, never on stdout, neither kept nor dropped
+        t.ok(readmod.reading_of("[Portuguese, fiction]") == "Portuguese, fiction"
+             and readmod.reading_of("English, man page") == "English, man page"
+             and readmod.reading_of('It opens "at nine".') is None
+             and readmod.reading_of("Here is what it says:") is None
+             and readmod.reading_of("Yes, it does.") is None
+             and readmod.reading_of("[" + "x" * 80 + "]") is None,
+             "read: reading_of knows the bracketed line, a bare pair, and leaves an answer line alone", "")
+        _told, _got = [], []
+
+        class _Sink:
+            def feed(self, s):
+                _got.append(s)
+        _r = readmod.Reading(_Sink(), _told.append)
+        for _d in ("[Portu", "guese, fic", "tion]\nIt op", 'ens "at nine".\n'):
+            _r.feed(_d)
+        _r.close()
+        _r2, _got2 = readmod.Reading(_Sink(), _told.append), []
+        _r2.stream.feed = _got2.append
+        _r2.feed('It opens "at nine".')
+        _r2.close()
+        _r3, _got3 = readmod.Reading(_Sink(), _told.append), []
+        _r3.stream.feed = _got3.append
+        _r3.feed("A first line that runs on and on without a newline, past the reading's width, as an answer does")
+        _r3.close()
+        t.ok(_told == ["Portuguese, fiction"] and "".join(_got) == 'It op' + 'ens "at nine".\n'
+             and "".join(_got2) == 'It opens "at nine".' and "".join(_got3).startswith("A first line that runs on"),
+             "read: Reading takes the first line out as it streams, passes a one-line reply and a long first line on",
+             repr((_told, "".join(_got)[:40], "".join(_got2)[:30], "".join(_got3)[:30])))
+        # --warm: the text sent ahead, the question's own request without
+        # the words, for one token; nothing printed, a turn of kind warm,
+        # no ledger record
+        _n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "--warm", "--name", "warmgate", stdin=READ_TEXT)
+        wb = STATE["bodies"][-1]
+        wmsg = wb["messages"][-1]["content"]
+        t.ok(rc == 0 and out == "" and err == "" and len(STATE["bodies"]) == _n0 + 1 and wb.get("max_tokens") == 1
+             and wb.get("model") == "ember" and umsg.startswith(wmsg) and wmsg.endswith("The reader asks:")
+             and wb["messages"][0] == _qb["messages"][0],
+             "read --warm: one request, the question's request without the words, one token, nothing printed",
+             repr(out + err) + repr(wmsg[-30:]))
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        wt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(wt.get("kind") == "warm" and wt.get("mode") == "read-source" and wt.get("chars") == lt.get("chars")
+             and wt.get("part") == 1 and wt.get("parts") == 1 and isinstance(wt.get("ms"), int)
+             and not any(k in wt for k in ("first_ms", "kept", "dropped", "line", "answer", "context")),
+             "read --warm: a turn of kind warm, the part's numbers, no wait and no words", json.dumps(wt)[:200])
+        rc, out, _ = spark("read", "--ledger", "--name", "warmgate")
+        t.ok(rc == 0 and "no question asked" in out, "read --warm: no ledger record", out[:80])
+        rc, out, err = spark("read", "--warm", "--part", "3", stdin=READ_TEXT)
+        t.ok(rc == 2 and "there is no part 3" in out + err, "read --warm --part N: a part that is not there is refused, exit 2", out + err)
         rc, _out, _ = spark("read", stdin=READ_TEXT)
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
-        t.ok(rc == 0 and umsg.startswith("What does this source cover?\n\n"),
-             "read: bare asks what the source covers", repr(umsg[:50]))
+        t.ok(rc == 0 and umsg.endswith("\n\nThe reader asks: What does this source cover?"),
+             "read: bare asks what the source covers, last in the request", repr(umsg[-50:]))
         # a source always has its secrets held back: the reading and the
         # answer see [held], never the values; one stderr line; held=N
         n0 = len(STATE["bodies"])

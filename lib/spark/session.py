@@ -145,7 +145,8 @@ def reading(cfg, data, shell="", start=0, act="Answer", answer="source"):
     reader's, from the words they typed -- a reader discussing a
     published source is answered in the language they asked in, not the
     source's; `spark edit ? --source`). Every grounded contract that
-    shows a text to the model opens with this. Any failure is two empty
+    shows a text to the model opens with this, but spark read: its
+    reading is the answer's own first line (read.Reading), one request. Any failure is two empty
     strings: the request goes on without it."""
     # the wait is something to read: at a terminal, stderr says `reading
     # ...` while the pass runs and then the language and kind it named,

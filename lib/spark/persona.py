@@ -1500,8 +1500,10 @@ MODE_READ_SOURCE = (
     "heading, no closing line. Plain text, no markdown marks; a few lines, fewer when "
     "fewer answer. Never add what you know from elsewhere, never guess past the "
     "source's edge, never write 'the text does not mention': when the source does not "
-    "answer, write nothing at all -- the refusal is composed for you. Answer in the "
-    "source's own language.")
+    "answer, write nothing at all -- the refusal is composed for you. Your first line "
+    "is your reading of the source, its language and its kind in square brackets -- "
+    "[Portuguese, news] -- and nothing else on it: it is taken out before the reader "
+    "sees the answer. Every line after it is the answer, in that language.")
 RECALL_SCHEMA = {
     "type": "object",
     "properties": {"candidates": {"type": "array", "items": {"type": "string"}}},

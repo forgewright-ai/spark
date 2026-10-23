@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.98
+
+A faster first line from `spark read` (#78): one request a read, the
+source first, and the text sent ahead while the reader types.
+
+- The source stands first in the request and the words last, so the
+  engine's prompt cache holds the source across questions. A second
+  question about the same source costs its own tokens, not the
+  source's. Before, the question stood first and the whole source was
+  processed again for every question about it
+- The reading pass is gone from `spark read`. The answer's first line
+  is the model's own reading of the source, `[Language, kind]`, taken
+  out before the gate: shown on stderr at a terminal as before, never
+  on stdout, neither kept nor dropped. One request where there were
+  two, and no `edit-read` turn before a read. The other grounded
+  contracts keep their pass
+- `spark read --warm`: the text sent ahead. The same source, held back
+  and cut to the same part, goes in the answer's request shape without
+  the words, for one token, and nothing is printed. A client calls it
+  the moment the text is known, before the reader types, and the
+  question then costs its own tokens. A turn of kind `warm`, numbers
+  only; no ledger record. The cheatsheet row and both completion files
+  know it
+- On the box (gemma4-26b-a4b, a 12 kB man page), from the turn
+  records. Before: a fresh question took 11.2 s in all, its first line
+  after 7.9 s; a second question about the same source processed 2202
+  tokens of it again, first line after 7.0 s. After: a fresh question
+  takes 8.2 s in all, one request; a second question processes 12
+  tokens, first line after 2.0 s; a warmed source answers its first
+  question after 1.6 s. The grounding audition's three read cases
+  (`tests/audition.py --ground --times 3`): 9 of 9 right before, 9 of
+  9 after
+
 ## v1.97.1
 
 - S3: a code block on the page wrapped its long lines, so a drawing

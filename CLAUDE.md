@@ -1951,8 +1951,12 @@ and may change freely.
     (`text.UNGROUNDED`). So is a line that quotes nothing
     (`text.UNQUOTED`): an unquoted sentence about a source is the
     model's own knowledge wearing the source's clothes. Kept lines
-    stream marked. A reading pass runs first (`session.reading`,
-    contract 10's). When nothing survives, stdout stays untouched and
+    stream marked. One request a read. The answer's first line is the
+    model's reading of the source, `[Language, kind]`. `read.Reading`
+    takes it out before the fence and the gate (`read.reading_of` knows
+    the shape). At a terminal stderr shows it as `reading ... English,
+    essay`; it is neither kept nor dropped. A first line that quotes is
+    an answer line. When nothing survives, stdout stays untouched and
     the reply is one line on stderr, exit 1. That line shows the
     source's own opening words (`read.opening`), composed in code and
     never asked of the model. A client tells "no answer" from "an
@@ -1979,13 +1983,18 @@ and may change freely.
     `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
     line. That is the number the prompt cache moves, and `spark stats`
     shows it beside each mode's cache hit rate. Both times start before
-    answer session setup, after the separate reading pass. `ms` ends
+    the answer's session setup. `ms` ends
     after the output gate closes; `first_ms` is absent when no line
     survives. Both use a monotonic clock and leave out ledger writes.
-    The reading pass is greedy (temperature 0). Its words are restated
-    above the source in the request that follows, so a word sampled
-    differently on the same source would break the served prompt's
-    cached prefix. The source is always held back first
+    The source stands first in the request under `Source:`, the words
+    last under `The reader asks:` (`read.context_of`). So the served
+    prompt's cached prefix holds the source across questions, and a
+    second question about the same source costs its own tokens.
+    `--warm` sends that request without the words, for one token, and
+    prints nothing. Exit 0; a turn of kind `warm`, numbers only; no
+    ledger record. A client calls it the moment the text is known,
+    before the reader types. The question's request then processes
+    only its own tokens. The source is always held back first
     (`text.hold_secrets`, contract 10's `--source` rule). Every span
     that looks like a secret becomes `[held]` before the parts are cut,
     one stderr line names the count and the shapes, and the turn records

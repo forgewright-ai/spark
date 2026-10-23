@@ -62,6 +62,7 @@ _spark() {
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(on off boot share https own status --login --audit) ;;
             chat)    comp=(--thread) ;;
+            read)    comp=(--part --name --ledger --warm) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
