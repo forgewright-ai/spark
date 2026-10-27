@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.102
 
 - Desktop tasks can use `spark do --tools`: scoped typed capabilities,
   questions and result-driven continuation. The host retains execution and

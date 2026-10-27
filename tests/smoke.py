@@ -5753,7 +5753,8 @@ def living_waits_cases(t):
         finally:
             _su.subprocess.run, _su.session.last_turn = real_run, real_turn
             sys.stdout, sys.stderr = out, err
-        t.ok("* It is small." in got and dots.startswith("\r\x1b[2K* .") and dots.endswith("\r\x1b[2K"),
+        visible_dots = re.sub(r"\x1b\[[0-9;]*m", "", dots)
+        t.ok("* It is small." in got and visible_dots.startswith("\r\x1b[2K* .") and dots.endswith("\r\x1b[2K"),
              "waits: setup's first question shows today's dots while it waits, then clears them", repr(dots))
 
         # --- the door: setup's closing line, update's once ever
