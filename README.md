@@ -93,6 +93,9 @@ spark chat                      talk with the model
 ```
 
 - `spark do WORDS`: a task, one confirmed command at a time.
+  A desktop can use `spark do --tools` to propose one typed operation,
+  return its result and continue the same task. The desktop owns
+  execution.
 - `spark ask`, `spark read`, `spark drill`, `spark watch`: work with a
   text.
 - `spark model list`: the models and their licenses.
@@ -220,6 +223,10 @@ it on a new install. What each command sends:
   the names of the files the step changed: in `--sandbox`, every file
   that changed in the copy. After a refused option, a few lines of that
   command's man page. A tool's result, the last 4 kB.
+  With `--tools`, the goal, scoped tool schemas and descriptions, the
+  caller's context and earlier results go to the configured model.
+  The caller keeps the bounded continuation in memory; no desktop
+  thread is saved. Credentials and secret-shaped text are held back.
 - `explain`: the piped text, the last 6 kB.
 - `steps`: your words and the tools you pipe in, their names,
   arguments and titles, up to 16 kB. Never a tool's description or a

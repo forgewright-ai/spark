@@ -63,7 +63,7 @@ _spark() {
             serve)   comp=(on off boot share https own status --login --audit) ;;
             chat)    comp=(--thread) ;;
             read)    comp=(--part --name --ledger --warm) ;;
-            do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
+            do)      comp=(--sandbox --detach --porcelain --tools --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
             ver)     comp=(--credits --sbom) ;;

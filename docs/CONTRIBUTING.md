@@ -1,5 +1,13 @@
 # Contributing to spark
 
+Desktop task integration uses `spark do --tools`. Its versioned protocol
+is in `CLAUDE.md`, under contract 16. The host owns consent and
+execution;
+spark owns continuation and decision limits. `tests/tool_run_test.py`
+checks lifecycle and evidence handling without a model. Keep those
+results
+separate from live-model accuracy and latency measurements.
+
 spark is a local AI at the shell prompt, for Linux and macOS. This file
 is the short path to a change that lands.
 

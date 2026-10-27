@@ -1,5 +1,10 @@
 # Roadmap
 
+The desktop task adapter is under review. Before release, measure task
+completion, incorrect actions, recovery and latency through the
+configured model connection. Decision models remain candidates until
+tested on the same held-out tasks.
+
 What comes after v1.101, in rough order. Nothing here is a promise.
 `docs/CHANGELOG.md` says what shipped.
 

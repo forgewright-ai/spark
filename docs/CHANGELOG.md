@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Desktop tasks can use `spark do --tools`: scoped typed capabilities,
+  questions and result-driven continuation. The host retains execution and
+  consent. Unknown outcomes stop, and completion cites observed results.
+  No new model, service or dependency is installed.
+- Task generation requires one typed decision and offers only available
+  inspection targets. It avoids an unused prose field and keeps stable
+  capability descriptions ahead of changing context for prompt reuse.
+- A host's native preparation can ask for missing input without another
+  model call. Preparation is kept separate from execution evidence.
+
 ## v1.101
 
 A second trial of spark's use cases, 85 real tasks run end to end on

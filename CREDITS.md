@@ -9,6 +9,9 @@ and zypper install the rest from their own repositories. spark's own
 code is MIT (`LICENSE`). The banner in `home/.config/spark/banner` is
 spark's own artwork.
 
+The `spark do --tools` adapter uses spark's existing Python runtime and
+model engine. It adds no third-party package or model weights.
+
 ## The engine
 
 llama.cpp -- https://github.com/ggml-org/llama.cpp -- MIT

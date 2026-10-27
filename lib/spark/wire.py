@@ -788,7 +788,7 @@ def gbnf(schema):
 GRAMMAR_STRING_MAX = 256    # a string a tool's schema caps at this or less is capped in its grammar too
 
 
-def tools_gbnf(tools, steps_max):
+def tools_gbnf(tools, steps_max, task=False):
     """The grammar (GBNF) of contract 16's reply: {"answer": string,
     "steps": [step, ...]}, `steps_max` steps at most, each step one of the
     tools -- {"name": its name, "arguments": its arguments}, the name a
@@ -799,13 +799,18 @@ def tools_gbnf(tools, steps_max):
     integer, a number, a boolean, or an array of one of those; an
     optional one may be left out. A tool with a required argument of
     another shape cannot be held to a grammar: ValueError, and the
-    caller does not offer it. The client checks every step after."""
+    caller does not offer it. The client checks every step after. The task
+    adapter requires one step, omits answer and adds complete_after;
+    older callers keep their shape."""
     rules = {}
 
     def value(p, name):
         if not isinstance(p, dict):
             raise ValueError("schema %s: not an object" % name)
         if isinstance(p.get("enum"), list):
+            if task and p.get("type") == "integer" and p["enum"] and all(type(v) is int for v in p["enum"]):
+                rules[name] = " | ".join(_lit(v) for v in p["enum"])
+                return name
             if not p["enum"] or not all(isinstance(v, str) for v in p["enum"]):
                 raise ValueError("schema %s: an enum of strings" % name)
             rules[name] = " | ".join(_lit(v) for v in p["enum"])
@@ -863,8 +868,12 @@ def tools_gbnf(tools, steps_max):
         raise ValueError("no tool to hold a step to")
     rules["step"] = " | ".join(alts)
     more = '(ws "," ws step){0,%d}' % (steps_max - 1) if steps_max > 1 else ""
-    rules["steps"] = '"[" ws (step %s)? ws "]"' % more
-    top = '"{" ws "\\"answer\\"" ws ":" ws string ws "," ws "\\"steps\\"" ws ":" ws steps ws "}"'
+    rules["steps"] = '"[" ws step ws "]"' if task else '"[" ws (step %s)? ws "]"' % more
+    if task:
+        top = '"{" ws "\\"steps\\"" ws ":" ws steps ws "," ws "\\"complete_after\\"" ws ":" ws boolean'
+    else:
+        top = '"{" ws "\\"answer\\"" ws ":" ws string ws "," ws "\\"steps\\"" ws ":" ws steps'
+    top += ' ws "}"'
     return "\n".join(["root ::= %s" % top] + ["%s ::= %s" % kv for kv in rules.items()]) + "\n" + GRAMMAR_BASE
 
 
