@@ -71,6 +71,7 @@ python3 tests/qr_test.py
 python3 tests/mcp_test.py
 python3 tests/tool_run_test.py
 python3 tests/agent_test.py
+python3 tests/agent_audit.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
@@ -84,6 +85,9 @@ python3 bin/spark check --chaos
 ```
 
 `sh tests/gate.sh full` runs the 3 groups in order on your own machine.
+`tests/agent_audit.py` uses the installed pinned runtime's npm to audit
+the complete SDK lock against the public registry. CI requires a clean
+verdict; it runs no install scripts and reads no ambient npm settings.
 It takes about 10 minutes, and nothing asks for it. `SPARK_GATE_PYTHON`
 names the python, and CI on macOS sets it to Apple's.
 

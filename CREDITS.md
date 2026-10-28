@@ -18,7 +18,8 @@ The optional SDK is @earendil-works/pi-coding-agent 1.4.0. Its complete
 dependency closure is pinned in `agent/package-lock.json`, installed
 without lifecycle scripts, and listed with licenses and integrity hashes
 in `spark ver --sbom`. Package license files remain in the
-installed tree.
+installed tree. The manifest overrides undici to 8.12.2 for its upstream
+security fixes; CI audits the full locked closure before release.
 
 Node.js -- https://nodejs.org -- MIT
 (c) Node.js contributors

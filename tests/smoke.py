@@ -3114,7 +3114,7 @@ def own_engine_cases(t):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
         env.update(agent_env())
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
-                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1",
+                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_TIMEOUT": "20", "SPARK_NO_REFRESH": "1",
                     "SPARK_NO_APPLY": "1", "SPARK_PORT": str(port), "SPARK_SHARE_TOKEN": tmp + "/no-share-token",
                     "SPARK_ENGINE_DIR": tmp + "/no-engine", "SPARK_LUA_MUTE": "1",
                     "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
@@ -7147,9 +7147,11 @@ def main():
         # the caller's repo instead of the one spark was pointed at.
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
         env.update(agent_env())
+        # Match production for real SDK startup on loaded runners. Cases
+        # testing model silence still override this with their short budget.
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
-                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+                    "SPARK_TIMEOUT": "20", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
         env.update(init_env(home))
         os.makedirs(home + "/.config/spark")
 

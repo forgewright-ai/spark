@@ -266,6 +266,7 @@ group_rest() {
 
 group_agent() {
     run agent_test.py "$PY" tests/agent_test.py
+    run agent_audit.py "$PY" tests/agent_audit.py
 }
 
 case $mode in

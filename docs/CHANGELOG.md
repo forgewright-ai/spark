@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.105
+
+- The Pi dependency lock pins undici 8.12.2, with its upstream security
+  fixes. Enabled runtimes refresh through the ordinary signed update.
+- CI audits the complete locked SDK dependency closure before release.
+  The audit uses the verified runtime in an empty temporary home, with
+  no lifecycle scripts or ambient npm settings, and requires a clean
+  advisory verdict. Pi remains 1.4.0; host transport and native gates
+  retain their authority.
+
 ## v1.104
 
 - Home tasks, `spark do` and `spark chat` share Pi 1.4.0 sessions.
