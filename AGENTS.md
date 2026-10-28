@@ -10,6 +10,11 @@ becomes a spark app as a client of `spark edit`, in its own
 contracts, the grammar and the release steps. This file is the short
 brief.
 
+The family's vision and principles, shared by every forgewright-ai
+repository, are one page in forgewright-ai/.github:
+`https://github.com/forgewright-ai/.github/blob/main/FAMILY.md`. This
+tree stays the authority for spark's own contracts, code and releases.
+
 ## The landing rule
 
 A change is done only when it is in `spark help`, a `spark` verb, a
