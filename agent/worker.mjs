@@ -157,6 +157,7 @@ async function run() {
   // context window remains available to Pi's session compaction.
   session.agent.streamFunction = (m, c, o) => runtime.stream(m, c, { ...o, fetch: hostFetch,
     env: {}, maxTokens: request.max_tokens, temperature: request.temperature,
+    toolChoice: request.kind === 'command' ? 'required' : undefined,
     samplingParams: { chat_template_kwargs: { enable_thinking: false }, reasoning_budget_tokens: 0,
       parallel_tool_calls: false }, maxRetries: 0 });
   session.agent.beforeToolCall = async ({ assistantMessage }) => {

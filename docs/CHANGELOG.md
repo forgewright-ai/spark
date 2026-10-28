@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.105.1
+
+- S3: a reviewed command could run successfully, then fail when Pi
+  returned its completion as prose. Command sessions require the
+  decision tool for both commands and completion; chat and Home keep
+  their existing response contracts (#124)
+
 ## v1.105
 
 - The Pi dependency lock pins undici 8.12.2, with its upstream security

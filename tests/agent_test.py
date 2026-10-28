@@ -14,7 +14,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from spark import agent, agent_runtime, tool_run, wire
+from spark import agent, agent_runtime, do, tool_run, wire
 
 
 def stream(text="hello", calls=None, finish=None, complete=True, error=None):
@@ -96,6 +96,7 @@ class Sessions(unittest.TestCase):
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.bodies[0]["model"], "ember")
         self.assertNotIn("tools", self.bodies[0])
+        self.assertNotIn("tool_choice", self.bodies[0])
 
     def test_small_context_preserves_the_hosts_reply_budget(self):
         request = dict(self.request, context_window=4096)
@@ -178,10 +179,21 @@ class Sessions(unittest.TestCase):
         self.assertEqual(len(self.bodies), 1)
         self.assertEqual(self.received, [])
 
+    def test_command_completion_requires_a_structured_decision(self):
+        done = {"kind": "done", "command": "", "hint": "Directory printed.", "danger": False, "proof": ""}
+        req = dict(self.request, kind="command", tools=agent.proposal_tools(do.DO_SCHEMA),
+                   messages=[{"role": "user", "content": "Print the current directory."},
+                             {"role": "assistant", "content": "pwd\nPrint the current directory."},
+                             {"role": "user", "content": "Exit 0. Output: /tmp/project"}])
+        result, _ = self.run_request([stream(calls=[("spark_command_proposal", done)])], req)
+        self.assertEqual(result["choice"]["arguments"], done)
+        self.assertEqual(self.bodies[0].get("tool_choice"), "required")
+
     def test_incomplete_or_multiple_tool_calls_never_yield_a_proposal(self):
         req = dict(self.request, kind="command", tools=[{"name": "native", "description": "Native proposal",
                    "properties": {"level": {"type": "integer"}}, "required": ["level"]}])
-        for payload in (stream(calls=[("native", {"level": 30})], complete=False),
+        for payload in (stream("kind:done\nhint:finished"),
+                        stream(calls=[("native", {"level": 30})], complete=False),
                         stream(calls=[("native", {"level": 30}), ("native", {"level": 40})]),
                         stream(calls=[("native", '{"level":')], finish="length")):
             self.bodies.clear()
@@ -203,6 +215,7 @@ class Sessions(unittest.TestCase):
         self.assertIn("Created exact note.", observed[0]["content"])
         self.assertNotIn("Proposal handed", json.dumps(messages))
         self.assertNotIn("native_add", [t["function"]["name"] for t in self.bodies[0]["tools"]])
+        self.assertNotIn("tool_choice", self.bodies[0])
 
     def test_unavailable_prose_is_not_completion_after_a_write(self):
         req = dict(self.request, kind="task", packet={"goal": "Finish", "context": {}, "history": [
