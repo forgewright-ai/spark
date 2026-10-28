@@ -10,6 +10,7 @@
 # the same tree differ only in the timestamp -- tests/smoke.py holds it
 # to that, and tests/docs_test.py to the model set and the flavours.
 
+import base64
 import json
 import os
 import re
@@ -155,10 +156,34 @@ def build(repo=REPO):
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "component": {"type": "application", "name": "spark", "version": version.version()},
         },
-        "components": (_engine(repo) + _voice(repo) + _models(repo) + _distro(repo)
+        "components": (_engine(repo) + _voice(repo) + _agent(repo) + _models(repo) + _distro(repo)
                        + [{"type": "platform", "name": "python", "version": PYTHON_FLOOR}]
                        + _actions(repo)),
     }
+
+
+def _agent(repo):
+    with open(os.path.join(repo, "agent", "node.json"), encoding="utf-8") as f:
+        node = json.load(f)
+    with open(os.path.join(repo, "agent", "package-lock.json"), encoding="utf-8") as f:
+        packages = json.load(f)["packages"]
+    out = [{"type": "application", "name": "node", "version": node["version"],
+            "licenses": [{"license": {"id": "MIT"}}],
+            "hashes": [{"alg": "SHA-256", "content": pin["sha256"]}],
+            "externalReferences": [{"type": "distribution", "url": pin["url"]}],
+            "properties": [_prop("spark:flavour", flavor)]} for flavor, pin in node["platforms"].items()]
+    for path, package in packages.items():
+        if not path:
+            continue
+        name = path.rsplit("node_modules/", 1)[1]
+        _, integrity = package["integrity"].split("-", 1)
+        out.append({"type": "library", "name": name, "version": package["version"],
+                    "purl": "pkg:npm/" + name.replace("@", "%40") + "@" + package["version"],
+                    "hashes": [{"alg": "SHA-512", "content": base64.b64decode(integrity).hex()}],
+                    "licenses": [{"license": {"name": package.get("license", "see package license")}}],
+                    "externalReferences": [{"type": "distribution", "url": package["resolved"]}],
+                    "properties": [_prop("spark:optional", "Pi runtime"), _prop("spark:package-path", path)]})
+    return out
 
 
 def dumps(repo=REPO):

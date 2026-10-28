@@ -9,8 +9,24 @@ and zypper install the rest from their own repositories. spark's own
 code is MIT (`LICENSE`). The banner in `home/.config/spark/banner` is
 spark's own artwork.
 
-The `spark do --tools` adapter uses spark's existing Python runtime and
-model engine. It adds no third-party package or model weights.
+## Tasks and chat
+
+Pi -- https://github.com/earendil-works/pi -- MIT
+(c) Pi contributors
+
+The optional SDK is @earendil-works/pi-coding-agent 1.4.0. Its complete
+dependency closure is pinned in `agent/package-lock.json`, installed
+without lifecycle scripts, and listed with licenses and integrity hashes
+in `spark ver --sbom`. Package license files remain in the
+installed tree.
+
+Node.js -- https://nodejs.org -- MIT
+(c) Node.js contributors
+
+Node 26.13.0 is pinned for macOS and glibc Linux, arm64 and x64, in
+`agent/node.json`. `spark do --agent on` downloads it and the SDK only
+when requested. The system's Node installation is not used. Spark adds
+no model weights for the agent.
 
 ## The engine
 

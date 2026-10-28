@@ -3,6 +3,12 @@ import os
 import sys
 
 
+def agent_env():
+    """The gate's disposable, verified runtime survives a case's env scrub."""
+    root = os.environ.get("SPARK_TEST_AGENT_DIR")
+    return {"SPARK_AGENT_DIR": root} if root else {}
+
+
 def init_env(root, **overrides):
     """Pin absent init markers; a case's explicit seams always win.
 
@@ -11,6 +17,7 @@ def init_env(root, **overrides):
     """
     env = {"SPARK_OS": "Darwin" if sys.platform == "darwin" else "Linux",
            "SPARK_VAR_SERVICE": os.path.join(root, "no-service")}
+    env.update(agent_env())
     if overrides.get("SPARK_OS", env["SPARK_OS"]) != "Darwin":
         env["SPARK_ETC_RUNIT"] = os.path.join(root, "no-runit")
     env.update(overrides)

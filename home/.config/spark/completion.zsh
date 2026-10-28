@@ -63,7 +63,7 @@ _spark() {
             serve)   comp=(on off boot share https own status --login --audit) ;;
             chat)    comp=(--thread) ;;
             read)    comp=(--part --name --ledger --warm) ;;
-            do)      comp=(--sandbox --detach --porcelain --tools --review --accept --discard) ;;
+            do)      comp=(--sandbox --detach --porcelain --tools --agent --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
             ver)     comp=(--credits --sbom) ;;
@@ -75,6 +75,8 @@ _spark() {
             mcp)     comp=(add rm trust call read status ${(f)"$(_spark_mcp_names)"}) ;;
             steps)   comp=(--about) ;;
         esac
+    elif (( CURRENT == 4 )) && [[ ${words[2]} == do && ${words[3]} == --agent ]]; then
+        comp=(on off status)
     fi
     (( ${#comp} )) && compadd -- "${comp[@]}"
     return 0

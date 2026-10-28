@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.104
+
+- Home tasks, `spark do` and `spark chat` share Pi 1.4.0 sessions.
+  The runtime generates proposals and responses; Spark retains native
+  review, execution, sandbox checks, receipts and sealed chat storage.
+- `spark do --agent on` installs the pinned SDK and Node 26.13.0.
+  No system Node, package manager or background agent is required.
+  `status`, `off`, the check row, completions and SBOM cover its lifecycle.
+  Updates refresh enabled runtimes from signed pins; failed setup does
+  not activate a partial installation.
+- Model transport remains in Spark with the configured credentials,
+  TLS checks and send accounting. The child has no network, write,
+  subprocess or native addon permission and cannot discover local skills
+  or save plaintext sessions. Interrupted chat retains its partial text;
+  a failed turn cannot replay an earlier answer or retry visible output.
+
 ## v1.103
 
 - The model table's grounding scores are new, from the third benchmark

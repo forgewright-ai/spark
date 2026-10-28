@@ -13,7 +13,7 @@ import os
 import sys
 import time
 
-from . import config, do, mcp, session, steps, wire
+from . import agent, config, do, mcp, session, steps, wire
 
 VERSION = 1
 INPUT_MAX = 262144
@@ -249,11 +249,8 @@ def model_decision(packet, tools):
     msgs = s._messages("Choose the next action for this task.", encoded(packet))
     if len(msgs[-1]["content"]) > do.budget(cfg, len(msgs[0]["content"])):
         raise Invalid("the task exceeds the model context; offer fewer capabilities or a larger local context")
-    grammar = wire.tools_gbnf([(t.name, steps.grammar_args(t)) for t in tools], 1, task=True)
     started = time.monotonic()
-    reply, s.timings = s._retry_fresh(lambda: wire.chat_grammar(
-        cfg, s.url, msgs, grammar, max_tokens=600, forge=s.forge, model=s.role, timeout=60))
-    s.note_sent(s.timings)
+    reply = s._retry_fresh(lambda: agent.task(s, packet))
     s.record(kind="do-tools", tools=len(tools), ms=int((time.monotonic() - started) * 1000))
     return reply
 

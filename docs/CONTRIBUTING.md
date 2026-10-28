@@ -8,6 +8,14 @@ checks lifecycle and evidence handling without a model. Keep those
 results
 separate from live-model accuracy and latency measurements.
 
+`tests/agent_test.py` exercises the actual pinned Pi SDK and Node with
+synthetic model streams. The full gate installs them in a disposable
+directory. `SPARK_TEST_AGENT_DIR` can reuse an already verified test
+runtime; it is never a system Node lookup. Test partial streams,
+compaction, cancellation, tool batches, permissions and archive
+integrity before changing the adapter. Python uses only its
+standard library.
+
 spark is a local AI at the shell prompt, for Linux and macOS. This file
 is the short path to a change that lands.
 

@@ -66,6 +66,9 @@ TASKS
   spark do --discard ID           drop a waiting run
   spark do --porcelain <words>    JSON lines, for a program
   spark do --tools                JSON task decision; the host runs tools
+  spark do --agent on             install Pi for Home tasks, do and chat
+  spark do --agent status         check the pinned runtime
+  spark do --agent off            disable it and remove its downloads
   spark do -- <words>             a goal that starts with -
 
 READING AND WRITING

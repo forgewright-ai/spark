@@ -22,7 +22,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from fixtures import init_env, chat_readline_unavailable
+from fixtures import init_env, chat_readline_unavailable, agent_env
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPARK = os.path.join(REPO, "bin", "spark")
@@ -192,6 +192,18 @@ class Stub(BaseHTTPRequestHandler):
         self.send_header("x-linked-etag", '"%s"' % hashlib.sha256(body).hexdigest())
         self.end_headers()
 
+    def _sse_tool(self, arguments, finish="tool_calls"):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        chunks = [{"choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+            {"index": 0, "id": "proposal", "type": "function", "function": {
+                "name": "spark_command_proposal", "arguments": arguments}}]}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": finish}], "timings": TIMINGS}]
+        for chunk in chunks:
+            self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())
+        self.wfile.write(b"data: [DONE]\n\n")
+
     def do_POST(self):
         STATE["hits"] += 1
         n = int(self.headers.get("Content-Length", 0))
@@ -214,6 +226,10 @@ class Stub(BaseHTTPRequestHandler):
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
         STATE.setdefault("lengths", []).append(n)     # and what each weighed on the wire, in step with bodies
         system = messages[0]["content"]
+        if [t.get("function", {}).get("name") for t in body.get("tools", [])] == ["spark_command_proposal"]:
+            if STATE.get("cut_out"):
+                return self._sse_tool('{"kind":"cmd","command":"cat << EOF > s', finish="length")
+            return self._sse_tool(json.dumps(dict({"proof": "", "command": "", "danger": False, "hint": ""}, **answer_json(messages))))
         if "think_after" in STATE and body.get("grammar"):
             # think_after N: N requests shaped by a schema pass, then
             # the next one thinks (a turn's second ask, say)
@@ -953,7 +969,7 @@ class T:
         self.skipped = 0
 
     def ok(self, cond, what, extra=""):
-        print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + extra) if extra and not cond else ""))
+        print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + str(extra)) if extra and not cond else ""))
         if not cond:
             self.fail += 1
 
@@ -3096,6 +3112,7 @@ def own_engine_cases(t):
     try:
         eng, port, url, log = serve()
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update(agent_env())
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1",
                     "SPARK_NO_APPLY": "1", "SPARK_PORT": str(port), "SPARK_SHARE_TOKEN": tmp + "/no-share-token",
@@ -5106,6 +5123,7 @@ def living_core_cases(t):
     home = os.path.join(tmp, "home")
     os.makedirs(os.path.join(home, ".config", "spark"))
     env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+    env.update(agent_env())
     env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                 "XDG_DATA_HOME": home + "/.local/share", "SPARK_NO_REFRESH": "1", "TERM": "xterm", "LANG": "C.UTF-8"})
 
@@ -5346,6 +5364,7 @@ def living_awaken_cases(t):
 
     def home_env(home, url):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update(agent_env())
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
                     "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8",
@@ -6341,6 +6360,7 @@ def check_history_cases(t):
     state = os.path.join(base, "verb", "spark")
     os.makedirs(state)
     env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "SITE_", "GIT_"))}
+    env.update(agent_env())
     env.update({"XDG_STATE_HOME": os.path.dirname(state), "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
 
     def spark(*args, extra=None):
@@ -6674,6 +6694,7 @@ def own_mark_cases(t, url):
     # the stub model: the prompt line, as a shell runs it
     with tempfile.TemporaryDirectory(prefix="spark-smoke-own-") as home:
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update(agent_env())
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
                     "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8",
@@ -7125,6 +7146,7 @@ def main():
         # calls (spark ver's credits line, the fork test below) run against
         # the caller's repo instead of the one spark was pointed at.
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update(agent_env())
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
                     "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
@@ -9930,6 +9952,9 @@ def main():
             def do_POST(self):
                 n = int(self.headers.get("Content-Length", 0))
                 req["body"] = json.loads(self.rfile.read(n))
+                if req["body"].get("tools"):
+                    reply = dict({"proof": "", "command": "", "danger": False, "hint": ""}, **answer_json(req["body"]["messages"]))
+                    return self._sse_tool(json.dumps(reply))
                 if req["body"].get("stream") and not req["body"].get("grammar"):
                     return self._sse(("ok",))
                 reply = answer_json(req["body"]["messages"]) if is_do(req["body"]["messages"]) else {"kind": "answer", "command": "", "hint": "ok", "danger": False}
@@ -10705,12 +10730,12 @@ def main():
         rc, out, err = spark("do", "bigout", "goal", stdin="\n" * 9, extra=dict(hook, SPARK_CTX="4096"), cwd=work)
         bodies = [b for b in STATE["bodies"][n0:] if is_do(b["messages"])]
         cap = int((4096 - _do.DO_MAX_TOKENS) * _reveal.CHARS_PER_TOKEN * _do.CTX_SHARE)
-        sizes = [sum(len(m["content"]) for m in b["messages"]) for b in bodies]
+        sizes = [sum(len(m["content"]) for m in b["messages"]) + len(json.dumps(b.get("tools", []))) for b in bodies]
         last = bodies[-1]["messages"] if bodies else []
-        t.ok(rc == 1 and len(bodies) == 8 and max(sizes) <= cap and sum(len(m["content"]) for m in last[1:]) > 4000,
+        t.ok(rc == 1 and len(bodies) == 8 and max(sizes) <= cap and sum(len(m["content"]) for m in last[1:]) > 3000,
              "spark do: a run of 4 kB outputs stays under the budget of the served context", (sizes, cap))
         t.ok(all(b["messages"][1]["content"] == "[cwd %s]\nbigout goal" % os.path.realpath(work) for b in bodies)
-             and "(output trimmed, exit 0)" in [m["content"] for m in last]
+             and any("(output trimmed, exit 0)" in m["content"] for m in last)
              and [m["role"] for m in last[1:]] == ["user", "assistant"] * ((len(last) - 1) // 2) + ["user"] * ((len(last) - 1) % 2),
              "spark do: the goal is kept, the oldest outputs become (output trimmed, exit N), the roles alternate",
              [m["content"][:40] for m in last])
@@ -13525,10 +13550,10 @@ site.cmd_headless([])
         t.ok(_got == "use \x1b[1m`vi`\x1b[22m and \x1b[1m`llama.cpp`\x1b[22m, then `main`.\n\n", "Wrap at a tty: a mark before a backtick opens", repr(_got))
         # a stream that goes quiet mid-reply is one line, never a traceback
         rc, out, err = spark("chat", "stall", extra={"SPARK_TIMEOUT": "1"})
-        t.ok(rc != 0 and "Traceback" not in err and "went quiet for 1" in err and "incomplete" in err and out.startswith("* Half an"),
+        t.ok(rc != 0 and "Traceback" not in err and "went quiet" in err and "incomplete" in err and out.startswith("* Half an"),
              "chat: a reply that stalls past SPARK_TIMEOUT ends in one line, the half kept", repr(out + err))
         rc, out, err = spark("chat", stdin="stall\n:q\n", extra={"SPARK_TIMEOUT": "1"})
-        t.ok(rc == 0 and "Traceback" not in err and err.startswith("! http"), "chat REPL: a stalled brain is one line, the chat goes on", repr(err))
+        t.ok(rc == 0 and "Traceback" not in err and err.startswith("! ") and "went quiet" in err and "incomplete" in err, "chat REPL: a stalled brain is one line, the chat goes on", repr(err))
         # v1.43: the reveal inside the streaming verbs
         import time as _time
         _p = _Tty()

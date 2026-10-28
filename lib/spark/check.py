@@ -905,6 +905,17 @@ def row_sandbox(ctx):
 
 
 @row("CAPABILITY")
+def row_agent(ctx):
+    from . import agent_runtime
+    state = agent_runtime.status()
+    if state == "ready":
+        return ok("Pi ready for Home tasks, do and chat")
+    if state == "off":
+        return na("off", "spark do --agent on")
+    return warn(state, "spark do --agent on")
+
+
+@row("CAPABILITY")
 def row_voice(ctx):
     """spark voice: off is na, its remedy the clear voice. On or clear,
     the engine and its models are here and are voice.env's pins (each
@@ -2552,6 +2563,15 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         f.write("".join("%s=%s\n" % kv for kv in sorted(look_env.items())))
     # the voice row: clear in both; the good fixture's engine is here (each
     # part where it lands and its sha file the pin's), the bad one's is not
+    from . import agent_runtime
+    adir = os.path.join(root, "agent-runtime")
+    os.makedirs(os.path.join(adir, "node", "bin"))
+    os.makedirs(os.path.join(adir, "sdk"))
+    _stub(os.path.join(adir, "node", "bin", "node"), "#!/bin/sh\nexit 0\n")
+    with open(os.path.join(adir, "sdk", "package-lock.json"), "w") as f:
+        f.write("{}\n")
+    with open(os.path.join(adir, "verified"), "w") as f:
+        f.write((agent_runtime.pins()[2] if good else "old") + "\n")
     fd_ = os.open(os.path.join(cfgd, "spark.env"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(fd_, "w") as f:
         f.write("SPARK_VOICE=clear\n")
@@ -2682,6 +2702,7 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             "XDG_DATA_HOME": os.path.join(home, ".local", "share"),
             "PATH": os.path.join(home, ".local", "bin") + ":" + bin_ + ":" + os.environ.get("PATH", ""),
             "SPARK_REPO": repo, "SPARK_ENGINE_DIR": engine if good else os.path.join(root, "nope"),
+            "SPARK_AGENT_DIR": adir,
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
             "SPARK_PROC_VERSION": os.path.join(root, "version"),
             "SPARK_OS_RELEASE": os.path.join(root, "os-release"),

@@ -193,7 +193,7 @@ REFUSED_OPAQUE = ("`%s` -- %s: what it does is not on the line -- refused over -
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
 CAPPED = "stopped at %d steps -- spark do again to go on" % DO_MAX_STEPS
 UNCHECKED = "unchecked: no step printed %s -- trust the outputs above"
-OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--tools", "--review", "--accept", "--discard")
+OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--tools", "--agent", "--review", "--accept", "--discard")
 # a checksum tool's line -- `DIGEST  NAME`, or `DIGEST *NAME` in binary
 # mode -- keeps its digest: a hash a step was asked to print is not a
 # secret, and 64 hex digits read as "a long base64 run". do's one
@@ -278,6 +278,9 @@ DO_USAGE = """%s do -- a task, step by step
                                JSON lines, for a program
   spark do --tools             one task decision from JSON on stdin;
                                the caller confirms and executes tools
+  spark do --agent on          install Pi for Home tasks, do and chat
+  spark do --agent off         disable Pi and remove its downloads
+  spark do --agent status      show whether the runtime is ready
   spark do -- <words>          a goal that starts with - or is help
 
   At each step: Enter runs it, e edits it, s skips it, q quits, and r
@@ -387,7 +390,8 @@ def fit(msgs, room):
     shortened to TRIMMED first, then the oldest exchanges after the goal
     are dropped, an assistant step with the answer it got, so the roles
     still alternate. The goal and the newest step with its answer are
-    always kept: a run that lost its goal proposes for nothing. The
+    always kept; oversized newest feedback keeps its head and tail.
+    A goal that cannot fit is refused, never silently cut. The
     thread on disk keeps everything; only the request is cut."""
     out = [dict(m) for m in msgs]
     total = sum(len(m["content"]) for m in out)
@@ -400,6 +404,16 @@ def fit(msgs, room):
             m["content"] = short
     while total > room and len(out) > 3:
         total -= len(out.pop(1)["content"]) + len(out.pop(1)["content"])
+    if total > room and len(out) >= 3 and _trimmed(out[-1]) is not None:
+        newest = out[-1]["content"]
+        marker = "\n" + _trimmed(out[-1]) + "\n"
+        keep = len(newest) - (total - room) - len(marker)
+        if keep >= 256:
+            head = keep // 2
+            out[-1]["content"] = newest[:head] + marker + newest[-(keep - head):]
+            total = room
+    if total > room:
+        raise wire.BrainError("bad", "the goal and latest step do not fit the model context; use a shorter goal or a larger context")
     return out
 
 
@@ -580,13 +594,15 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
     not. The Session comes back so the caller records the turn with the
     server's timings and the stem that answered (Session.record). Never
     runs anything. Raises BrainError."""
+    from . import agent
     s = session.Session(cfg, "do", shell, cwd, None, brain)
-    room = budget(cfg, len(s._system()))
+    room = budget(cfg, len(s._system()) + agent.proposal_overhead(DO_SCHEMA))
     if history is None:
         history = _thread_messages(thread)
     sent = history if landed else history + [{"role": "user", "content": persona.user_message(text, cwd)}]
-    s.history = fit(sent, room)[:-1]        # the newest message is `text`'s own, rebuilt by ask_json
-    raw, ms = s.ask_json(text, DO_SCHEMA, max_tokens=DO_MAX_TOKENS)
+    fitted = fit(sent, room)
+    s.history = fitted[:-1]
+    raw, ms = s._retry_fresh(lambda: agent.propose(s, fitted, DO_SCHEMA, DO_MAX_TOKENS))
     command = step_text(textmod.utf8(str(raw.get("command") or "")))
     hint = _plain(textmod.utf8(str(raw.get("hint") or "")))
     proof = " ".join(textmod.utf8(str(raw.get("proof") or "")).split())
@@ -1811,6 +1827,9 @@ def _usage(rc):
 
 
 def cmd_do(args):
+    if args and args[0] == "--agent":
+        from . import agent_runtime
+        return agent_runtime.main(args[1:])
     if args == ["--tools"]:
         from . import tool_run
         return tool_run.main()
@@ -1828,6 +1847,8 @@ def cmd_do(args):
         return _usage(0)
     if "--tools" in flags:
         return face.refuse("--tools takes one JSON request on stdin and no other options or words")
+    if "--agent" in flags:
+        return face.refuse("--agent takes on, off or status, without a goal or other options")
     verbs = [f for f in flags if f in ("--review", "--accept", "--discard")]
     if verbs and porcelain:
         return face.refuse("%s is not a run -- use it without --porcelain" % verbs[0])

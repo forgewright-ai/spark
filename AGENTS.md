@@ -70,6 +70,7 @@ python3 tests/knowledge_test.py
 python3 tests/qr_test.py
 python3 tests/mcp_test.py
 python3 tests/tool_run_test.py
+python3 tests/agent_test.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
@@ -130,9 +131,10 @@ job then runs a real bootstrap on the runner. The `debian`, `arch`,
 `void`, `fedora` and `opensuse` jobs run the one-liner as a new user
 in a container. The `void` job starts a runsvdir first, so it
 proves `spark-check` running supervised. The `workflows` job runs
-zizmor over the workflows, medium and above failing. The `green`
-job needs every other job: the one name a ruleset on `main` can
-require. `codeql.yml` is
+zizmor over the workflows, medium and above failing. The `agent` matrix
+also runs the pinned SDK on macOS and Linux, arm64 and x64. The `green`
+job needs every other job: the one name a ruleset on `main` can require.
+`codeql.yml` is
 GitHub's static analysis over the python and the javascript.
 `advisories.yml` opens one issue when llama.cpp publishes a security
 advisory after the engine pin's date, and one when sherpa-onnx does
@@ -398,6 +400,14 @@ The desktop adapter of `spark do --tools` is part of contract 16. It
 owns task continuation; a host owns tool authorization and execution.
 Tests with scripted decisions prove control flow, never live model
 quality.
+
+Home, do and chat share the pinned Pi SDK through `lib/spark/agent.py`.
+It generates proposals in a bounded Node child; the Python/native hosts
+retain authentication, confirmation, execution and saved history. The
+full gate installs the runtime in a disposable directory and exercises
+the real SDK with synthetic streams. Runtime changes must keep the
+signed download pins, SBOM, check row and lifecycle documentation
+aligned.
 
 The interfaces between parts live in `CLAUDE.md`, "Contracts": `spark
 line`, `spark check`, the config file shape, the `FORGE` HTTP API and
