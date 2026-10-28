@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.103
+
+- The model table's grounding scores are new, from the third benchmark
+  report (spark v1.102, 2026-10-27): `tests/audition.py --ground`, 10
+  cases, 3 runs each, for every model `auto` may pick. gemma4-26b-a4b
+  and gemma4-e4b are right 27 times in 30, granite-4-2-8b 26,
+  qwen3-8b 22, qwen3-5-4b 20, qwen3-14b 19, qwen3-4b 17 and
+  qwen3-5-2b 15. qwen3-30b-a3b has its first score, 24. `auto`'s
+  choice does not move: every row that had a score still has one
+  (#122)
+
 ## v1.102
 
 - Desktop tasks can use `spark do --tools`: scoped typed capabilities,

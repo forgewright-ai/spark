@@ -11387,7 +11387,8 @@ def main():
                     'MODEL_LLAMA3_2_1B="Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/'
                     'Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf 807694464 '
                     '6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83 3"\n'
-                    'MODEL_LLAMA3_2_1B_LICENSE="Llama-3.2-Community-License https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"\n')
+                    'MODEL_LLAMA3_2_1B_LICENSE="Llama-3.2-Community-License https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"\n'
+                    'MODEL_LLAMA3_2_1B_TESTED="line"\n')
         marks = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64",
                  "SITE_AI_MODEL": "qwen3-5-2b", "SITE_EMBER_MODEL": "qwen3-4b"}
         rc, out, _ = spark("model", "list", extra=marks)
@@ -11397,7 +11398,9 @@ def main():
              and "Llama-3.2- " not in out and "Gemma-Term " not in out,
              "spark model list: a license's first word in whole parts, never cut mid-part", out)
         t.ok(all(len(ln) <= 80 for ln in out.splitlines()[1:]), "spark model list: the sized license column keeps 80 columns", out)
-        t.ok(re.search(r"^     qwen3-30b-a3b .* Apache-2\.0 +line ", out, re.M), "a tested row says line", out)
+        # every tested row of models.env has a ground score: yours stands in
+        t.ok(re.search(r"^ +u +llama3-2-1b .* Llama-3\.2 +line ", out, re.M), "a tested row with no score says line", out)
+        t.ok(re.search(r"^     gemma4-26b-a4b .* Apache-2\.0 +\d+/\d+ ", out, re.M), "a scored row says its score", out)
         t.ok(re.search(r"^     qwen3-coder-30b-a3b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
         t.ok("u = yours" in out and "auto: the first tested row that fits" in out, "the legend names the mark and the auto rule", out)
         t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
