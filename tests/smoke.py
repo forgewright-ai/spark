@@ -4405,6 +4405,11 @@ def chat_voice_pty_cases(t, env, home):
             stop = time.time() + secs
             while want and not PROMPT_AT.search(got[mark:]) and status is None and time.time() < stop:
                 pump(0.1)
+            # a step that waits for a prompt that never comes once passed
+            # after 20 silent seconds: it fails now, and says which step
+            if want and status is None and not PROMPT_AT.search(got[mark:]):
+                t.ok(False, "chat pty (%s): the prompt a step waits for comes before it types %r" % (lib, data),
+                     got[-300:])
             mark = len(got)
             if status is None:
                 os.write(fd, data)
@@ -4490,8 +4495,9 @@ def chat_voice_pty_cases(t, env, home):
     # puzzled line is read too
     clear = dict(e, SPARK_VOICE="clear")
     os.remove(os.path.join(state, "look"))
+    # Esc x stops the speaking and draws no new prompt: /nope follows at once
     st, text, alive = drive(clear, [("\nchat>", b"\x1bv", 1.5), (None, b"\r", 0.2), ("\nchat>", b"/again\r", 0.3),
-                                    ("\nchat>", b"\x1bx", 0.5), ("\nchat>", b"/nope\r", 0.3), ("\nchat>", b"\x04", 2.0)])
+                                    ("\nchat>", b"\x1bx", 0.5), (None, b"/nope\r", 0.3), ("\nchat>", b"\x04", 2.0)])
     said = spoken()
     t.ok(ended(st) and "* listening -- a pause ends it" in text and "chat> how many files are here" in text
          and text.count("The output means X.") == 2 and alive[0],
@@ -4514,7 +4520,8 @@ def chat_voice_pty_cases(t, env, home):
          "chat pty (%s): clear -- the reply spoken sentence by sentence as it streams: the first said before the "
          "stream ended, 3.14 and e.g. never a sentence's end, the rest at the end" % lib,
          repr((said, early, text[-300:])))
-    st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), ("\nchat>", b"\x04", 2.0)])
+    # the line it says is printed above the prompt it keeps: Ctrl-D follows at once
+    st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), (None, b"\x04", 2.0)])
     t.ok(ended(st) and "! the voice is off -- spark voice on, then Esc v" in text
          and "chat> how many" not in text and not spoken(),
          "chat pty (%s): voice off -- Esc v says how to turn it on, nothing heard or said" % lib,
