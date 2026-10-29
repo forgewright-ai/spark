@@ -479,7 +479,13 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 `full [smoke|serve|rest]` what CI runs, one job per group;
                 the hooks and ci.yml name no test themselves; the selftest
                 and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
-                stops full at the first suite that fails)
+                stops full at the first suite that fails; full runs the
+                suites side by side through gate_run.py unless
+                SPARK_GATE_JOBS=1, ci.yml's too)
+                gate_run.py (full's runner: the suites SPARK_GATE_JOBS at
+                a time, the CPU count by default, 3 at most on macOS, the
+                longest first by ~/.cache/spark/gate-times, each log
+                printed whole when its suite ends; --selftest on stand-ins)
                 land.sh (lands a commit: a try/ branch, CI, then main moved
                 forward to the same commit; `--passed SHA` is the one check
                 "ci.yml passed", asked by the pre-push hook and release.yml)

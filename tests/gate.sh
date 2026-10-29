@@ -26,16 +26,28 @@ bad() { printf 'gate: %s\n' "$*"; fail=1; failed="$failed
 
 # run LABEL COMMAND...: one suite. fast keeps it quiet, full shows it under
 # a `== LABEL` line. Every tests/ file the gate runs is on a `run` line.
-# SPARK_GATE_FAIL_FAST=1 (ci.yml) stops full at the first suite that fails,
-# so a red run says so in minutes; at a desk every suite runs
+# full runs them side by side through tests/gate_run.py, unless
+# SPARK_GATE_JOBS=1 (ci.yml: a job is one group), which runs them here, one
+# at a time. SPARK_GATE_FAIL_FAST=1 (ci.yml) stops full at the first suite
+# that fails, so a red run says so in minutes; at a desk every suite runs
+queue=
 run() {
     label=$1; shift
     if [ "$mode" = fast ]; then
         "$@" >/dev/null || bad "$label"
+    elif [ -n "$queue" ]; then
+        printf '%s\t%s\n' "$label" "$(quote "$@")" >> "$queue"
     else
         printf '== %s\n' "$label"
         "$@" || { bad "$label"; [ -z "${SPARK_GATE_FAIL_FAST:-}" ] || { printf 'gate: refused, stopped at the first%s\n' "$failed"; exit 1; }; }
     fi
+}
+
+# quote ARG...: each one shell word, for the runner's queue
+quote() {
+    for a in "$@"; do
+        printf "'%s' " "$(printf '%s' "$a" | sed "s/'/'\\\\''/g")"
+    done
 }
 
 # --- the privacy gate: staged content, the staged names, the branch ------
@@ -257,6 +269,7 @@ group_rest() {
     # the patch lane's fence: the tree, then the fence proven on a scratch repository
     run patch_test.py "$PY" tests/patch_test.py
     run "patch_test selftest" "$PY" tests/patch_test.py --selftest
+    run "gate_run selftest" "$PY" tests/gate_run.py --selftest
     # the widgets at a pty: zsh on a Mac, bash on Linux; the pager on both
     case $os in
         Darwin) run "widget_pty shell" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh
@@ -280,6 +293,7 @@ case $mode in
         # git dir, and every git -C in them would answer for that instead)
         unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
         "$PY" --version
+        [ "${SPARK_GATE_JOBS:-}" = 1 ] || queue=$(mktemp)
         case $group in
             '')    group_smoke; group_serve; group_rest ;;
             smoke) group_smoke ;;
@@ -287,6 +301,12 @@ case $mode in
             rest)  group_rest ;;
             *)     echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2 ;;
         esac
+        if [ -n "$queue" ]; then
+            failed_to=$(mktemp)
+            "$PY" tests/gate_run.py "$queue" "$failed_to" || bad "gate_run.py"
+            while IFS= read -r label; do bad "$label"; done < "$failed_to"
+            rm -f "$queue" "$failed_to"
+        fi
         printf '== end\n'
         ;;
     *)
