@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.108
+
+- `spark serve off` waits for a unit only when one was running. A
+  server started by hand does not leave with a unit, so the verb took
+  the unit's 20 seconds for nothing, and so did its test (#133).
+- Every `spark` call starts about 40 ms sooner on Python 3.12 and
+  newer. The TLS trust handler built a default context at import, and
+  loaded the system's CAs with it, for a connection it never made
+  (#134).
+- The full gate runs its suites side by side: `tests/gate_run.py`, the
+  CPU count at a time, the longest first by the last run's times, each
+  log printed whole when its suite ends. `smoke.py` runs in four parts
+  (`--part line|read|machine|tree`) and `widget_pty.py` in three
+  (`session`, `living`, `rows`), suites of their own. 18 minutes in a
+  row on 4 cores, about 4 on a 10-core Mac. CI keeps one suite at a
+  time, runs the selftest and chaos first, and stops at the first
+  suite that fails (#135, #136, #137, #138, #139).
+- The streamed line's test waits on a latch, not a clock: the stub
+  held its hint for 1.5 s, and a driver that stalled longer reordered
+  them (#137). A chat step that waits for a prompt that never comes
+  fails now; two such steps cost 45 silent seconds (#138). Two tests
+  silently needed `gh` and `curl` on PATH, or a git identity, and
+  failed without them.
+- A Claude Code cloud session turns the repository's hooks on and
+  installs the gate's tools at its start, and names the command that
+  runs the full gate as a user of its own: the session is root, and
+  the knowledge index never builds as root (#128, #129, #130).
+
 ## v1.107
 
 - `spark steps` serves a desktop's whole tree: 128 tools and 32 kB of

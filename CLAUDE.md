@@ -452,7 +452,10 @@ templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,c
                 (the 3 launchd agents); .config/spark/sv/spark-{serve,forge,check}/
                 (the 3 runit service directories: run, finish, log/run; rendered
                 only where /etc/runit is a directory)
-tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
+tests/          smoke.py (the spine end to end against a stub engine; its
+                body is four parts, --part line|read|machine|tree, suites of
+                their own in the gate, and bare runs the four in a row)
+                serve_smoke.py forge_smoke.py bench_smoke.py
                 policy_test.py (every row of forgeserve.ROUTES with 3
                 callers: nobody, a user, the admin)
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
@@ -471,9 +474,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 the splitter, the lead-in, the Reader's two stages timed)
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice)
-                widget_pty.py (the widgets at a pty, in two parts the gate
-                runs side by side -- the one long session, then the shells
-                of their own -- the pager, and completion)
+                widget_pty.py (the widgets at a pty, in three parts the
+                gate runs side by side -- the one long session, the living
+                prompt, the shells of their own -- the pager, and completion)
                 check_selftest.py (a standalone entry to spark check --selftest)
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)

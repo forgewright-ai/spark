@@ -7116,6 +7116,28 @@ def tls_cases(t):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+PARTS = ("line", "read", "machine", "tree")   # the body's four parts: see main()
+
+# a mail with three secret shapes -- a one-time code, a link token, an sk-
+# key -- held back by two parts (edit ? --source in line, spark read in read)
+SIGNIN_CODE, SIGNIN_TOKEN, SIGNIN_KEY = "482913", "Zq8xT3kLmN4pW7vR2s", "sk-" + "abcdefghijklmnopqrstuvwx1234"  # spark:allow-secret
+SIGNIN_MAIL = ("Subject: your sign-in\n\nYour verification code is 482913.\n"  # spark:allow-secret
+               "Reset it here: https://192.0.2.7/r?reset=Zq8xT3kLmN4pW7vR2s\n"  # spark:allow-secret
+               "Your new key is " + SIGNIN_KEY + " -- keep it safe.\n")
+
+
+def parts_asked(argv):
+    """The parts argv asks for: all with no words, `--part NAME[,NAME]` for
+    some; None after the usage line for anything else (exit 2)."""
+    if not argv:
+        return set(PARTS)
+    if len(argv) == 2 and argv[0] == "--part" and argv[1] and all(w in PARTS for w in argv[1].split(",")):
+        return set(argv[1].split(","))
+    print("usage: python3 tests/smoke.py [--part %s]" % "|".join(PARTS))
+    return None
+
+
+
 def main():
     # a Ctrl-C case sends SIGINT to a spark it started, as a terminal's
     # Ctrl-C reaches its foreground job. A shell's background job (`&`)
@@ -7125,27 +7147,14 @@ def main():
         signal.signal(signal.SIGINT, signal.default_int_handler)
     srv, url = start_stub()
     t = T()
-    config_parity_cases(t)
-    with tempfile.TemporaryDirectory(prefix="spark-smoke-") as home:
-        # GIT_* stripped too: a caller's GIT_DIR/GIT_INDEX_FILE (a pre-commit
-        # hook, say) must never leak into a spawned `spark`, or its own git
-        # calls (spark ver's credits line, the fork test below) run against
-        # the caller's repo instead of the one spark was pointed at.
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
-        env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
-                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
-                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
-        env.update(init_env(home))
-        os.makedirs(home + "/.config/spark")
+    want = parts_asked(sys.argv[1:])
+    if want is None:
+        return 2
 
-        def spark(*args, stdin="", extra=None, exe=SPARK, cwd=None):
-            e = dict(env)
-            e.update(extra or {})
-            p = subprocess.run([sys.executable, exe] + list(args), input=stdin, capture_output=True, text=True, env=e, timeout=30, cwd=cwd)
-            return p.returncode, p.stdout, p.stderr
-
-        print("smoke: stub llama-server at %s, HOME %s" % (url, home))
-
+    # the body in four parts, nested so every line keeps its place:
+    # each closes over home, env, url, spark and t, bound below before
+    # it is called; --part runs one, the gate all four side by side
+    def part_line():
         platform_tests = subprocess.run([sys.executable, os.path.join(REPO, "tests", "platform_test.py")],
                                         capture_output=True, text=True, timeout=30)
         t.ok(platform_tests.returncode == 0, "synthetic platform and safety regressions",
@@ -8057,12 +8066,6 @@ def main():
         # threads: `?` starts one, `?? ` goes on with it (the stub counts the
         # messages). v1.4: threads live sealed in the auto-minted account's
         # store, users/<name>/threads/<id>.sealed
-        import glob as _glob
-
-        def tdir():
-            ds = _glob.glob(home + "/.local/state/spark/users/*/threads")
-            return ds[0] if ds else ""
-
         spark("history", "clear")
         rc, out, _ = spark("line", stdin="? a")
         rc, out, _ = spark("line", stdin="?? count")
@@ -8300,16 +8303,6 @@ def main():
         spark("history", "clear")
 
         # @FILE: the text rides along, as typed; refusals
-        work = tempfile.mkdtemp(prefix="spark-work-")
-        with open(work + "/f.txt", "w") as f:
-            f.write("SECRET-MARK line one\n")
-        with open(home + "/f2.txt", "w") as f:
-            f.write("HOME-MARK\n")
-        with open(work + "/big.txt", "w") as f:
-            f.write("x" * 40000)
-        with open(work + "/bin.dat", "wb") as f:
-            f.write(b"abc\0def")
-        os.mkdir(work + "/dir")
         rc, out, _ = spark("@f.txt", "count", cwd=work)
         t.ok(rc == 0 and out.strip() == "* 2", "spark @FILE words asks, streamed", out)
         rc, out, _ = spark("@f.txt", cwd=work)
@@ -8691,10 +8684,8 @@ def main():
         # carries [held] three times and none of the values, stderr names
         # the shapes, the turn records held=3; an answer quoting [held] is
         # anchored (the anchors read what the model saw)
-        _code, _tok, _key = "482913", "Zq8xT3kLmN4pW7vR2s", "sk-" + "abcdefghijklmnopqrstuvwx1234"  # spark:allow-secret
-        mail = ("Subject: your sign-in\n\nYour verification code is 482913.\n"  # spark:allow-secret
-                "Reset it here: https://192.0.2.7/r?reset=Zq8xT3kLmN4pW7vR2s\n"  # spark:allow-secret
-                "Your new key is " + _key + " -- keep it safe.\n")
+        _code, _tok, _key = SIGNIN_CODE, SIGNIN_TOKEN, SIGNIN_KEY
+        mail = SIGNIN_MAIL
         n0 = len(STATE["bodies"])
         rc, out, err = spark("edit", "?", "--source", "what", "is", "this", stdin=mail)
         sent = json.dumps(STATE["bodies"][n0:])
@@ -9210,6 +9201,17 @@ def main():
              "ask --thread: the reading runs once, the first pair rides, the same text sends the words alone",
              json.dumps(msgs)[:200])
 
+
+    def part_read():
+        # alone, the part brings what the line part used to leave behind:
+        # two imports, the sign-in mail, a soul of the fixture's own and
+        # one remembered fact (the ember's identity, checked below)
+        from spark import config as _config, persona as _pers
+        mail, _code, _tok, _key = SIGNIN_MAIL, SIGNIN_CODE, SIGNIN_TOKEN, SIGNIN_KEY
+        with open(home + "/.config/spark/soul", "w") as f:
+            f.write("Call yourself Fixture.\n")
+        os.chmod(home + "/.config/spark/soul", 0o600)
+        spark("memory", "add", "the", "box", "is", "called", "forge")
         read_timing_cases(t)
 
         # spark read: the reader's protocol (contract 11)
@@ -10313,6 +10315,7 @@ def main():
         rc, out, err = spark("do", "say", "hello", stdin="\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "STEP-ONE" in out and "done  all done" in out, "spark do: proposes, Enter runs it, the output ends it", out + err)
         t.ok("1  echo STEP-ONE   say hello" in out and "Enter runs it" in out, "spark do: the step line and the prompt", out)
+        threads = tdir()
         names = os.listdir(threads)
         lines = read_thread(home, threads + "/" + names[0]) if len(names) == 1 else []
         t.ok(len(lines) == 4 and [l["role"] for l in lines] == ["user", "assistant"] * 2 and "Output of `echo STEP-ONE` (exit 0)" in lines[2]["text"], "spark do: one thread, goal / step / output / done", lines)
@@ -12113,7 +12116,6 @@ def main():
 
         # the interface is the bar line; `shell`, `theme`, `font` and
         # `quiet` are no verbs of spark's -- unknown words like any other
-        off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 2 and out.startswith("spark -- no command named shell"),
              "spark shell: an unknown verb -- the no-command line, exit 2", out)
@@ -12247,6 +12249,8 @@ def main():
             t.ok(rc == 2 and out.startswith("spark -- no command named %s" % _verb),
                  "spark %s: an unknown word (v1.62 and v1.69 took them out of core)" % _verb, out)
 
+
+    def part_machine():
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
         t.ok(rc == 0 and "off: this machine runs its own model" in out, "spark client: not a client", out)
@@ -13648,208 +13652,254 @@ site.cmd_headless([])
                            env=dict(env, SPARK_HINT_ROW="1", **_col), timeout=30, start_new_session=True)
         t.ok(p.returncode == 0 and p.stdout == _plain and p.stderr == "",
              "spark line with SPARK_HINT_ROW=1 and no terminal: the same two lines, nothing drawn", repr(p.stdout + p.stderr))
-        # ---- end of the v1.41 block ------------------------------------------
 
-    # spark reveal: piped it is an exact copy (bytes, no pacing); at a
-    # tty it is paced -- 60 chars at 100 cps cannot land in an instant;
-    # a wrong CPS and a second word are the usage, signed
-    blob = ("abc éçÃo \n" * 40).encode() + b"tail with no newline"
-    p = subprocess.run([sys.executable, SPARK, "reveal"], input=blob,
-                       capture_output=True, env=env, timeout=30)
-    t.ok(p.returncode == 0 and p.stdout == blob, "reveal: piped is an exact copy, byte for byte",
-         repr(p.stdout[:80]))
-    p = subprocess.run([sys.executable, SPARK, "reveal", "999"], input=b"",
-                       capture_output=True, env=env, timeout=30)
-    t.ok(p.returncode == 2 and b"5 to 200" in p.stdout + p.stderr, "reveal: CPS out of range is the usage",
-         repr(p.stdout + p.stderr))
-    p = subprocess.run([sys.executable, SPARK, "reveal", "30", "x"], input=b"",
-                       capture_output=True, env=env, timeout=30)
-    t.ok(p.returncode == 2, "reveal: a second word is the usage")
-    _m, _s = pty.openpty()
-    p = subprocess.Popen([sys.executable, SPARK, "reveal", "100"],
-                         stdin=subprocess.PIPE, stdout=_s, stderr=_s, env=env)
-    os.close(_s)
-    _t0 = time.time()
-    p.stdin.write(b"x" * 60)
-    p.stdin.close()
-    _got = b""
-    while len(_got) < 60 and time.time() - _t0 < 15:
-        r, _, _ = select.select([_m], [], [], 0.2)
-        if r:
-            try:
-                _got += os.read(_m, 4096)
-            except OSError:
-                break
-    _dt = time.time() - _t0
-    os.close(_m)
-    p.wait(timeout=10)
-    t.ok(_got.count(b"x") == 60 and _dt >= 0.3,
-         "reveal: at a tty the characters are paced, not dumped", "%d chars in %.2fs" % (_got.count(b"x"), _dt))
+    def part_tree():
+        import pty
+        config_parity_cases(t)
+            # ---- end of the v1.41 block ------------------------------------------
 
-    # typed at a terminal with nothing piped in, it never waits on the
-    # keyboard (it once did, until Ctrl-C, keeping nothing): a pace is
-    # kept in spark.env, and bare shows the numbers and the pace now
-    import tempfile as _tf
-    _cfgd = _tf.mkdtemp(prefix="spark-reveal-")
-    _renv = dict(env, HOME=_cfgd, XDG_CONFIG_HOME=_cfgd + "/config", XDG_STATE_HOME=_cfgd + "/state")
-
-    def _at_tty(*words):
-        m, s = pty.openpty()
-        q = subprocess.Popen([sys.executable, SPARK, "reveal"] + list(words), stdin=s, stdout=s, stderr=s, env=_renv)
-        os.close(s)
-        out, end = b"", time.time() + 10
-        while time.time() < end:
-            r, _, _ = select.select([m], [], [], 0.2)
+        # spark reveal: piped it is an exact copy (bytes, no pacing); at a
+        # tty it is paced -- 60 chars at 100 cps cannot land in an instant;
+        # a wrong CPS and a second word are the usage, signed
+        blob = ("abc éçÃo \n" * 40).encode() + b"tail with no newline"
+        p = subprocess.run([sys.executable, SPARK, "reveal"], input=blob,
+                           capture_output=True, env=env, timeout=30)
+        t.ok(p.returncode == 0 and p.stdout == blob, "reveal: piped is an exact copy, byte for byte",
+             repr(p.stdout[:80]))
+        p = subprocess.run([sys.executable, SPARK, "reveal", "999"], input=b"",
+                           capture_output=True, env=env, timeout=30)
+        t.ok(p.returncode == 2 and b"5 to 200" in p.stdout + p.stderr, "reveal: CPS out of range is the usage",
+             repr(p.stdout + p.stderr))
+        p = subprocess.run([sys.executable, SPARK, "reveal", "30", "x"], input=b"",
+                           capture_output=True, env=env, timeout=30)
+        t.ok(p.returncode == 2, "reveal: a second word is the usage")
+        _m, _s = pty.openpty()
+        p = subprocess.Popen([sys.executable, SPARK, "reveal", "100"],
+                             stdin=subprocess.PIPE, stdout=_s, stderr=_s, env=env)
+        os.close(_s)
+        _t0 = time.time()
+        p.stdin.write(b"x" * 60)
+        p.stdin.close()
+        _got = b""
+        while len(_got) < 60 and time.time() - _t0 < 15:
+            r, _, _ = select.select([_m], [], [], 0.2)
             if r:
                 try:
-                    chunk = os.read(m, 4096)
+                    _got += os.read(_m, 4096)
                 except OSError:
                     break
-                if not chunk:
+        _dt = time.time() - _t0
+        os.close(_m)
+        p.wait(timeout=10)
+        t.ok(_got.count(b"x") == 60 and _dt >= 0.3,
+             "reveal: at a tty the characters are paced, not dumped", "%d chars in %.2fs" % (_got.count(b"x"), _dt))
+
+        # typed at a terminal with nothing piped in, it never waits on the
+        # keyboard (it once did, until Ctrl-C, keeping nothing): a pace is
+        # kept in spark.env, and bare shows the numbers and the pace now
+        import tempfile as _tf
+        _cfgd = _tf.mkdtemp(prefix="spark-reveal-")
+        _renv = dict(env, HOME=_cfgd, XDG_CONFIG_HOME=_cfgd + "/config", XDG_STATE_HOME=_cfgd + "/state")
+
+        def _at_tty(*words):
+            m, s = pty.openpty()
+            q = subprocess.Popen([sys.executable, SPARK, "reveal"] + list(words), stdin=s, stdout=s, stderr=s, env=_renv)
+            os.close(s)
+            out, end = b"", time.time() + 10
+            while time.time() < end:
+                r, _, _ = select.select([m], [], [], 0.2)
+                if r:
+                    try:
+                        chunk = os.read(m, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    out += chunk
+                elif q.poll() is not None:
                     break
-                out += chunk
-            elif q.poll() is not None:
-                break
-        os.close(m)
-        try:
-            rc = q.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            q.kill()
-            rc = None
-        return rc, out.decode("utf-8", "replace")
+            os.close(m)
+            try:
+                rc = q.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                q.kill()
+                rc = None
+            return rc, out.decode("utf-8", "replace")
 
-    _kept = _cfgd + "/config/spark/spark.env"
-    rc, out = _at_tty("22")
-    kept = open(_kept).read() if os.path.exists(_kept) else ""
-    t.ok(rc == 0 and "22 characters a second" in out and "SPARK_REVEAL=22" in kept,
-         "reveal 22 at a terminal: returns at once and keeps the pace in spark.env", repr(out) + " | " + kept[-60:])
-    rc, out = _at_tty()
-    t.ok(rc == 0 and "now: 22 a second" in out, "bare reveal at a terminal: the numbers and the pace now", repr(out))
-    rc, out = _at_tty("off")
-    kept = open(_kept).read() if os.path.exists(_kept) else ""
-    t.ok(rc == 0 and "* replies come as they are made" in out and "SPARK_REVEAL=off" in kept, "reveal off at a terminal: kept", repr(out))
-    rc, out = _at_tty("fast")
-    t.ok(rc == 2 and "auto or off" in out, "reveal with a wrong word at a terminal: the one line, exit 2", repr(out))
+        _kept = _cfgd + "/config/spark/spark.env"
+        rc, out = _at_tty("22")
+        kept = open(_kept).read() if os.path.exists(_kept) else ""
+        t.ok(rc == 0 and "22 characters a second" in out and "SPARK_REVEAL=22" in kept,
+             "reveal 22 at a terminal: returns at once and keeps the pace in spark.env", repr(out) + " | " + kept[-60:])
+        rc, out = _at_tty()
+        t.ok(rc == 0 and "now: 22 a second" in out, "bare reveal at a terminal: the numbers and the pace now", repr(out))
+        rc, out = _at_tty("off")
+        kept = open(_kept).read() if os.path.exists(_kept) else ""
+        t.ok(rc == 0 and "* replies come as they are made" in out and "SPARK_REVEAL=off" in kept, "reveal off at a terminal: kept", repr(out))
+        rc, out = _at_tty("fast")
+        t.ok(rc == 2 and "auto or off" in out, "reveal with a wrong word at a terminal: the one line, exit 2", repr(out))
 
-    # completion drift guard: every verb the CLI dispatches (bin/spark's
-    # one VERBS table) appears in completion.bash -- a new verb without a
-    # completion word goes loud here. The zsh file shares the same
-    # tables; the pty completion test proves both live. Verbs excluded
-    # from completion on purpose are named in a comment there, which
-    # counts: the guard is about forgetting, not about policy.
-    comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
-    verbs_src = re.search(r"^VERBS = \{(.*?)\}$", open(SPARK).read(), re.S | re.M).group(1)
-    wanted = set(re.findall(r'"([^"]+)":', verbs_src)) | {"help"}
-    missing = sorted(w for w in wanted
-                     if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
-    t.ok(not missing, "completion.bash names every dispatch verb and cli command",
-         "missing: " + " ".join(missing))
-    # and every option spark do takes (do.OPTIONS, the help pair aside)
-    # is a word after `do` in both files
-    from spark import do as _dod
-    for cf in ("completion.bash", "completion.zsh"):
-        src = open(os.path.join(REPO, "home", ".config", "spark", cf)).read()
-        m = re.search(r"^\s*do\)\s+(?:words=\"|comp=\()([^\")]*)", src, re.M)
-        have = set(m.group(1).split()) if m else set()
-        want = set(_dod.OPTIONS) - {"-h", "--help"}
-        t.ok(have == want, "%s completes every spark do option (do.OPTIONS)" % cf,
-             "have %s, want %s" % (sorted(have), sorted(want)))
-        # v1.87: ver and stats complete the options their own usage names
-        from spark import cli as _clim, stats as _statsm
-        for verb, usage in (("ver", _clim.VER_USAGE), ("stats", _statsm.USAGE)):
-            m = re.search(r"^\s*%s\)\s+(?:words=\"|comp=\()([^\")]*)" % verb, src, re.M)
+        # completion drift guard: every verb the CLI dispatches (bin/spark's
+        # one VERBS table) appears in completion.bash -- a new verb without a
+        # completion word goes loud here. The zsh file shares the same
+        # tables; the pty completion test proves both live. Verbs excluded
+        # from completion on purpose are named in a comment there, which
+        # counts: the guard is about forgetting, not about policy.
+        comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
+        verbs_src = re.search(r"^VERBS = \{(.*?)\}$", open(SPARK).read(), re.S | re.M).group(1)
+        wanted = set(re.findall(r'"([^"]+)":', verbs_src)) | {"help"}
+        missing = sorted(w for w in wanted
+                         if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
+        t.ok(not missing, "completion.bash names every dispatch verb and cli command",
+             "missing: " + " ".join(missing))
+        # and every option spark do takes (do.OPTIONS, the help pair aside)
+        # is a word after `do` in both files
+        from spark import do as _dod
+        for cf in ("completion.bash", "completion.zsh"):
+            src = open(os.path.join(REPO, "home", ".config", "spark", cf)).read()
+            m = re.search(r"^\s*do\)\s+(?:words=\"|comp=\()([^\")]*)", src, re.M)
             have = set(m.group(1).split()) if m else set()
-            want = set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", usage))
-            t.ok(have == want and len(want) > 1, "%s completes every option of spark %s (its usage)" % (cf, verb),
+            want = set(_dod.OPTIONS) - {"-h", "--help"}
+            t.ok(have == want, "%s completes every spark do option (do.OPTIONS)" % cf,
                  "have %s, want %s" % (sorted(have), sorted(want)))
+            # v1.87: ver and stats complete the options their own usage names
+            from spark import cli as _clim, stats as _statsm
+            for verb, usage in (("ver", _clim.VER_USAGE), ("stats", _statsm.USAGE)):
+                m = re.search(r"^\s*%s\)\s+(?:words=\"|comp=\()([^\")]*)" % verb, src, re.M)
+                have = set(m.group(1).split()) if m else set()
+                want = set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", usage))
+                t.ok(have == want and len(want) > 1, "%s completes every option of spark %s (its usage)" % (cf, verb),
+                     "have %s, want %s" % (sorted(have), sorted(want)))
 
-    # v1.95: the page's look is tokens.css's night and day, nothing of the
-    # page's own -- no palette table in spark.js, no picker, no /api/theme
-    # call; the switch keeps one word in this browser (spark-theme), and
-    # nothing asks the machine for a palette
-    js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
-    t.ok("builtin:" not in js and "spark.palette" not in js and "/api/theme" not in js
-         and '"spark-theme"' in js and "data-theme" in js,
-         "spark.js: no palette of the page's own; the night/day switch alone, kept as spark-theme")
+        # v1.95: the page's look is tokens.css's night and day, nothing of the
+        # page's own -- no palette table in spark.js, no picker, no /api/theme
+        # call; the switch keeps one word in this browser (spark-theme), and
+        # nothing asks the machine for a palette
+        js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
+        t.ok("builtin:" not in js and "spark.palette" not in js and "/api/theme" not in js
+             and '"spark-theme"' in js and "data-theme" in js,
+             "spark.js: no palette of the page's own; the night/day switch alone, kept as spark-theme")
 
-    # the guard (v1.48): spark's core is decoupled from any shell layer.
-    # Nothing a user installs or runs names one -- not a message, a check
-    # row, a help line, a model prompt, a verb, a comment, a fixture. The
-    # generic contracts stay and are described as generic: theme.env (the
-    # palette any renderer may write), the three SPARK_*_SGR variables,
-    # `spark bar line`. A hit names file:line.
-    _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
-    # v1.90: the trusted chain is his word (spark, spark-shell, spark-acp),
-    # and issue 23's review names it: one named line of mcp.TRUSTED_CHAIN
-    # may carry the name, and no other line of a core file
-    _CHAIN_FILE, _CHAIN_LINE = os.path.join(REPO, "lib", "spark", "mcp.py"), '"spark-shell",'
-    _hits = []
-    for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
-        _p = os.path.join(REPO, _r)
-        if os.path.isfile(_p):
-            _files = [_p]
-        elif os.path.isdir(_p):
-            _files = [os.path.join(d, f) for d, _, fs in os.walk(_p) for f in fs
-                      if "__pycache__" not in d and not f.endswith(".pyc")]
-        else:
-            continue
-        for _f in sorted(_files):
-            with open(_f, "rb") as fh:
-                _raw = fh.read()
-            if b"\0" in _raw:
-                continue                    # an image, a font
-            for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
-                if _f == _CHAIN_FILE and _l.lstrip().startswith(_CHAIN_LINE):
-                    continue                # the one named line, below
-                if _guard.search(_l):
-                    _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
-    t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",
-         " ".join(_hits[:12]))
+        # the guard (v1.48): spark's core is decoupled from any shell layer.
+        # Nothing a user installs or runs names one -- not a message, a check
+        # row, a help line, a model prompt, a verb, a comment, a fixture. The
+        # generic contracts stay and are described as generic: theme.env (the
+        # palette any renderer may write), the three SPARK_*_SGR variables,
+        # `spark bar line`. A hit names file:line.
+        _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
+        # v1.90: the trusted chain is his word (spark, spark-shell, spark-acp),
+        # and issue 23's review names it: one named line of mcp.TRUSTED_CHAIN
+        # may carry the name, and no other line of a core file
+        _CHAIN_FILE, _CHAIN_LINE = os.path.join(REPO, "lib", "spark", "mcp.py"), '"spark-shell",'
+        _hits = []
+        for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
+            _p = os.path.join(REPO, _r)
+            if os.path.isfile(_p):
+                _files = [_p]
+            elif os.path.isdir(_p):
+                _files = [os.path.join(d, f) for d, _, fs in os.walk(_p) for f in fs
+                          if "__pycache__" not in d and not f.endswith(".pyc")]
+            else:
+                continue
+            for _f in sorted(_files):
+                with open(_f, "rb") as fh:
+                    _raw = fh.read()
+                if b"\0" in _raw:
+                    continue                    # an image, a font
+                for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
+                    if _f == _CHAIN_FILE and _l.lstrip().startswith(_CHAIN_LINE):
+                        continue                # the one named line, below
+                    if _guard.search(_l):
+                        _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
+        t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",
+             " ".join(_hits[:12]))
 
-    # widget drift guard: the failure moment's word lists live in two
-    # files, one per shell, with no compiler between them. A word added to
-    # one and not the other goes loud here, as does a marker or hook that
-    # leaves one shell behind.
-    wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
-    wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
+        # widget drift guard: the failure moment's word lists live in two
+        # files, one per shell, with no compiler between them. A word added to
+        # one and not the other goes loud here, as does a marker or hook that
+        # leaves one shell behind.
+        wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
+        wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
 
-    def wordlist(text, name):
-        m = re.search(r"^%s='([^']*)'" % name, text, re.M)
-        return sorted(m.group(1).split()) if m else []
-    for name in ("_SPARK_DANGER", "_SPARK_QUIET_ONE", "_SPARK_QUIET_RC", "_SPARK_LOOKING"):
-        a, b = wordlist(wz, name), wordlist(wb, name)
-        t.ok(bool(a) and a == b, "%s is the same list in both widgets" % name,
-             "zsh: %s; bash: %s" % (a, b))
-    t.ok(wordlist(wz, "_SPARK_DANGER") == sorted(
-        "rm dd mkfs shred chown chmod kill killall pkill shutdown reboot halt "
-        "poweroff crontab truncate diskutil fdisk parted".split()),
-        "the danger list is the agreed one", wordlist(wz, "_SPARK_DANGER"))
-    for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
-        t.ok("_spark_failed" in text and "_spark_offer_kind" in text and " hook" in text,
-             "%s carries the exit-code hook, the predicate and the marker field" % name)
-        t.ok("_spark_offer_fix" in text and "SPARK_EXPLAIN_RC=127" in text and "install it" in text,
-             "%s carries the two escalations (127 install, the second-Esc-s fix)" % name)
-        t.ok("_spark_hinted" in text and ("bindkey '^U'" in text or 'bind \'"\\C-u"' in text),
-             "%s clears the hint it drew when Ctrl-U empties the line" % name)
+        def wordlist(text, name):
+            m = re.search(r"^%s='([^']*)'" % name, text, re.M)
+            return sorted(m.group(1).split()) if m else []
+        for name in ("_SPARK_DANGER", "_SPARK_QUIET_ONE", "_SPARK_QUIET_RC", "_SPARK_LOOKING"):
+            a, b = wordlist(wz, name), wordlist(wb, name)
+            t.ok(bool(a) and a == b, "%s is the same list in both widgets" % name,
+                 "zsh: %s; bash: %s" % (a, b))
+        t.ok(wordlist(wz, "_SPARK_DANGER") == sorted(
+            "rm dd mkfs shred chown chmod kill killall pkill shutdown reboot halt "
+            "poweroff crontab truncate diskutil fdisk parted".split()),
+            "the danger list is the agreed one", wordlist(wz, "_SPARK_DANGER"))
+        for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
+            t.ok("_spark_failed" in text and "_spark_offer_kind" in text and " hook" in text,
+                 "%s carries the exit-code hook, the predicate and the marker field" % name)
+            t.ok("_spark_offer_fix" in text and "SPARK_EXPLAIN_RC=127" in text and "install it" in text,
+                 "%s carries the two escalations (127 install, the second-Esc-s fix)" % name)
+            t.ok("_spark_hinted" in text and ("bindkey '^U'" in text or 'bind \'"\\C-u"' in text),
+                 "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
-    knowledge_cases(t)
-    continuing_tag_cases(t)
-    model_name_cases(t)
-    server_pids_cases(t)
-    client_units_cases(t)
-    own_engine_cases(t)
-    living_core_cases(t)
-    chat_awake_cases(t)
-    living_awaken_cases(t)
-    living_widget_cases(t)
-    living_waits_cases(t)
-    lan_wait_cases(t)
-    handback_cases(t)
-    check_history_cases(t)
-    own_mark_cases(t, url)
-    grammar_cases(t)
-    own_imports_cases(t)
-    tls_cases(t)
+        knowledge_cases(t)
+        continuing_tag_cases(t)
+        model_name_cases(t)
+        server_pids_cases(t)
+        client_units_cases(t)
+        own_engine_cases(t)
+        living_core_cases(t)
+        chat_awake_cases(t)
+        living_awaken_cases(t)
+        living_widget_cases(t)
+        living_waits_cases(t)
+        lan_wait_cases(t)
+        handback_cases(t)
+        check_history_cases(t)
+        own_mark_cases(t, url)
+        grammar_cases(t)
+        own_imports_cases(t)
+        tls_cases(t)
+
+    with tempfile.TemporaryDirectory(prefix="spark-smoke-") as home:
+        # GIT_* stripped too: a caller's GIT_DIR/GIT_INDEX_FILE (a pre-commit
+        # hook, say) must never leak into a spawned `spark`, or its own git
+        # calls (spark ver's credits line, the fork test below) run against
+        # the caller's repo instead of the one spark was pointed at.
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
+                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+        env.update(init_env(home))
+        os.makedirs(home + "/.config/spark")
+
+        def spark(*args, stdin="", extra=None, exe=SPARK, cwd=None):
+            e = dict(env)
+            e.update(extra or {})
+            p = subprocess.run([sys.executable, exe] + list(args), input=stdin, capture_output=True, text=True, env=e, timeout=30, cwd=cwd)
+            return p.returncode, p.stdout, p.stderr
+
+        print("smoke: stub llama-server at %s, HOME %s" % (url, home))
+        # what the parts share: the account store's threads dir once one is
+        # minted, a project dir with f.txt (and ~/f2.txt) for @FILE, and
+        # the environment that applies nothing
+        import glob as _glob
+
+        def tdir():
+            ds = _glob.glob(home + "/.local/state/spark/users/*/threads")
+            return ds[0] if ds else ""
+        work = tempfile.mkdtemp(prefix="spark-work-")
+        with open(work + "/f.txt", "w") as f:
+            f.write("SECRET-MARK line one\n")
+        with open(work + "/big.txt", "w") as f:
+            f.write("x" * 40000)
+        with open(work + "/bin.dat", "wb") as f:
+            f.write(b"abc\0def")
+        os.mkdir(work + "/dir")
+        with open(home + "/f2.txt", "w") as f:
+            f.write("HOME-MARK\n")
+        off = {"SPARK_NO_APPLY": "1"}
+        for name, part in (('line', part_line), ('read', part_read), ('machine', part_machine), ('tree', part_tree)):
+            if name in want:
+                part()
     srv.shutdown()
     print("smoke: %s; %d skipped" % ("all ok" if not t.fail else "%d FAILED" % t.fail, t.skipped))
     return 1 if t.fail else 0

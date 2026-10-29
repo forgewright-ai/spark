@@ -1680,7 +1680,7 @@ def checker():
 
 
 def session_main(shell, widget):
-    """Part 1/2: the one long session, sections 1 to 8 -- a question lands
+    """Part session: the one long session, sections 1 to 8 -- a question lands
     and does not run, danger, an answer, the hostile four, the streamed
     line, the judged line, a plain line, the glob, off, Esc s, the failure
     moment and the fix, intent search, the proof line, paste, colour, the
@@ -2267,14 +2267,29 @@ def session_main(shell, widget):
         left = outlived(tmp)
         ok(not left, "no process the widget started outlives its shell", left)
 
-    print("widget_pty %s 1/2: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
+    print("widget_pty %s session: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
+    return 1 if fails[0] else 0
+
+
+def living_main(shell, widget):
+    """Part living: the living prompt (v1.59), section 9b -- height, Esc k,
+    awake, the fallbacks, the face and its blink. 80 s of waits on a Mac,
+    so a part of its own."""
+    widget = os.path.abspath(widget)
+    ok, fails = checker()
+    with tempfile.TemporaryDirectory(prefix="spark-pty-") as tmp:
+        env, _state, _asked = prepare(shell, widget, tmp)
+        living(shell, widget, tmp, env, ok)
+        left = outlived(tmp)
+        ok(not left, "no process the widget started outlives its shell", left)
+    print("widget_pty %s living: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
     return 1 if fails[0] else 0
 
 
 def rows_main(shell, widget):
-    """Part 2/2: the shells of their own, sections 9 and 10 -- the rendered
-    screen, the living prompt, the alert, the voice keys, the keys moved
-    and off; nothing outlives its shell."""
+    """Part rows: the shells of their own, sections 9, 9b2 to 9e and 10 --
+    the rendered screen, the alert, the voice keys, the keys moved and
+    off; nothing outlives its shell."""
     widget = os.path.abspath(widget)
     ok, fails = checker()
     with tempfile.TemporaryDirectory(prefix="spark-pty-") as tmp:
@@ -2282,9 +2297,6 @@ def rows_main(shell, widget):
 
         # 9. the rendered screen: a wrapped question, hint above, prompt intact
         wrapped(shell, widget, tmp, env, PROMPT, ok)
-
-        # 9b. the living prompt (v1.59): height, Esc k, awake, the fallbacks
-        living(shell, widget, tmp, env, ok)
 
         # 9b2. the alert (v1.81): a check row that turned worse, said once
         # in each pane; zsh's Ctrl-C leaves no face
@@ -2305,19 +2317,24 @@ def rows_main(shell, widget):
         left = outlived(tmp)
         ok(not left, "no process the widget started outlives its shell", left)
 
-    print("widget_pty %s 2/2: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
+    print("widget_pty %s rows: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
     return 1 if fails[0] else 0
 
 
+PARTS = {"session": session_main, "living": living_main, "rows": rows_main}
+
+
 def main(shell, widget, part=""):
-    """The shell case: both parts in a row, or one of them (`--part 1/2`
-    or `2/2`): the two run side by side in the gate, each on a machine of
-    its own, so the suite takes the longer part's time, not the sum."""
-    if part == "1/2":
-        return session_main(shell, widget)
-    if part == "2/2":
-        return rows_main(shell, widget)
-    return session_main(shell, widget) | rows_main(shell, widget)
+    """The shell case: the three parts in a row, or one of them (`--part
+    session|living|rows`). The gate runs the three side by side, each on
+    a machine of its own, so the suite takes the longest part's time, not
+    the sum."""
+    if part:
+        return PARTS[part](shell, widget)
+    rc = 0
+    for run in PARTS.values():
+        rc |= run(shell, widget)
+    return rc
 
 
 if __name__ == "__main__":
@@ -2326,9 +2343,9 @@ if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "completion" and sys.argv[2] in ("bash", "zsh"):
         sys.exit(completion_main(sys.argv[2], sys.argv[3]))
     part = ""
-    if len(sys.argv) == 5 and sys.argv[3] == "--part" and sys.argv[4] in ("1/2", "2/2"):
+    if len(sys.argv) == 5 and sys.argv[3] == "--part" and sys.argv[4] in PARTS:
         part, sys.argv = sys.argv[4], sys.argv[:3]
     if len(sys.argv) != 3 or sys.argv[1] not in ("bash", "zsh"):
-        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET [--part 1/2|2/2] | pager | completion bash|zsh FILE")
+        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET [--part session|living|rows] | pager | completion bash|zsh FILE")
         sys.exit(2)
     sys.exit(main(sys.argv[1], sys.argv[2], part))

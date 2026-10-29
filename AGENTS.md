@@ -48,7 +48,10 @@ CI runs the full gate once per commit, in 3 groups side by side:
 
 ```sh
 sh tests/gate.sh full smoke
-python3 tests/smoke.py
+python3 tests/smoke.py --part line      # bare, the four parts in a row
+python3 tests/smoke.py --part read
+python3 tests/smoke.py --part machine
+python3 tests/smoke.py --part tree
 
 sh tests/gate.sh full serve
 python3 tests/serve_smoke.py
@@ -77,8 +80,9 @@ python3 tests/policy_test.py
 python3 tests/patch_test.py
 python3 tests/patch_test.py --selftest
 python3 tests/gate_run.py --selftest
-python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 1/2   # bash on Linux
-python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 2/2
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part session   # bash on Linux
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part living
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part rows
 python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 python3 tests/widget_pty.py pager
 ```

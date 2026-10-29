@@ -227,7 +227,11 @@ lint() {
 static() { staged; syntax; columns; ascii; lint; }
 
 group_smoke() {
-    run smoke.py "$PY" tests/smoke.py
+    # smoke.py's body in its four parts, suites of their own for the runner
+    run "smoke line" "$PY" tests/smoke.py --part line
+    run "smoke read" "$PY" tests/smoke.py --part read
+    run "smoke machine" "$PY" tests/smoke.py --part machine
+    run "smoke tree" "$PY" tests/smoke.py --part tree
 }
 
 group_serve() {
@@ -272,11 +276,13 @@ group_rest() {
     run "gate_run selftest" "$PY" tests/gate_run.py --selftest
     # the widgets at a pty: zsh on a Mac, bash on Linux; the pager on both
     case $os in
-        Darwin) run "widget_pty shell 1/2" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 1/2
-                run "widget_pty shell 2/2" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 2/2
+        Darwin) run "widget_pty session" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part session
+                run "widget_pty living" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part living
+                run "widget_pty rows" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part rows
                 run "widget_pty completion" "$PY" tests/widget_pty.py completion zsh home/.config/spark/completion.zsh ;;
-        *)      run "widget_pty shell 1/2" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part 1/2
-                run "widget_pty shell 2/2" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part 2/2
+        *)      run "widget_pty session" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part session
+                run "widget_pty living" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part living
+                run "widget_pty rows" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part rows
                 run "widget_pty completion" "$PY" tests/widget_pty.py completion bash home/.config/spark/completion.bash ;;
     esac
     run "widget_pty pager" "$PY" tests/widget_pty.py pager
