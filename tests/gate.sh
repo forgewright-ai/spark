@@ -140,7 +140,7 @@ tree_privacy() {
 # one file per call: `sh -n A B` parses A and hands B to it as $1
 syntax() {
     for f in bootstrap.sh install.sh lib/env.sh get \
-             .githooks/pre-commit .githooks/pre-push .githooks/commit-msg tests/*.sh; do
+             .githooks/pre-commit .githooks/pre-push .githooks/commit-msg .claude/hooks/session-start.sh tests/*.sh; do
         [ -f "$f" ] || { bad "$f is missing (sh -n names it)"; continue; }
         sh -n "$f" || bad "sh -n $f"
     done
@@ -200,7 +200,8 @@ $hit"
 lint() {
     if command -v shellcheck >/dev/null 2>&1; then
         shellcheck -S warning bootstrap.sh install.sh lib/env.sh get \
-            .githooks/pre-commit .githooks/pre-push .githooks/commit-msg tests/gate.sh tests/land.sh tests/tag.sh \
+            .githooks/pre-commit .githooks/pre-push .githooks/commit-msg .claude/hooks/session-start.sh \
+            tests/gate.sh tests/land.sh tests/tag.sh \
             || bad "shellcheck"
     elif [ -n "${CI:-}" ] && [ "$os" = Linux ]; then
         bad "shellcheck not found (ci.yml installs it)"

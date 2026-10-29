@@ -525,6 +525,11 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 over the message -- history is public too), pre-push (no
                 test: main and a v* tag are refused unless ci.yml passed
                 for that commit)
+.claude/        settings.json and hooks/session-start.sh: in a Claude Code
+                cloud session only, the hooks above turned on and the
+                gate's tools installed (shellcheck, zsh, bwrap, ssh-keygen),
+                one line saying what is still missing; the rest of
+                .claude/ is local state, ignored
 .github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
                 request, by hand, never a tag; linux and macos run
                 tests/gate.sh full, one job per group (smoke, serve, rest),

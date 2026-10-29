@@ -4,4 +4,7 @@
 __pycache__/
 *.pyc
 .DS_Store
-.claude/
+# Claude's local state stays out; the cloud session's hook is the tree's
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
