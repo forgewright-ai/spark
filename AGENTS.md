@@ -135,28 +135,29 @@ never the line, and skips a line marked `spark:allow-secret`. shellcheck
 is the contributor's tool, not a user's package, and the gate skips it
 with a notice when absent.
 
-CI is where the full gate runs, `.github/workflows/`. `ci.yml` runs on
-a push to `main` or to a `try/` branch, on a pull request and by hand.
-A tag push runs `release.yml` alone. A newer push cancels an older run
-on a `try/` branch or a pull request, never on `main`. The `lint` job
-runs first: `tests/gate.sh full lint` and zizmor over the workflows,
-medium and above failing, in about a minute, and every other job
-needs it. The `linux` and `macos` jobs run `tests/gate.sh full`, one
-job per group of suites. The `rest` job then runs a real bootstrap on
-the runner. The `debian`, `arch`, `void`, `fedora` and `opensuse` jobs
-run the one-liner as a new user in a container. The `void` job starts
-a runsvdir first, so it proves `spark-check` running supervised. The
-`green` job needs every other job: the one name a ruleset on `main`
-can require. `codeql.yml` is
-GitHub's static analysis over the python and the javascript.
-`advisories.yml` opens one issue when llama.cpp publishes a security
-advisory after the engine pin's date, and one when sherpa-onnx does
-after the voice pin's. `dependabot.yml` keeps every action's sha pin
-current. The Debian image is pinned by its digest, moved by hand.
-`tests/context_bench.py` measures bounded file and thread context with
-synthetic inputs, without a model. It reports input size, bytes read,
-peak Python allocations and elapsed time; fixture creation is excluded.
-It is run by hand, not in the gate.
+CI is where the full gate runs, `.github/workflows/`. `ci.yml` runs on a
+push to `main` or to a `try/` branch, on a pull request and by hand. A
+tag push runs `release.yml` alone. A newer push cancels an older run on
+a `try/` branch or a pull request, never on `main`. The `lint` job runs
+first: `tests/gate.sh full lint` and zizmor over the workflows, medium
+and above failing, in about a minute, and every other job needs it. The
+`linux` and `macos` jobs run `tests/gate.sh full`, one job per group of
+suites, and keep the runner's ledger of each suite's seconds as an
+artifact, `gate-times-<OS>-<group>`. The `rest` job then runs a real
+bootstrap on the runner. The `debian`, `arch`, `void`, `fedora` and
+`opensuse` jobs run the one-liner as a new user in a container. The
+`void` job starts a runsvdir first, so it proves `spark-check` running
+supervised. The `green` job needs every other job: the one name a
+ruleset on `main` can require. `codeql.yml` is GitHub's static analysis
+over the python and the javascript. `advisories.yml` opens one issue
+when llama.cpp publishes a security advisory after the engine pin's
+date, and one when sherpa-onnx does after the voice pin's.
+`dependabot.yml` keeps every action's sha pin current. The Debian image
+is pinned by its digest, moved by hand. `tests/context_bench.py`
+measures bounded file and thread context with synthetic inputs, without
+a model. It reports input size, bytes read, peak Python allocations and
+elapsed time; fixture creation is excluded. It is run by hand, not in
+the gate.
 
 `tests/forge_probe.py URL` is not in the
 gate: it asks a live `FORGE`'s gates from the wire, one line per gate,

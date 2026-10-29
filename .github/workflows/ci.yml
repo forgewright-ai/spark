@@ -99,6 +99,15 @@ jobs:
           GROUP: ${{ matrix.group }}
           SPARK_GATE_FAIL_FAST: 1
         run: sh tests/gate.sh full "$GROUP"
+      - name: the suites' seconds, kept
+        # gate_run.py's ledger from this job: what each suite took here,
+        # the number the shards and the flake hunt read
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
+        with:
+          name: gate-times-${{ runner.os }}-${{ matrix.group }}
+          path: ~/.cache/spark/gate-times
+          if-no-files-found: warn
       - name: real bootstrap on the runner
         if: matrix.group == 'rest'
         env:
@@ -374,6 +383,15 @@ jobs:
           SPARK_GATE_PYTHON: /usr/bin/python3
           SPARK_GATE_FAIL_FAST: 1
         run: sh tests/gate.sh full "$GROUP"
+      - name: the suites' seconds, kept
+        # gate_run.py's ledger from this job: what each suite took here,
+        # the number the shards and the flake hunt read
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
+        with:
+          name: gate-times-${{ runner.os }}-${{ matrix.group }}
+          path: ~/.cache/spark/gate-times
+          if-no-files-found: warn
       - name: real core bootstrap on the runner
         # the AI layer as a Mac user gets it without a model: the token,
         # the tools, one line in ~/.zshrc, no Homebrew, no engine (it comes

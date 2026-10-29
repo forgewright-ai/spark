@@ -554,8 +554,9 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 request, by hand, never a tag; lint runs first, alone
                 (tests/gate.sh full lint and zizmor over the workflows), and
                 every other job needs it; linux and macos run tests/gate.sh
-                full, one job per group of suites (smoke, serve, rest), then
-                a real bootstrap in the rest job; debian, arch, void, fedora
+                full, one job per group of suites (smoke, serve, rest), each
+                job's gate-times ledger kept as an artifact, then a real
+                bootstrap in the rest job; debian, arch, void, fedora
                 and opensuse containers run the one-liner as a new user
                 (void under a runsvdir started for the job: the supervised
                 spark-check is proven there)
