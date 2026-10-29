@@ -403,7 +403,11 @@ class TrustHandler(urllib.request.HTTPSHandler):
     first https request, so importing the wire costs nothing."""
 
     def __init__(self):
-        super().__init__()
+        # a bare context, never used: https_open passes its own. With none,
+        # Python 3.12 and newer build a default one here and load the
+        # system's CAs, 20 ms and more at every spawn, since HANDLER is made
+        # at import
+        super().__init__(context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
         self._ctx, self._pins = None, None
 
     def _load(self):
