@@ -749,7 +749,21 @@ def test_fails_index_redacts():
                 "shape": "c" * 16, "head": "gh", "rc": "1"},
                {"kind": "fail", "name": "curl", "note": "curl -H 'Authorization: Bearer %s' host" % sk,
                 "shape": "d" * 16, "head": "curl", "rc": "22"}]
-    ledger.write_fails_index(entries)
+    # the index drops a fix whose head word left PATH (ledger._retired):
+    # a gh and a curl of the test's own, so the holding is proven on a
+    # machine without them
+    bindir = os.path.join(HOME, "fails-bin")
+    os.makedirs(bindir, exist_ok=True)
+    for tool in ("gh", "curl"):
+        with open(os.path.join(bindir, tool), "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(os.path.join(bindir, tool), 0o755)
+    path = os.environ.get("PATH", "")
+    os.environ["PATH"] = bindir + os.pathsep + path
+    try:
+        ledger.write_fails_index(entries)
+    finally:
+        os.environ["PATH"] = path
     with open(ledger.FAILS_INDEX, encoding="utf-8") as f:
         text = f.read()
     check("the fails index holds a GitHub token back", gh not in text and "--with-token [held]\n" in text, True)
