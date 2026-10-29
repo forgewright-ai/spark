@@ -518,13 +518,16 @@ def cmd_off(args):
 
         return 0
     from . import check, forgeserve, site
+    # a unit's stop is asynchronous (sv down, systemctl stop --no-block,
+    # launchctl bootout): when one ran, wait for its server to leave the
+    # port, so the line below says what is true. A server started by hand
+    # does not leave with a unit, and cmd_stop ends it at once
+    unit = engine.service_state(cfg) == "loaded"
     site.set_keys(_file=SPARK_ENV, SPARK_SERVICE="none", SPARK_FORGE="off")
     rc = site.apply(UNIT_ROWS)
     page = forgeserve.cmd_stop(["--force"])
-    # a unit's stop is asynchronous (sv down, systemctl stop --no-block,
-    # launchctl bootout): wait for its server to leave the port, so the
-    # line below says what is true
-    engine.wait_gone(engine.server_pids(cfg.port), 20)
+    if unit:
+        engine.wait_gone(engine.server_pids(cfg.port), 20)
     rc2 = cmd_stop(args)
     check.refresh()
     return rc or page or rc2

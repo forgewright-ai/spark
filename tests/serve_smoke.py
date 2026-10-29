@@ -694,8 +694,11 @@ def main():
         rc, out, err = spark("serve", "on")
         hand = int(open(state + "/serve.pid").read())
         ok(rc == 0 and get(url + "/health") == 200, "a server by hand (no unit in sight)", out + err)
+        t0 = time.monotonic()
         rc, out, err = spark("serve", "off", extra=unit)
+        took = time.monotonic() - t0
         ok(rc == 0 and ("stopped pid %d" % hand) in out and wait_down(hand), "the unit down: serve off TERMs spark's own hand server", out + err)
+        ok(took < 10, "and waits for no unit to stop it first (it once waited the unit's 20 s)", "%.1f s" % took)
 
         # 3. the unit's --foreground finds spark's own hand server on the
         #    port: it takes over (TERM, then exec), never a 78 that leaves
