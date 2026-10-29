@@ -471,7 +471,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 the splitter, the lead-in, the Reader's two stages timed)
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice)
-                widget_pty.py (the widgets, the pager and completion at a pty)
+                widget_pty.py (the widgets at a pty, in two parts the gate
+                runs side by side -- the one long session, then the shells
+                of their own -- the pager, and completion)
                 check_selftest.py (a standalone entry to spark check --selftest)
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)
@@ -483,9 +485,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 suites side by side through gate_run.py unless
                 SPARK_GATE_JOBS=1, ci.yml's too)
                 gate_run.py (full's runner: the suites SPARK_GATE_JOBS at
-                a time, the CPU count by default, 3 at most on macOS, the
-                longest first by ~/.cache/spark/gate-times, each log
-                printed whole when its suite ends; --selftest on stand-ins)
+                a time, the CPU count by default, the longest first by
+                ~/.cache/spark/gate-times, each log printed whole when its
+                suite ends; --selftest on stand-ins)
                 land.sh (lands a commit: a try/ branch, CI, then main moved
                 forward to the same commit; `--passed SHA` is the one check
                 "ci.yml passed", asked by the pre-push hook and release.yml)

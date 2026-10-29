@@ -77,15 +77,16 @@ python3 tests/policy_test.py
 python3 tests/patch_test.py
 python3 tests/patch_test.py --selftest
 python3 tests/gate_run.py --selftest
-python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh          # bash on Linux
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 1/2   # bash on Linux
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 2/2
 python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 python3 tests/widget_pty.py pager
 ```
 
 `sh tests/gate.sh full` runs the 3 groups on your own machine, their
 suites side by side. `tests/gate_run.py` runs them the CPU count at a
-time, 3 at most on macOS, the longest first by the last run's times. It
-takes about 7 minutes on 4 cores, and nothing asks for it.
+time, the longest first by the last run's times. It takes about 7
+minutes on 4 cores, and nothing asks for it.
 `SPARK_GATE_JOBS=1` runs them one at a time, as CI does, about 18
 minutes. `SPARK_GATE_PYTHON` names the python, and CI on macOS sets it
 to Apple's.

@@ -272,9 +272,11 @@ group_rest() {
     run "gate_run selftest" "$PY" tests/gate_run.py --selftest
     # the widgets at a pty: zsh on a Mac, bash on Linux; the pager on both
     case $os in
-        Darwin) run "widget_pty shell" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh
+        Darwin) run "widget_pty shell 1/2" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 1/2
+                run "widget_pty shell 2/2" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part 2/2
                 run "widget_pty completion" "$PY" tests/widget_pty.py completion zsh home/.config/spark/completion.zsh ;;
-        *)      run "widget_pty shell" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash
+        *)      run "widget_pty shell 1/2" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part 1/2
+                run "widget_pty shell 2/2" "$PY" tests/widget_pty.py bash home/.config/spark/widget.bash --part 2/2
                 run "widget_pty completion" "$PY" tests/widget_pty.py completion bash home/.config/spark/completion.bash ;;
     esac
     run "widget_pty pager" "$PY" tests/widget_pty.py pager

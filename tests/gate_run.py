@@ -7,9 +7,9 @@
 
 tests/gate.sh full writes QUEUE: one suite a line, `label<TAB>command`,
 the command one argv in shell quotes (its `run` lines, collected). The
-suites run SPARK_GATE_JOBS at a time, the CPU count by default, 3 at most
-on macOS: their ports come from bind(0), and most of their time is
-waiting, so they overlap. The longest go first, by the seconds each took
+suites run SPARK_GATE_JOBS at a time, the CPU count by default: their
+ports come from bind(0), and most of their time is waiting, so they
+overlap. The longest go first, by the seconds each took
 last time (~/.cache/spark/gate-times, a label and its seconds a line,
 outside the tree); a suite never timed goes before them all. Each suite's
 output is printed whole under its `== label` line when it ends, so no two
@@ -18,7 +18,6 @@ has failed. Python 3.9, the standard library alone.
 """
 import concurrent.futures
 import os
-import platform
 import shlex
 import subprocess
 import sys
@@ -28,7 +27,6 @@ import time
 
 TIMES = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
                      "spark", "gate-times")
-MAC_MAX = 3                     # macos-latest has 3 vCPUs
 
 
 def jobs():
@@ -36,10 +34,7 @@ def jobs():
         n = int(os.environ.get("SPARK_GATE_JOBS", ""))
     except ValueError:
         n = 0
-    if n > 0:
-        return n
-    n = os.cpu_count() or 1
-    return min(n, MAC_MAX) if platform.system() == "Darwin" else n
+    return n if n > 0 else os.cpu_count() or 1
 
 
 def load_times(path):

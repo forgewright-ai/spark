@@ -1609,48 +1609,88 @@ def completion_main(shell, comp):
     return 1 if fails else 0
 
 
-def main(shell, widget):
-    widget = os.path.abspath(widget)
-    fails = 0
+PROMPT = "SPARKPROMPT> "
+
+
+def prepare(shell, widget, tmp):
+    """The throwaway machine a shell case runs on, under `tmp`: HOME, the
+    two stubs, the logs, and smoke's stub server behind the judged line.
+    Returns (env, state, asked), `asked` the count of questions the stub
+    took."""
+    home = os.path.join(tmp, "home")
+    state = os.path.join(home, ".local", "state")
+    os.makedirs(os.path.join(home, "bin"))
+    os.makedirs(os.path.join(tmp, "work"))
+    open(os.path.join(tmp, "work", "a.txt"), "w").close()
+    stub = os.path.join(home, "bin", "spark")
+    with open(stub, "w") as f:
+        f.write(STUB)
+    os.chmod(stub, 0o755)
+    estub = os.path.join(home, "bin", "explain")
+    with open(estub, "w") as f:
+        f.write(EXPLAIN_STUB)
+    os.chmod(estub, 0o755)
+    log = os.path.join(tmp, "asked.log")
+    env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
+           "EXPLAIN_LOG": os.path.join(tmp, "explained.log"), "STUB_ENV": os.path.join(tmp, "env.log"),
+           "STUB_VOICE": os.path.join(tmp, "voice.log"), "STUB_HEARD": "list the big files",
+           "STUB_GATE": os.path.join(tmp, "stub-gate"),
+           "SPARK_VOICE": "clear",
+           "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
+           "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
+    # the judged line's cases run the real spark line behind the stub
+    # script: smoke's stub server and its snapshot store
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import smoke
+    _srv, know_url = smoke.start_stub()
+    env.update(KNOW_URL=know_url, KNOW_KEY=smoke.TOKEN, KNOW_PY=sys.executable,
+               KNOW_SPARK=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "spark"),
+               KNOW_SNAP=smoke.know_store(os.path.join(tmp, "know-store.json")))
+
+    def asked():
+        try:
+            with open(log) as f:
+                return len(f.read().splitlines())
+        except OSError:
+            return 0
+    return env, state, asked
+
+
+def outlived(tmp):
+    """What the widget started and left running after its shell ended,
+    within 3 s: nothing, or pgrep's lines."""
+    left = ""
+    end = time.time() + 3
+    while time.time() < end:
+        left = subprocess.run(["pgrep", "-af", tmp], capture_output=True, text=True).stdout.strip()
+        if not left:
+            break
+        time.sleep(0.2)
+    return left
+
+
+def checker():
+    """(ok, fails): the one line a check prints, and the count it keeps."""
+    fails = [0]
 
     def ok(cond, what, extra=""):
-        nonlocal fails
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + repr(extra)[:300]) if extra and not cond else ""))
-        fails += not cond
+        fails[0] += not cond
+    return ok, fails
 
+
+def session_main(shell, widget):
+    """Part 1/2: the one long session, sections 1 to 8 -- a question lands
+    and does not run, danger, an answer, the hostile four, the streamed
+    line, the judged line, a plain line, the glob, off, Esc s, the failure
+    moment and the fix, intent search, the proof line, paste, colour, the
+    voice keys, exit."""
+    widget = os.path.abspath(widget)
+    ok, fails = checker()
     with tempfile.TemporaryDirectory(prefix="spark-pty-") as tmp:
-        home = os.path.join(tmp, "home")
-        state = os.path.join(home, ".local", "state")
-        os.makedirs(os.path.join(home, "bin"))
-        os.makedirs(os.path.join(tmp, "work"))
-        open(os.path.join(tmp, "work", "a.txt"), "w").close()
-        stub = os.path.join(home, "bin", "spark")
-        with open(stub, "w") as f:
-            f.write(STUB)
-        os.chmod(stub, 0o755)
-        estub = os.path.join(home, "bin", "explain")
-        with open(estub, "w") as f:
-            f.write(EXPLAIN_STUB)
-        os.chmod(estub, 0o755)
-        log = os.path.join(tmp, "asked.log")
-        elog = os.path.join(tmp, "explained.log")
-        envlog = os.path.join(tmp, "env.log")
-        vlog = os.path.join(tmp, "voice.log")
-        env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
-               "EXPLAIN_LOG": elog, "STUB_ENV": envlog, "STUB_VOICE": vlog, "STUB_HEARD": "list the big files",
-               "STUB_GATE": os.path.join(tmp, "stub-gate"),
-               "SPARK_VOICE": "clear",
-               "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
-               "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
-        # the judged line's cases run the real spark line behind the stub
-        # script: smoke's stub server and its snapshot store
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import smoke
-        _srv, know_url = smoke.start_stub()
-        env.update(KNOW_URL=know_url, KNOW_KEY=smoke.TOKEN, KNOW_PY=sys.executable,
-                   KNOW_SPARK=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "spark"),
-                   KNOW_SNAP=smoke.know_store(os.path.join(tmp, "know-store.json")))
-        prompt = "SPARKPROMPT> "
+        env, state, asked = prepare(shell, widget, tmp)
+        log, elog, envlog, vlog = (env[k] for k in ("STUB_LOG", "EXPLAIN_LOG", "STUB_ENV", "STUB_VOICE"))
+        prompt = PROMPT
         if shell == "bash":
             sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, os.path.join(tmp, "work"))
             sh.send("PS1='\\n%s'; source %s; echo SOURCED\n" % (prompt, widget))
@@ -1659,13 +1699,6 @@ def main(shell, widget):
             sh.send("PROMPT=$'\\n%s'; source %s; echo SOURCED\n" % (prompt, widget))
         ok(sh.expect("SOURCED"), "widget sourced")
         sh.expect(prompt)
-
-        def asked():
-            try:
-                with open(log) as f:
-                    return len(f.read().splitlines())
-            except OSError:
-                return 0
 
         markers = os.listdir(os.path.join(state, "spark", "widgets"))
         ok(len(markers) == 1 and open(os.path.join(state, "spark", "widgets", markers[0])).read().startswith(shell + " "),
@@ -2229,8 +2262,26 @@ def main(shell, widget):
         time.sleep(0.3)
         ok(not os.listdir(os.path.join(state, "spark", "widgets")), "marker removed on exit")
 
+        # 10. nothing the widget started outlives its shell: a streamed
+        #     answer's reader and its spark line stop with it
+        left = outlived(tmp)
+        ok(not left, "no process the widget started outlives its shell", left)
+
+    print("widget_pty %s 1/2: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
+    return 1 if fails[0] else 0
+
+
+def rows_main(shell, widget):
+    """Part 2/2: the shells of their own, sections 9 and 10 -- the rendered
+    screen, the living prompt, the alert, the voice keys, the keys moved
+    and off; nothing outlives its shell."""
+    widget = os.path.abspath(widget)
+    ok, fails = checker()
+    with tempfile.TemporaryDirectory(prefix="spark-pty-") as tmp:
+        env, _state, _asked = prepare(shell, widget, tmp)
+
         # 9. the rendered screen: a wrapped question, hint above, prompt intact
-        wrapped(shell, widget, tmp, env, prompt, ok)
+        wrapped(shell, widget, tmp, env, PROMPT, ok)
 
         # 9b. the living prompt (v1.59): height, Esc k, awake, the fallbacks
         living(shell, widget, tmp, env, ok)
@@ -2250,19 +2301,23 @@ def main(shell, widget):
         # 9e. the keys off (spark keys off): none bound, the rest works
         keys_off(shell, widget, tmp, env, ok)
 
-        # 10. nothing the widget started outlives its shell: a streamed
-        #     answer's reader and its spark line stop with it
-        left = ""
-        end = time.time() + 3
-        while time.time() < end:
-            left = subprocess.run(["pgrep", "-af", tmp], capture_output=True, text=True).stdout.strip()
-            if not left:
-                break
-            time.sleep(0.2)
+        # 10. nothing the widget started outlives its shell
+        left = outlived(tmp)
         ok(not left, "no process the widget started outlives its shell", left)
 
-    print("widget_pty %s: %s" % (shell, "all ok" if not fails else "%d FAILED" % fails))
-    return 1 if fails else 0
+    print("widget_pty %s 2/2: %s" % (shell, "all ok" if not fails[0] else "%d FAILED" % fails[0]))
+    return 1 if fails[0] else 0
+
+
+def main(shell, widget, part=""):
+    """The shell case: both parts in a row, or one of them (`--part 1/2`
+    or `2/2`): the two run side by side in the gate, each on a machine of
+    its own, so the suite takes the longer part's time, not the sum."""
+    if part == "1/2":
+        return session_main(shell, widget)
+    if part == "2/2":
+        return rows_main(shell, widget)
+    return session_main(shell, widget) | rows_main(shell, widget)
 
 
 if __name__ == "__main__":
@@ -2270,7 +2325,10 @@ if __name__ == "__main__":
         sys.exit(pager_main())
     if len(sys.argv) == 4 and sys.argv[1] == "completion" and sys.argv[2] in ("bash", "zsh"):
         sys.exit(completion_main(sys.argv[2], sys.argv[3]))
+    part = ""
+    if len(sys.argv) == 5 and sys.argv[3] == "--part" and sys.argv[4] in ("1/2", "2/2"):
+        part, sys.argv = sys.argv[4], sys.argv[:3]
     if len(sys.argv) != 3 or sys.argv[1] not in ("bash", "zsh"):
-        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET | pager | completion bash|zsh FILE")
+        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET [--part 1/2|2/2] | pager | completion bash|zsh FILE")
         sys.exit(2)
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main(sys.argv[1], sys.argv[2], part))
