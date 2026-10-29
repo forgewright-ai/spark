@@ -111,7 +111,7 @@ RESTARTS = {"update": lambda a: True, "serve": lambda a: a[:1] == ["https"]}
 # still goes through the write gate, /v1/chat/completions takes a bearer
 # only), user (a named user or the admin), admin (the forge-token). A `*`
 # is one path segment. A request off this table is 404; a user on an
-# admin row is 403 "role". CLAUDE.md contract 9 prints the table and
+# admin row is 403 "role". docs/REFERENCE.md contract 9 prints the table and
 # tests/docs_test.py holds the two equal; tests/policy_test.py proves
 # every row with three callers.
 ROUTES = {

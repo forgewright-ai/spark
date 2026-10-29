@@ -186,6 +186,7 @@ Tasks:
 - [Changelog](docs/CHANGELOG.md): changes in each release.
 - [Roadmap](docs/ROADMAP.md): planned work.
 - [Contributing](docs/CONTRIBUTING.md): how to send a change.
+- [Reference](docs/REFERENCE.md): the maintainer's reference.
 
 ## Bugs
 

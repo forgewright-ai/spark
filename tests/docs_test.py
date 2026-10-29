@@ -25,7 +25,7 @@
 # of 30 words at most, prose within 72 columns), and the two nouns hold
 # in `spark help` and every usage text too; a plain voice and the face
 # (v1.80): no doc but the CHANGELOG names a removed voice character,
-# CLAUDE.md's voice file entry holds the keys voice.mint writes, both
+# docs/REFERENCE.md's voice file entry holds the keys voice.mint writes, both
 # widgets read FACE_IDLE, and grammar rule 6 names every kind in
 # look.PROGRESS; the prompt warns (v1.82): every flag of `spark check`
 # completes, the docs name `spark check --history`, the state files and
@@ -55,7 +55,7 @@ FONTS = {"atkinson-hyperlegible-next-latin-ext.woff2": "7dae0c6c66af1aec82e09618
          "monaspace-neon-700.woff2": "37f1c50c462e51d871d52c36b190628e94c379c7157e07e04e1e2f943f07f54f",
          "monaspace-xenon-400.woff2": "eb34d971e2bf956230ba2e5bd621af7310d4c739057ae7df7b8a38ca95b03cf6",
          "monaspace-xenon-700.woff2": "c156f532e8ca566d5f5e6854cac1fdb1f614127b2f8b5d6a6d62aa7b29282c14"}
-CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md")
+CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "REFERENCE.md")
 DOCS_DIR = CORE_IN_DOCS
 CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt")
 ALL_DOCS = ROOT_DOCS + tuple("docs/" + f for f in DOCS_DIR) + ("site.env.example",)
@@ -69,7 +69,7 @@ CAPS_OK = {
     "FILE", "HOME", "ADDR", "PORT", "USER", "HOST", "MODEL", "THEME", "SITE", "SPARK", "XDG",
     "PID", "EOF", "UTF", "POSIX", "GRUB", "EFI", "DRM", "AMD", "NVIDIA", "CUDA", "OK", "FAIL",
     "WARN", "NA", "TTY", "VT", "QR", "PR", "CI", "ID", "OS", "LICENSE", "README", "CREDITS",
-    "CLAUDE", "AGENTS", "INSTALL", "CHEATSHEET", "CHANGELOG", "ROADMAP", "CONTRIBUTING", "TOUR",
+    "CLAUDE", "AGENTS", "REFERENCE", "INSTALL", "CHEATSHEET", "CHANGELOG", "ROADMAP", "CONTRIBUTING", "TOUR",
     "APPS", "IDEAS", "TROUBLESHOOTING", "DOCUMENTS", "MIT", "ISC", "BSD", "CC", "GPL", "LGPL",
     "MPL", "RFC", "ChaCha20", "AEAD", "HMAC", "CSRF", "SSE", "MB", "GB", "KB", "TB", "DNS", "IP",
     "IPV4", "IPV6", "RSA", "ED25519", "SHA256", "ROUTES", "SENDS", "MODES", "PREFERRED", "VERBS",
@@ -604,10 +604,10 @@ def shell_keys():
     keys of keys.NAMES are the two widgets' own, every name is in INSTALL
     and in the verb's usage and both completion files, the verb is in the
     cheatsheet, both widgets read the KEYS=off line of keys.env, the old
-    site.env switch is gone, CLAUDE.md's contract 3 lists site.env's keys,
+    site.env switch is gone, docs/REFERENCE.md's contract 3 lists site.env's keys,
     and SPARK_OFF is told."""
     from spark import keys as keysmod
-    inst, cheat, claude = read("docs/INSTALL.md"), read("docs/CHEATSHEET.txt"), read("CLAUDE.md")
+    inst, cheat, claude = read("docs/INSTALL.md"), read("docs/CHEATSHEET.txt"), read("docs/REFERENCE.md")
     want = sorted((n, k) for n, k, _ in keysmod.NAMES)
     for f in WIDGETS:
         text = read(f)
@@ -632,14 +632,14 @@ def shell_keys():
         check("KEYS=*" in read(f) and "=none _spark_k_recall=none" in read(f),
               "%s reads keys.env's KEYS line and binds none of the keys when it is off" % f)
     for f in ("lib/spark/config.py", "site.env.example", "lib/env.sh", "bootstrap.sh", "docs/INSTALL.md",
-              "CLAUDE.md", "README.md", "lib/spark/keys.py", "lib/spark/setup.py"):
+              "docs/REFERENCE.md", "README.md", "lib/spark/keys.py", "lib/spark/setup.py"):
         check("SITE_" + "KEYS=" not in read(f) and '"SITE_' + 'KEYS"' not in read(f) and "`SITE_" + "KEYS`" not in read(f),
               "%s holds no SITE_" "KEYS: keys.env's KEYS line is the one switch" % f)
-    check("`KEYS` is `on` or `off`" in claude, "CLAUDE.md contract 3 says keys.env's KEYS line")
+    check("`KEYS` is `on` or `off`" in claude, "docs/REFERENCE.md contract 3 says keys.env's KEYS line")
     m = re.search(r"- `site\.env`: `([A-Z_\s]+)`", claude)
     check(m is not None and m.group(1).split() == list(config.SITE_KEYS),
-          "CLAUDE.md contract 3 lists site.env's keys as config.SITE_KEYS holds them")
-    check("keys.env" in claude and "replaced." in claude, "CLAUDE.md names keys.env and the widgets' record")
+          "docs/REFERENCE.md contract 3 lists site.env's keys as config.SITE_KEYS holds them")
+    check("keys.env" in claude and "replaced." in claude, "docs/REFERENCE.md names keys.env and the widgets' record")
 
 
 def quiet():
@@ -678,11 +678,11 @@ def presence():
     """v1.80, a plain voice and a face with presence, as the tree holds
     them: no doc but the CHANGELOG names a removed voice character where
     the voice is the subject, and voice.py holds none; every `voice.NAME`
-    CLAUDE.md and AGENTS.md name is in voice.py; CLAUDE.md's voice file
+    docs/REFERENCE.md and AGENTS.md name is in voice.py; docs/REFERENCE.md's voice file
     entry names the keys voice.mint writes and never FAMILY; AGENTS.md no
     longer says the face shows only while spark waits; both widgets read
     FACE_IDLE, every FACE_<MOOD> they read is a mood look.py knows, and
-    CLAUDE.md states how many calls carry SPARK_HINT_ROW; grammar rule 6
+    docs/REFERENCE.md states how many calls carry SPARK_HINT_ROW; grammar rule 6
     names every kind in look.PROGRESS and every pace in look.STEPS."""
     from spark import look, voice as voicemod
     for doc in ALL_DOCS:
@@ -697,8 +697,8 @@ def presence():
         check(not hit, "%s: no removed voice character%s" % (doc, " (found '%s')" % hit if hit else ""))
     held = [n for n in GONE_VOICE_NAMES if hasattr(voicemod, n)]
     check(not held, "voice.py holds no character chain%s" % ("" if not held else " (found %s)" % ", ".join(held)))
-    claude, agents = read("CLAUDE.md"), read("AGENTS.md")
-    for doc, text in (("CLAUDE.md", claude), ("AGENTS.md", agents)):
+    claude, agents = read("docs/REFERENCE.md"), read("AGENTS.md")
+    for doc, text in (("docs/REFERENCE.md", claude), ("AGENTS.md", agents)):
         names = sorted(set(re.findall(r"(?<![\w./-])voice\.([A-Za-z_]\w*)", text)) - {"env", "py", "wav"})
         lost = [n for n in names if not hasattr(voicemod, n)]
         check(not lost, "%s: every voice.NAME it names is in voice.py (%d names)%s"
@@ -708,8 +708,8 @@ def presence():
     m = re.search(r"(?ms)^   - `~/\.config/spark/voice`:(.*?)^   - ", claude)
     entry = m.group(1) if m else ""
     check(bool(keys) and bool(entry) and all(re.search(r"\b%s\b" % k, entry) for k in keys),
-          "CLAUDE.md's voice file entry names the keys voice.mint writes (%s)" % " ".join(keys))
-    check(re.search(r"\bFAMILY\b", claude) is None, "CLAUDE.md: the voice file has no FAMILY")
+          "docs/REFERENCE.md's voice file entry names the keys voice.mint writes (%s)" % " ".join(keys))
+    check(re.search(r"\bFAMILY\b", claude) is None, "docs/REFERENCE.md: the voice file has no FAMILY")
     flat = " ".join(agents.split())
     check("only while spark waits" not in flat, "AGENTS.md: the face is not only the wait")
     check("rests above an idle prompt" in flat, "AGENTS.md: the face rests above an idle prompt")
@@ -728,15 +728,15 @@ def presence():
         calls.append(sum(1 for line in src.split("\n")
                          if "SPARK_HINT_ROW=$_spark_height" in line and not line.lstrip().startswith("#")))
     check(calls[0] == calls[1] and ("The widgets set it on those %d calls" % calls[0]) in " ".join(claude.split()),
-          "CLAUDE.md contract 4: the widgets set SPARK_HINT_ROW on %d calls, both alike" % calls[0])
+          "docs/REFERENCE.md contract 4: the widgets set SPARK_HINT_ROW on %d calls, both alike" % calls[0])
     # grammar rule 6: every progress kind by name, every pace
     m = re.search(r"(?ms)^6\. One progress vocabulary\.(.*?)^7\. ", claude)
     rule = m.group(1) if m else ""
-    check(bool(rule), "CLAUDE.md has grammar rule 6, one progress vocabulary")
+    check(bool(rule), "docs/REFERENCE.md has grammar rule 6, one progress vocabulary")
     for kind in look.PROGRESS:
-        check("`%s`" % kind in rule, "CLAUDE.md's grammar rule 6 names the progress kind %s (look.PROGRESS)" % kind)
+        check("`%s`" % kind in rule, "docs/REFERENCE.md's grammar rule 6 names the progress kind %s (look.PROGRESS)" % kind)
     for step in sorted(set(look.STEPS.values())):
-        check("%.2f" % step in rule, "CLAUDE.md's grammar rule 6 states the pace %.2f (look.STEPS)" % step)
+        check("%.2f" % step in rule, "docs/REFERENCE.md's grammar rule 6 states the pace %.2f (look.STEPS)" % step)
 
 
 COMPLETIONS = ("home/.config/spark/completion.bash", "home/.config/spark/completion.zsh")
@@ -748,7 +748,7 @@ def warns():
     """v1.82, the prompt warns and the check remembers, as the tree holds
     them: every --flag of check.USAGE is in both completion files; the
     cheatsheet and INSTALL name `spark check --history`, and help's line
-    for `spark clear --history` names it too; CLAUDE.md's runtime paths
+    for `spark clear --history` names it too; docs/REFERENCE.md's runtime paths
     name the three files the merge writes beside check.json, by the
     names in lib/spark/__init__.py; AGENTS.md's hook rule names
     state/alert, and neither widget sources or writes that file;
@@ -770,13 +770,13 @@ def warns():
         check("spark check --history" in " ".join(read(name).split()), "%s names spark check --history" % name)
     check("spark check --history" in " ".join(cli.CLEAR_USAGE.split()),
           "cli.CLEAR_USAGE says spark clear --history drops what spark check --history shows")
-    claude = read("CLAUDE.md")
+    claude = read("docs/REFERENCE.md")
     m = re.search(r"(?ms)^State is `~/\.local/state/spark/`.*?^Data is ", claude)
     paths = m.group(0) if m else ""
-    check(bool(paths), "CLAUDE.md has the runtime paths of the state directory")
+    check(bool(paths), "docs/REFERENCE.md has the runtime paths of the state directory")
     for const in ("CHECK_JSON", "CHECK_LOCK", "CHECK_HISTORY", "ALERT_FILE"):
         base = os.path.basename(getattr(spark, const, "") or "?")
-        check("`%s`" % base in paths, "CLAUDE.md's runtime paths name %s (spark.%s)" % (base, const))
+        check("`%s`" % base in paths, "docs/REFERENCE.md's runtime paths name %s (spark.%s)" % (base, const))
     alert = "state/" + os.path.basename(spark.ALERT_FILE)
     check("`%s`" % alert in read("AGENTS.md"), "AGENTS.md names %s among the hook's reads" % alert)
     for f in WIDGETS:
@@ -854,23 +854,41 @@ def patch_lane():
     day = {"1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday"}
     check(m is not None, "tests/tag.sh has a default weekly day")
     if m:
-        for doc in ("docs/CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md"):
+        for doc in ("docs/CONTRIBUTING.md", "docs/REFERENCE.md", "AGENTS.md"):
             check(day[m.group(1)] in read(doc), "%s names tag.sh's weekly day, %s" % (doc, day[m.group(1)]))
     m = re.search(r"^cool=\$\{SPARK_TAG_COOL:-(\d+)\}$", read("tests/tag.sh"), re.M)
     check(m is not None, "tests/tag.sh has default cooling hours")
     if m:
-        for doc in ("CLAUDE.md", "AGENTS.md", "docs/CONTRIBUTING.md"):
+        for doc in ("docs/REFERENCE.md", "AGENTS.md", "docs/CONTRIBUTING.md"):
             check(re.search(r"\b%s hours\b" % m.group(1), read(doc)) is not None,
                   "%s states tag.sh's cooling hours, %s" % (doc, m.group(1)))
     m = re.search(r"^PATCH_MAX_LINES = (\d+)$", read("tests/patch_test.py"), re.M)
     check(m is not None, "tests/patch_test.py has PATCH_MAX_LINES")
     if m:
-        for doc in ("CLAUDE.md", "AGENTS.md"):
+        for doc in ("docs/REFERENCE.md", "AGENTS.md"):
             check(re.search(r"\b%s (changed )?lines\b" % m.group(1), read(doc)) is not None,
                   "%s states the fence's cap, %s lines" % (doc, m.group(1)))
 
 
+def tests_brief():
+    """CLAUDE.md is what a Claude session loads: short, it imports
+    AGENTS.md, and every section it names is one of docs/REFERENCE.md's
+    (a ## heading or an Adding-things bullet)."""
+    brief = read("CLAUDE.md")
+    lines = brief.split("\n")
+    check(len(lines) <= 200, "CLAUDE.md stays under 200 lines (%d)" % len(lines))
+    check("@AGENTS.md" in lines, "CLAUDE.md imports AGENTS.md on a line of its own")
+    ref = read("docs/REFERENCE.md")
+    sections = set(re.findall(r"^#+ (.+)$", ref, re.M)) | set(re.findall(r"^- \*\*(.+?)\.\*\*", ref, re.M))
+    for name in sorted(set(" ".join(n.split()) for n in re.findall(r'"([^"]+)"', brief))):   # a quote wrapped by the prose
+        if name == "The patch lane":
+            check("## The patch lane" in read("AGENTS.md"), "AGENTS.md has the section CLAUDE.md names, %s" % name)
+            continue
+        check(name in sections, "docs/REFERENCE.md has the section CLAUDE.md names, %s" % name)
+
+
 def main():
+    tests_brief()
     tests_named()
     tests_gated()
     readme, inst, cheat, cli = (read(f) for f in
@@ -900,7 +918,7 @@ def main():
           "INSTALL leads with requirements and a signed existing-computer path")
     check("Developer-only alternative" in inst and "without signed-release verification" in inst,
           "INSTALL states the clone-from-main tradeoff beside that path")
-    # the docs rendered outside this tree (CLAUDE.md, "A doc") draw code
+    # the docs rendered outside this tree (docs/REFERENCE.md, "A doc") draw code
     # spans, bold, bare URLs and doc names, and nothing else: a markdown
     # link or an emphasis there shows as typed
     for doc in ("docs/INSTALL.md", "docs/CHANGELOG.md", "docs/ROADMAP.md", "docs/CONTRIBUTING.md", "CREDITS.md"):
@@ -968,7 +986,7 @@ def main():
               "README.md 'What leaves this machine' names '%s' (text.SOURCE_SHAPES)" % what)
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
-    for doc in ("CLAUDE.md", "docs/INSTALL.md"):
+    for doc in ("docs/REFERENCE.md", "docs/INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
     # the threat model: the section exists and names the one remedy
@@ -983,27 +1001,27 @@ def main():
     for m in re.finditer(r'(?m)^(MODEL_[A-Z_0-9]+_GROUND)="?([^"\n]*)"?\s*$', read("models.env")):
         check(re.match(r"^\d+/\d+ \d{4}-\d{2}-\d{2}$", m.group(2)) is not None,
               "models.env: %s is '<kept>/<run> <YYYY-MM-DD>' (got %r)" % (m.group(1), m.group(2)))
-    # the split by category CLAUDE.md states ("8 SOFTWARE, 22 CAPABILITY, 9 NONFUNCTIONAL")
+    # the split by category docs/REFERENCE.md states ("8 SOFTWARE, 22 CAPABILITY, 9 NONFUNCTIONAL")
     src_rows = read(os.path.join("lib", "spark", "check.py"))
     for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):
         n_cat = len(re.findall(r'^@row\("%s"' % cat, src_rows, re.M))
-        m = re.search(r"(\d+)\s+%s" % cat, read("CLAUDE.md"))
-        check(m is not None and int(m.group(1)) == n_cat, "CLAUDE.md: %d %s rows (check.py says %d)" % (int(m.group(1)) if m else -1, cat, n_cat))
+        m = re.search(r"(\d+)\s+%s" % cat, read("docs/REFERENCE.md"))
+        check(m is not None and int(m.group(1)) == n_cat, "docs/REFERENCE.md: %d %s rows (check.py says %d)" % (int(m.group(1)) if m else -1, cat, n_cat))
     # the chaos scenarios: a count a doc spells out is chaos.py's own
     n_sc = sum(1 for line in read(os.path.join("lib", "spark", "chaos.py")).split("\n")
                if line.startswith("@scenario"))
     spelled = "zero one two three four five six seven eight nine ten eleven twelve".split()
     if n_sc < len(spelled):
         rx = re.compile(r"\b(%s) (?:failures|scenarios)\b" % "|".join(spelled), re.I)
-        for doc in ("docs/ROADMAP.md", "docs/CHANGELOG.md", "README.md", "docs/INSTALL.md", "CLAUDE.md", "AGENTS.md"):
+        for doc in ("docs/ROADMAP.md", "docs/CHANGELOG.md", "README.md", "docs/INSTALL.md", "docs/REFERENCE.md", "AGENTS.md"):
             for m in rx.finditer(read(doc)):
                 check(m.group(1).lower() == spelled[n_sc],
                       "%s: '%s' is chaos.py's count (%s)" % (doc, m.group(0), spelled[n_sc]))
     # a contract written down and not built says so in three places: its
-    # module, the roadmap and CLAUDE.md. Check the claims, not the prose --
+    # module, the roadmap and docs/REFERENCE.md. Check the claims, not the prose --
     # and check that nothing quietly started dispatching to it
     verbs = read(os.path.join("bin", "spark"))
-    roadmap, claude = read("docs/ROADMAP.md"), read("CLAUDE.md")
+    roadmap, claude = read("docs/ROADMAP.md"), read("docs/REFERENCE.md")
     reserved = 0
     for f in sorted(os.listdir(os.path.join("lib", "spark"))):
         head = read(os.path.join("lib", "spark", f))[:600] if f.endswith(".py") else ""
@@ -1018,7 +1036,7 @@ def main():
         check(re.search(r"(?m)^## Contract %s: spark %s$" % (n, name), roadmap) is not None,
               "docs/ROADMAP.md has '## Contract %s: spark %s'" % (n, name))
         check(re.search(r"(?m)^%s\. `spark %s` -- reserved, not built" % (n, name), claude) is not None,
-              "CLAUDE.md reserves contract %s for spark %s" % (n, name))
+              "docs/REFERENCE.md reserves contract %s for spark %s" % (n, name))
     # reserved may be zero once the last one is built; the loop still guards
     # any that remain (a module marked NOT BUILT that quietly gets dispatched)
     # contract 8: a signed line is `spark <verb> -- <one line>`, and the
@@ -1040,10 +1058,10 @@ def main():
     top = re.search(r"^## v(\d+\.\d+)(?:\.\d+)?$", read("docs/CHANGELOG.md"), re.M).group(1)
     m = re.search(r"What comes after v(\d+\.\d+)", read("docs/ROADMAP.md"))
     check(m is not None and m.group(1) == top, "docs/ROADMAP.md: 'What comes after v%s' names docs/CHANGELOG.md's top section" % top)
-    # the gated row lists: CLAUDE.md states their counts, and names the
+    # the gated row lists: docs/REFERENCE.md states their counts, and names the
     # client's rows one by one
     src = read(os.path.join("lib", "spark", "check.py"))
-    claude = read("CLAUDE.md")
+    claude = read("docs/REFERENCE.md")
     named = {}
     for const in ("WSL_ROWS", "ARCH_ROWS", "VOID_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
@@ -1052,17 +1070,17 @@ def main():
         check(m is not None, "check.py defines %s" % const)
         for c in re.finditer(r"the (\d+) rows?\s+in\s+`check\.%s`" % const, claude):
             check(int(c.group(1)) == len(named[const]),
-                  "CLAUDE.md: '%s' is check.py's count (%d)" % (" ".join(c.group(0).split()), len(named[const])))
+                  "docs/REFERENCE.md: '%s' is check.py's count (%d)" % (" ".join(c.group(0).split()), len(named[const])))
     m = re.search(r"`check\.CLIENT_ROWS` \(([^)]*)\)", claude)
     listed = re.split(r",\s+", " ".join(m.group(1).split())) if m else []
     check(listed == named["CLIENT_ROWS"],
-          "CLAUDE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
+          "docs/REFERENCE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
     n_models = len(rows)
     for doc in ("README.md", "docs/INSTALL.md"):
         for m in re.finditer(r"(\d+) (models|rows), each with its license", read(doc)):
             check(int(m.group(1)) == n_models, "%s: '%s' is models.env's count (%d)" % (doc, m.group(0), n_models))
     # the CHANGELOG's top section is the newest tag or the one right after it
-    # (written before its tag, CLAUDE.md Releasing) -- never further ahead,
+    # (written before its tag, docs/REFERENCE.md Releasing) -- never further ahead,
     # never behind. After a tag a.b or a.b.c the one right after is its next
     # patch (a.b.1, a.b.c+1), the next minor (a.b+1) or the next major (a+1.0)
     import subprocess
@@ -1104,7 +1122,7 @@ def main():
         check(app in read("CREDITS.md"), "CREDITS.md names %s (README.md's Apps does)" % app)
     # docs/ holds exactly the five core docs that moved there with v1.38.
     # (release-gated, so none carries the "not tied to a release" line);
-    # every one is in CLAUDE.md's Layout and is pointed to from the README
+    # every one is in docs/REFERENCE.md's Layout and is pointed to from the README
     have = sorted(f for f in os.listdir(os.path.join(ROOT, "docs")) if not f.startswith("."))
     check(have == sorted(DOCS_DIR), "docs/ holds exactly %s%s"
           % (", ".join(DOCS_DIR), "" if have == sorted(DOCS_DIR) else " (found %s)" % ", ".join(have)))
@@ -1115,11 +1133,11 @@ def main():
               "docs/%s is core (the landing rule): it does not carry the beside-the-core line" % name)
         check("docs/" + name in readme, "README.md points to docs/%s" % name)
     for name in DOCS_DIR:
-        check(name in layout, "CLAUDE.md's Layout names docs/%s" % name)
+        check(name in layout, "docs/REFERENCE.md's Layout names docs/%s" % name)
     # every package family's data file is named on the Layout's distro/ line
     for f in sorted(os.listdir(os.path.join(ROOT, "distro"))):
         if f.endswith(".env"):
-            check(f in layout, "CLAUDE.md's Layout names distro/%s" % f)
+            check(f in layout, "docs/REFERENCE.md's Layout names distro/%s" % f)
     # every docs/X a doc or the help names exists (the successor of the
     # page-source check; the CHANGELOG is history and may name what moved),
     # and README and the CHEATSHEET send a new user to the same set
@@ -1138,7 +1156,7 @@ def main():
     # a moved doc is named only by its new path: INSTALL.md, CHEATSHEET.txt,
     # CHANGELOG.md, ROADMAP.md and CONTRIBUTING.md live in docs/ since v1.38,
     # so a bare name (or ~/.spark/CHEATSHEET.txt) is a broken pointer. The
-    # CHANGELOG is history; CLAUDE.md's Layout block names files by their
+    # CHANGELOG is history; docs/REFERENCE.md's Layout block names files by their
     # bare name under the docs/ entry, as every entry there does
     old = re.compile(r"(?<!docs/)(?<![\w.-])(INSTALL\.md|CHEATSHEET\.txt|CHANGELOG\.md|ROADMAP\.md|CONTRIBUTING\.md)\b")
     scan = list(live) + ["bin/spark"] + sorted(os.path.join("lib", "spark", f) for f in os.listdir(libdir) if f.endswith(".py"))
@@ -1146,7 +1164,7 @@ def main():
         scan += [os.path.relpath(os.path.join(d, f), ROOT) for f in fs]
     for doc in scan:
         text = read(doc)
-        if doc == "CLAUDE.md":
+        if doc == "docs/REFERENCE.md":
             text = text.replace(layout, "")
         m = old.search(text)
         check(m is None, "%s: no old root path%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
@@ -1175,13 +1193,13 @@ def main():
     # CHANGELOG names the verb, its keys, or a part of the look as a word
     # of spark look
     gone = re.compile(r"\bspark quiet\b|\bspark look (?:PART|motion|colou?r|words|reveal)\b")
-    # the removed keys: CLAUDE.md alone names them, as keys an older file
+    # the removed keys: docs/REFERENCE.md alone names them, as keys an older file
     # may hold that still load and that nothing reads
     keys = re.compile(r"\bSITE_QUIET_(?:START|AUDIO)\b|\bSPARK_LOOK_[A-Z]+|\bquiet_(?:start|audio)\b")
     for doc in ALL_DOCS + ("home/.config/spark/spark.env.example",):
         if doc == "docs/CHANGELOG.md":
             continue
-        m = gone.search(read(doc)) or (keys.search(read(doc)) if doc != "CLAUDE.md" else None)
+        m = gone.search(read(doc)) or (keys.search(read(doc)) if doc != "docs/REFERENCE.md" else None)
         check(m is None, "%s: no spark quiet, the look one switch (v1.69)%s"
               % (doc, " (found '%s')" % m.group(0) if m else ""))
     # v1.48: the core knows nothing of a shell layer, and neither does a
@@ -1193,19 +1211,19 @@ def main():
             continue
         m = re.search(r"spark-shell|(?i:shell layer)|SHELL\.md|THEME_BTOP", read(doc))
         check(m is None, "%s: no shell layer%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
-    # contract 9: the route table CLAUDE.md prints is forgeserve.ROUTES,
+    # contract 9: the route table docs/REFERENCE.md prints is forgeserve.ROUTES,
     # entry for entry -- a route added without its row, or a row without
     # its route, fails here (the block is METHOD  PATH  ROLE lines)
     from spark import forgeserve
     m = re.search(r"```\n((?:[ ]*(?:GET|POST|DELETE)\s+\S+\s+(?:none|user|admin)\n)+)[ ]*```", claude)
-    check(m is not None, "CLAUDE.md contract 9 prints the route table (METHOD  PATH  ROLE)")
+    check(m is not None, "docs/REFERENCE.md contract 9 prints the route table (METHOD  PATH  ROLE)")
     doc_routes = {}
     for line in (m.group(1).split("\n") if m else []):
         if line.strip():
             method, path, role = line.split()
             doc_routes[(method, path)] = role
     off = sorted(k for k in set(doc_routes) | set(forgeserve.ROUTES) if doc_routes.get(k) != forgeserve.ROUTES.get(k))
-    check(not off, "CLAUDE.md's route table is forgeserve.ROUTES, entry for entry%s"
+    check(not off, "docs/REFERENCE.md's route table is forgeserve.ROUTES, entry for entry%s"
           % ("" if not off else " (differs at %s)" % ", ".join("%s %s" % k for k in off[:3])))
     # the release key get carries is allowed-signers, byte for byte: a
     # fresh install verifies against the key in get, never the clone's

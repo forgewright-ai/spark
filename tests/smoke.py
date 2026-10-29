@@ -10061,7 +10061,7 @@ def main():
              "ver: the version line matches git describe", out + err)
         t.ok("\u2588" in out and "\033" not in out and "\\033" not in out, "ver: the logo is drawn, without escapes, when piped", out)
         t.ok("CREDITS.md" in spark("ver", "--credits")[1], "ver --credits: names CREDITS.md for the rest of the licenses", out)
-        # a patch release is a three-part tag (CLAUDE.md, Releasing): the
+        # a patch release is a three-part tag (docs/REFERENCE.md, Releasing): the
         # version reads it, and counts commits past it. A scratch repository
         # from this tree, so the real cache and the real tags stay untouched.
         with tempfile.TemporaryDirectory(prefix="spark-ver.") as scratch:

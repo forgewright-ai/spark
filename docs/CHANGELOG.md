@@ -6,6 +6,12 @@
   its root. OpenSSL 3 added them by itself and OpenSSL 4 does not, and a
   python 3.13 client refused the chain without the authority key
   identifier. The test fixture's pair carries them too (#158).
+- The full reference moves to `docs/REFERENCE.md`. `CLAUDE.md`, what a
+  Claude session loads, is a short file now: it imports `AGENTS.md` and
+  names the reference's sections by topic. A session starts with about
+  7k tokens of context instead of 50k, and reads the rest when a task
+  needs it. `tests/docs_test.py` holds the file under 200 lines and
+  every section it names to the reference (#147).
 - CI: the Void job pins the Fastly mirror before xbps runs.
   repo-default.voidlinux.org maps to any Tier 1 mirror, and the one it
   mapped to on 2026-10-29 failed, then crawled for hours.

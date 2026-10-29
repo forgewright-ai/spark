@@ -1,0 +1,3158 @@
+# spark -- maintainer's reference
+
+`AGENTS.md` is the short brief for agents and contributors. This file is
+the full reference. `CLAUDE.md` is what a Claude session loads: the
+brief, imported, and this file's sections named by topic. It describes
+how things are, not how they came to be.
+
+spark is a local AI at the shell prompt that never leaves your LAN. It
+runs on a fresh Debian-family, Arch, Void, Fedora or openSUSE Linux, on
+macOS, and on Ubuntu under WSL 2. Its spine is 3 lines. Choose your OS,
+run one line, spark is live. A tool becomes a spark app as a client of
+`spark edit` (contract 10), in its own `spark-<app>` repository. When
+apps ask for it, another contract is defined and apps connect the same
+way. Inside, the `FORGE` is the identity spark builds and keeps on this
+machine: the model, one soul, one memory and the threads, served on the
+LAN by `spark serve`. It is one identity per machine, the same one for
+the prompt line, the page and any program. `FORGE` is the code's name
+for it, and no verb carries the word.
+
+## Principles
+
+- **Simple.** One command (`spark`), one bootstrap, one install script,
+  one config format (`KEY=value`). The code is python3 stdlib, 3.9 or
+  newer, and `sh`. Nothing else.
+- **The spine, one command.** spark is the engine, the model, chat, the
+  `?` prompt line, the `FORGE` and users. It is always installed: one rc
+  line, and nothing else touched. A spark app is a client of one spark
+  surface. The surfaces are text on stdin (`spark edit`, contract 10,
+  and `spark line`, contract 4), the shell (`? words`, `spark do`,
+  `explain`, `$EDITOR`) and the `FORGE` API (contract 9). spark is an
+  MCP host too (contract 16): the servers on its list offer their tools
+  to the prompt line and `spark do`, and `spark steps` plans with any
+  program's tools. Its plugin
+  lives in its own repository, named `spark-<app>`, installed the app's
+  way. micro came first: forgewright-ai/spark-micro. spark ships no app,
+  no app package, no app check row and no per-app verb. A machine's
+  desktop, its prompt and its daily tools are not spark's business:
+  `spark look` dresses spark's own lines alone. The console's palette
+  and font and a quiet boot are the machine's look, not spark's. spark's
+  side is generic: `~/.config/spark/theme.env` is a palette a look
+  layer may write, and no shell code lives in this tree. The bar line
+  is core, beside `spark serve boot`: the behaviour of an AI appliance.
+- **Privacy by design.** Nothing leaves the machine except the package
+  managers, pinned sha256-verified downloads, and `spark` talking to a
+  `FORGE` or a llama-server you run. Identity lives in
+  `~/.config/spark/site.env`, never in the repository. The soul is
+  yours, under `~/.config/spark/`. The memory is yours, sealed in your
+  store. Secrets are 0600 files, never config values. The words in
+  `.privacy-terms` appear nowhere in this repository, and the pre-commit
+  hook enforces it. The personal words are not published either. They
+  live in `~/.config/spark/privacy-terms` (or `SPARK_PRIVACY_TERMS`),
+  0600, one per line. The hook and the `privacy` row read the union of
+  both lists.
+- **Two paces.** A conversation can be paced for the reader. The prompt
+  line is speed alone. Where you read a reply as it comes (chat,
+  explain, a bare question), spark measures what the model writes. The
+  measure is the newest turns' tokens a second and characters a token
+  (`reveal.measured`). It offers the threshold a reveal stays under, so
+  the hand never waits and never bursts: `reveal.auto_cps`, 85% of the
+  measured pace, a reader's 40 a second at most. `spark stats` and a
+  bare `/reveal` show the numbers. The choice is the reader's, never
+  imposed: `--reveal N|auto|off`, `/reveal`, `SPARK_REVEAL`. Off is the
+  default, the chunks as they come. On an awakened machine the reveal
+  breathes at the punctuation (`text.Wrap._breath`). A comma or a
+  semicolon waits `reveal.BREATH_COMMA` steps more, and a sentence's end
+  or a blank line `reveal.BREATH_STOP`. The pace chosen
+  is the average with the pauses in it: the base step shrinks by
+  `reveal.BREATH_SCALE`. A code line has no breath, so it keeps the
+  chosen pace itself, never faster. A breath is a later due, never a
+  sleep, so a model stall swallows it and is never repaid. Unawakened,
+  the pace is even. Where you type commands (the widget's line, `spark
+  do`'s steps) nothing is paced. Piped, nothing is paced anywhere.
+- **Text-first.** Plain text that pipes, `--porcelain` for programs, no
+  curses, keyboard only. Long output pages at a terminal (`$PAGER`, else
+  `less`) and is plain when piped: `page()` and `paged()` in
+  `lib/spark/__init__.py`. A closed pipe is an error, never a signal.
+  `SIGPIPE` stays ignored, Python's default. A write into a closed
+  stdout, pager or child's stdin raises `BrokenPipeError` where the
+  code can handle it. `bin/spark` ends quietly on one that reaches the
+  top, with the status a process killed by `SIGPIPE` has. Every
+  character spark prints draws on the Linux console. The mark is the
+  word `spark`. A line spark says
+  starts with one mark, on every OS and terminal: `* ` when spark
+  speaks, `! ` for a warning or a failure. No `spark:` prefix and no
+  other glyph starts a line. Where the look draws the face, it comes
+  after the mark. A reply at a terminal is the one line a face opens:
+  it stands in the mark's place. `spark check` is a table and keeps
+  its row glyphs. On the console, inside a
+  tmux running on it, or with `SPARK_ASCII=1`, the report and bar glyphs
+  fall back to `+ x - | v ^ ->`. The docs are ASCII too, and the hook
+  refuses anything else: they are read on that console as well. Colour
+  comes at a terminal only, first from 6 optional environment variables
+  an rc may export, SGR parameter strings, one per role:
+  `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`, `SPARK_WARN_SGR`,
+  `SPARK_OK_SGR`, `SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR`. An awakened
+  machine whose colour part is active fills a role left unset from a
+  built-in palette (`look.DEFAULT_SGR`). Accent is bold, muted dim, warn
+  red, trouble bold red, ok green, and you plain (you is reserved:
+  nothing paints with it yet). No hue reads on every
+  background, so the accent is bold in the terminal's own foreground.
+  Dim is decoration only: the dots, the scanner's brackets, the arrow,
+  never text a person has to read. `sgr()` and `paint()` in
+  `lib/spark/__init__.py` keep to 30-37 and 90-97 plus bold and dim.
+  They also take `38;5;16` to `38;5;20`, five slots a desktop's
+  terminal may set from the palette. Any other `38;5` or 24-bit value
+  is dropped whole. A pipe never sees an escape.
+  Unset and unawakened, every output is byte for byte what it was. An
+  input() prompt (`chat> `) is painted only under GNU readline,
+  bracketed in `\001` and `\002`. libedit counts the escape bytes as
+  columns, so there it stays plain. Every animation frame is ASCII:
+  `text.Busy`, the pulse while a reply is on its way, its scanner and
+  the waking bar (`text.Estimate`). So are the 5 progress kinds
+  (`look.PROGRESS`), the faces (`faces.kit`) and every frame
+  `look.Anim` derives from them. A reply's
+  Markdown
+  is drawn at a terminal, never stripped blind. `text.Wrap` renders
+  `**bold**` as bold and a `# heading` line as bold. It drops the `*`
+  marks of an emphasis only when they flank a word: a letter after an
+  opening mark and none before it, the reverse to close. So `*.txt`,
+  `**/`, `2*3*4` and `_names_` pass through. A ``` fence opens a block
+  that passes through whole until the closing fence. Awakened, it also
+  draws `inline code` in the accent, its backticks dropped, and a `- `,
+  `* ` or `N. ` line as a bullet whose wrapped lines hang under its
+  first word. The face is presence. It shows where the look's motion
+  and words are active on the stream, and it says nothing: no line is
+  printed for it, and no model is asked. In a wait it sits inside the
+  pulse, the scanner and the waking bar. It leads a reply at a
+  terminal: chat, explain, a bare question and `/read`. It follows the
+  mark on a `!` line for a model failure, on `spark do`'s danger step
+  and on its done line (`text.faced`). In the hint row it follows the
+  mark on spark's lines, and it rests alone above an idle prompt
+  (contract 4). `spark look` shows it too. No greeting or goodbye
+  carries it. Each mood has several frames. `look.Anim` derives them
+  from the stored idle face (`look.parts`, `look.scores`), and none is
+  stored: the faces file and the look file keep one still a mood. A
+  still edited by hand is drawn as written, one frame. A led reply
+  opens with the idle face in the mark's place (`text.reply_face`,
+  `text.Wrap`'s `lead`). Its later lines start at column 0, so a code
+  block copies clean. `text.FaceLead`, a thread of its own, redraws
+  the face on that first row. It talks while text flows, a write in
+  the last `FaceLead.FLOW` seconds, and thinks while the stream
+  pauses. A reply the chat reads aloud talks with the voice instead.
+  `forge._Face`, a subclass, moves the mouth every `look.MOUTH_STEP`
+  (0.15 s) while one of the reply's sentences sounds
+  (`voice.Reader.sounds`), and rests on idle between them.
+  The talking frame is the idle one with its mouth open
+  (`look.talking`). The redraw saves the cursor, goes up the rows the
+  reply has taken, writes the frame and restores, under one lock with
+  the reply's writes, which count the rows. The reply ends on a mood's
+  still (`FaceLead.settle`): pleased, puzzled when the cap cut it,
+  alarmed when the model failed. Nothing is drawn after the verb
+  returns. In the chat the mood's frames may play while `chat>` waits.
+  There the face rests at the first key typed, on a cut (`Esc x`) and
+  before the chat prints a line of its own. Before its row would
+  scroll off, the reply's rows at the terminal's height less 2, the
+  face settles where it is. A resized terminal stops it as it stands.
+  A pipe, an unawakened machine and the look `off` keep the mark and
+  their bytes.
+  A reply's escapes and control characters never print, at a
+  terminal or piped. `text.Printable` drops ESC and 8-bit CSI
+  sequences, OSC, DCS, SOS, PM and APC whole, a sequence split across
+  chunks too. It drops C0 but tab and line feed, DEL, C1 and the bidi
+  controls. Printable text stays byte for byte. Text in is strict
+  UTF-8 as well. stdin is decoded with the replacement mark
+  (`text.stdin_text`). Every string bound for the wire or a store goes
+  through `text.clean` first: a thread, the ledger, a turn record. A
+  lone surrogate is an HTTP 500 from the engine's JSON parser and a
+  crash at a store's strict encode. surrogateescape keeps one for a byte
+  that was not UTF-8 in argv or the environment under the C locale. A
+  w3m page title on the box was one.
+- **Awake by choice.** After the install spark works as it did. `spark
+  awaken` gives the machine a personality and a look. Until it runs
+  nothing living happens: `look.part` answers `off` for every part, so
+  every caller keeps its old bytes. Awaken is the one place spark asks
+  the model about itself, never unasked. It makes only what shows: a
+  personality and a face. Every mood of the face is made and kept, one
+  still each. It sets the look, one
+  switch (`SPARK_LOOK`), to `auto` and writes the look file with
+  `AWAKE=yes`. Motion, colour and words follow the switch. Words is
+  the face, wherever it shows (Text-first), and motion is what moves
+  it. spark prints
+  no canned line: no greeting, no goodbye, no news. A check row that
+  turned worse is not one. The line is the row's own name, value and
+  remedy, said once in each pane, and once more when it heals
+  (contract 6). Four fixes
+  reach every machine: setup's one suggestion line, the height (`spark
+  height N`, `Esc k`), one text for every line, and the bugs.
+  Precedence, strongest first: a pipe, `spark off`, the look `off`,
+  `on`, then `auto`. A pipe never sees a frame or an escape. `on` wins
+  over `NO_COLOR`. `auto` needs a tty, not `TERM=dumb`, and for colour
+  `NO_COLOR` unset. The machine's personality never claims where data
+  goes: awaken's brief forbids it, and `README.md` says what leaves. The
+  voice follows the same door. Awaken offers the machine's own voice
+  (`SPARK_VOICE=on`) where a player is. It is one of Kokoro's
+  speakers, picked by the temperament and the seed, with no effect
+  over it. The clear voice, for low
+  vision, is accessibility, not a look: it works before awaken, and
+  `spark setup` offers it.
+- **Symmetric.** Every feature exists on both OSes, through each OS's
+  native mechanism. That is apt, pacman, xbps, dnf or zypper for the
+  packages, systemd, launchd or runit for the services, bash or zsh for
+  the shell.
+  Nothing OS-only ships. A Linux package family is one oracle beside
+  `is_wsl()`: `distro()` reads `ID`, then `ID_LIKE`, from os-release,
+  and `SPARK_OS_RELEASE` pins it. Fedora answers by its `ID`, and
+  openSUSE Tumbleweed and Leap by the `ID_LIKE` word `opensuse`. Rocky
+  and AlmaLinux say `ID_LIKE` `fedora` and so match that family. They
+  are not proven, and their older glibc may not run the pinned engine.
+  Fedora and openSUSE are systemd and glibc: the services, linger and
+  `spark serve boot` work as on Debian and Arch. Their atomic systems
+  are not supported. Both turn firewalld on, and spark never changes
+  it: `docs/INSTALL.md` gives the line to open the page's port by
+  hand. Its names are one data file,
+  `distro/<id>.env`. The verbs that ask a package manager switch once on
+  `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. The init is one
+  oracle too, `init_shape()` beside `distro()`: launchd on macOS, runit
+  when `/etc/runit` is a directory, else systemd. On runit the 3
+  services are directories under `~/.config/spark/sv/`, rendered by
+  `install.sh`. A root `runsvdir-USER` service, written once by
+  bootstrap and linked into `/var/service`, supervises them from boot.
+  spark runs sv for them in one place, `engine.svctl`. A verb that waits
+  for the service (`restart`, `stop`, `start`) carries `sv -w 60`
+  (`engine.SV_WAIT`): a big model takes longer than sv's own 7 seconds
+  to unload. On runit the prompt line's prefix names `sv` and `ip`
+  (`persona.runit_lines`). It names `svlogtail`, which reads the logs,
+  only where that program is installed. It never names `svlogd`, which
+  writes them. One line there says how runit enables a service of the
+  system (`persona.RUNIT_BOOT`): a link in `/var/service`, which `ls`
+  lists.
+  The engine pin is a glibc build, so Void's musl flavour refuses at
+  `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
+  flavour runs spark`. The voice's runtime is a glibc build too, and its
+  fetch refuses on musl in one line. What a family lacks refuses in one
+  signed line, and its rows say so, never fail. `check.ARCH_ROWS`,
+  `check.VOID_ROWS`, `check.FEDORA_ROWS` and `check.OPENSUSE_ROWS` name
+  those rows, none today, and the fifth to eighth selftest passes run
+  there. Windows is reached through WSL 2. Ubuntu
+  there is Linux to spark, minus what WSL cannot do. `is_wsl()` sits
+  beside `os_pretty`. A verb WSL cannot serve refuses in one signed
+  line, such as `spark serve boot`, and a row says so, never fails. CI
+  has no WSL runner: `check.WSL_ROWS` and the fourth selftest pass pin
+  the branch by fixture. A real run there is the maintainer's, by hand.
+- **The user chooses.** Model, machine name, user, spark's own look:
+  all keys with defaults. Nothing aesthetic or sized to hardware
+  is baked in. A model is the user's own choice, never a spark change:
+  `spark model add URL --license "NAME URL"` and `spark model --chat
+  NAME` bring one in, and nothing credits it beyond its license. A new
+  behaviour is measured and offered, never imposed: today's behaviour
+  stays the default, and the measure names the choice. Nothing runs,
+  routes or switches without the user's own action: which engine
+  answers is a verb's choice (`spark client URL|off`, `spark model`),
+  and a detection only informs.
+
+## The four obligations
+
+Every change lands in 4 places, or it is not done:
+
+| # | obligation | where |
+|---|---|---|
+| 1 | apply | the live machine |
+| 2 | reproduce | `bootstrap.sh` / `install.sh` / `templates/` / `home/` |
+| 3 | detect | a row in `spark check` (`lib/spark/check.py`), fixture-tested by `--selftest` |
+| 4 | explain | `README.md` / `docs/INSTALL.md` / `docs/CHEATSHEET.txt` / `docs/CHANGELOG.md` / this file |
+
+Then commit and push. `spark check` has a `git` row that warns while the
+working tree is dirty or ahead of origin.
+
+Skipping the third is the expensive one. A capability nobody checks is
+one you discover broken by needing it. A check that has only ever
+returned one answer has never been tested. Break the thing on purpose,
+watch the row go red, put it back. `--selftest` automates this for
+every row that can be fixture-tested. The rest are listed as untestable
+with the reason.
+
+## Layout
+
+```
+get             POSIX sh, both OSes: the one-liner. Clone (or pull) ~/.spark, exec spark setup
+allowed-signers the release keys, ssh allowed-signers form -- one line per key,
+                `spark-release namespaces="git" <keytype> <base64>`, never a
+                real name: get, spark update and release.yml move to a
+                tag only when a key here signed it
+bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --list-models
+install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
+lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
+distro/         one KEY=value file per Linux package family (debian.env, arch.env,
+                void.env, fedora.env, opensuse.env): the manager, its install
+                line, the doc's name, the 3 package groups
+site.env.example, models.env, engine.env, voice.env   KEY=value data
+                (engine.env is the llama.cpp pin: version + one sha per flavour;
+                voice.env the voice's: the sherpa-onnx runtime per flavour and
+                its 3 models, each "<url> <bytes> <sha256>" with its licence)
+bin/spark, bin/explain -> spark                  the one command
+lib/spark/      __init__ config wire engine serve session persona cli check
+                verify (sha256, cached: spark model verify, check's models row)
+                bar (the status line)
+                site (site.env custodian: set_keys/apply, rc custody,
+                headless client share)
+                model (spark model and --chat: the table, add, verify, budget)
+                edit (spark edit: contract 10)
+                facts (the machine's decisions as KEY=value for bootstrap's eval:
+                distro, build, WSL, memory, engine home + flavour, model picks)
+                packages (the family's names from distro/<id>.env, the manager's
+                questions, switched once)
+                sbom (spark ver --sbom: what the tree depends on, as CycloneDX
+                1.5 JSON; the release's sbom.cdx.json)
+                chaos (spark check --chaos: the rehearsed failures on a throwaway
+                machine; a llama-server with a mood, as a real process)
+                setup (spark setup: the guided first run)
+                keys (spark keys: the keys the widgets add to the shell --
+                the list, what each replaced, a key moved through keys.env,
+                the whole set off or on through its KEYS line)
+                stats (turns -> numbers; --sends: bytes out by destination and day)
+                bench (llama-bench, bench tune [show|apply])
+                soul memory (the identity files; memory's writers refuse a
+                sealed file that does not open, never write over it)
+                text (the streams: wrap, fence, Busy and its progress kinds,
+                FaceLead, the face that leads a reply, faced, the face after
+                a mark; the grounding law: anchor,
+                Ground, Gate, shared by every contract that shows a text to a
+                model; what a source holds back: SECRET_SHAPES, SOURCE_SHAPES,
+                hold_secrets)
+                ledger (what you have already weighed: one sealed file, a kind
+                per contract, the retiring rule the contract's own; a writer
+                refuses a file that does not open; the plain state/fails index
+                it writes holds a fix to `text.hold_secrets`, each span
+                `[held]`, and carries `NAME=...` where NAME smells of a
+                secret)
+                ask (spark ask: contract 12) read (spark read: contract 11)
+                drill (spark drill: contract 13) watch (spark watch: contract 14)
+                reveal (spark reveal: stdin at a reader's pace at a terminal, an exact
+                copy piped; the same pace inside the streaming verbs: `--reveal
+                [CPS]` on chat, explain and bare words, `/reveal` in chat --
+                `text.Wrap(cps=)`, `cli.reveal_flag`)
+                forge (identity, threads and the kept ones, reply, the chat
+                loop, @FILE; the chat-history save skips a sealed file that
+                does not open. The loop opens with one line, the thread it
+                goes on with (`forge.continuing`) or the model it talks to
+                (`forge.opening`), and closes with nothing. SLASH_VERBS:
+                /help /new /resume /clear /keep /last /model /reveal, /copy (pbcopy, wl-copy,
+                xclip, xsel), /save (0600, never overwrites), /read @FILE
+                (contract 11 on the file, onto the chat's thread with the
+                file it read), /do
+                [--sandbox] (spark do's terminal loop; the chat runs
+                nothing), /aloud /again (the voice: with it on or
+                clear every reply is spoken, /aloud stops it; with it off
+                /aloud speaks for that chat, voice.for_now; a reply spoken a
+                sentence at a time as the reveal prints it; awake, every
+                reply is led by the face, and a spoken one talks while
+                the voice plays -- _Face). Esc on an empty line,
+                Ctrl-D or /q ends it; Esc v listens onto the line, Esc x
+                stops the speaking (_Keys: a getc hook under GNU readline,
+                the first key read raw under libedit))
+                forgeserve (the page's server under spark serve: the API, the page;
+                ROUTES is the one table of every route and its role)
+                tls (the page over https: the certificate readers, the
+                listener's pair and its reload, a client's trust -- a CA
+                file, a saved root, a pinned leaf -- and the own root)
+                do (spark do: the one loop, a face per driver -- the terminal,
+                --porcelain (contract 15) -- the budget, the hold, the man excerpt)
+                intake grounding judge (the prompt line's knowledge, three
+                contexts: intake reads what this machine can run -- its
+                manuals, its apps, its services, spark's own verbs -- into
+                the store outside the hot path, and a manual's list of
+                commands whole or not at all: command_set, stored with its
+                version, COMMANDS_V; grounding picks the entries that go
+                with one question, and makes the map of spark's own
+                commands the prefix carries from the help's rows:
+                shell_map, a help row a line, within MAP_MAX; judge checks
+                a proposed command against them: verdict and its findings,
+                and own, a line that is spark's own, whole)
+                sandbox (spark do --sandbox: the probe, the copy the kernel keeps
+                the steps inside, the review, the apply bound to it, a run's
+                life and its lock; every list that decides is a named line)
+                audit (the sealed audit trail: one record per admin action in
+                the box account's store, numbers and names only; spark serve
+                --audit [N] reads it)
+                mcp (spark mcp: contract 16's MCP client, stdio only -- the
+                list, the server on its wire, the gate, the audit record, the
+                tools file the prompt line reads; every list that decides a
+                named line)
+                steps (spark steps: contract 16's planner, the tools on stdin,
+                the steps out under a grammar made from them)
+                version (the version, from git, cached: spark ver, check's
+                header, forgeserve)
+                update (spark update: the newest release tag signed by a key in
+                allowed-signers, or main; converges; with the voice on or
+                clear, a voice part whose pin changed is fetched again;
+                `verified` is the one signature check, check's signed row
+                reuses it)
+                uninstall (spark uninstall: the plan, the word yes, then
+                everything spark made goes; yours stays unless --purge; the
+                clone last)
+                chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
+                vectors in tests/vault_test.py: the sealed stores' cipher)
+                qr (a QR encoder from ISO/IEC 18004, versions 1-5, pinned to the
+                spec in tests/qr_test.py: the login link, scannable at a terminal)
+                vault (the sealed-file format and the key custody: a per-user
+                data key wrapped by the token; an append holds an existing file
+                to the caller's header first, so a foreign file takes no record,
+                and starts a line of its own after a torn one; a thread's
+                record that fails its tag is skipped and counted
+                (`read_sealed_records`), never shown, and `Store.load` says so
+                once on stderr: `! N records in thread ID could not be read --
+                skipped`; a whole-blob file is still refused whole)
+                bounded (bounded context reads: a regular file opened without
+                waiting for a writer, the newest lines within a byte budget)
+                users (the named users, their store under state/users/, and
+                this machine's login: spark user)
+                look (the living prompt's state: the one switch and the 3
+                parts that follow it, the height, the six colour roles,
+                look.clean for every line spark says, the look file the
+                widgets read; Anim, the one animator: each mood's frames,
+                derived from the stored face, and the 5 progress kinds,
+                PROGRESS; spark look, spark height)
+                awaken (spark awaken: the temperament, the birth -- one JSON
+                object, `why` first, then the personality paragraph and
+                the face's eyes and mouth -- the pace, its voice where a
+                player is: keep, again or none)
+                words (the temperament and the faces: the kit, every mood
+                made from its parts, the faces file, the shipped
+                personality; no verb. bin/spark answers an older shell's
+                `spark words greet`, silent)
+                voice (spark voice: the engine's fetch, size and sha256 before
+                a byte unpacks; speak, the machine's own speaker, play and stop;
+                Engine, Kokoro loaded once through the runtime's C API;
+                Stream, one raw stream to the sound card a burst;
+                listen, the recording removed before it returns; the clear
+                reading of a command, a do step, a block; the screen reader;
+                the lead-in, silence after quiet; Reader, the lines
+                spoken in two threads of their own, the next made while one
+                plays; Sentences, a streamed reply cut into sentences)
+lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
+                  mark.svg -- the page, ASCII, no inline script; tokens.css
+                  (the colors and the fonts, the one source of spark's look,
+                  which spark.forgewright.ai copies at the tag), theme.js
+                  (the chosen theme before first paint), fonts/ (six woff2:
+                  Atkinson Hyperlegible Next, Monaspace Neon and Xenon,
+                  SIL OFL 1.1, CREDITS.md)
+home/           the shared $HOME mirror, linked. .config/spark/ holds the two
+                widgets (widget.bash widget.zsh), the two rc hooks (hook.bash
+                hook.zsh: PATH, the widget, the blank row, completion), the
+                two completion files
+                (completion.bash completion.zsh: TAB completes the verbs and
+                their names, offline), the banner, spark.env.example, tale
+                (a text of the maintainer's own, credited in CREDITS.md),
+                words.d/ (the shipped personality, one file per temperament:
+                plain, warm, playful, terse) and faces.kit (the parts a face
+                is made of: eyes, mouth, body)
+linux/home/     the systemd user units (.config/systemd/user: spark-serve spark-forge
+                spark-check.service + spark-check.timer)
+templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,check}.plist
+                (the 3 launchd agents); .config/spark/sv/spark-{serve,forge,check}/
+                (the 3 runit service directories: run, finish, log/run; rendered
+                only where /etc/runit is a directory)
+tests/          smoke.py (the spine end to end against a stub engine; its
+                body is four parts, --part line|read|machine|tree, suites of
+                their own in the gate, and bare runs the four in a row)
+                serve_smoke.py forge_smoke.py bench_smoke.py
+                policy_test.py (every row of forgeserve.ROUTES with 3
+                callers: nobody, a user, the admin)
+                vault_test.py (RFC 8439 vectors, round-trips, refusals)
+                knowledge_test.py (the knowledge on a fixture machine: the
+                readers, the store, a manual's commands on pages shaped by
+                hand, the judge on the entries built from them)
+                sandbox_test.py (the review, every named apply refusal, a run's
+                life and its lock, and the real escapes where the probe says
+                this machine has a sandbox)
+                qr_test.py (ISO 18004 format table, the RS vector, a decode-back)
+                mcp_test.py (contract 16 against a stub MCP server and a stub
+                engine: every gate of the client, a named check each, and
+                spark steps)
+                voice_test.py (the voice: a stub runtime, player and recorder;
+                the fetch's refusals, the speaker awaken picks, the clear reading;
+                the splitter, the lead-in, the Reader's two stages timed)
+                docs_test.py (the docs say what the tree holds: credits, counts,
+                the voice)
+                widget_pty.py (the widgets at a pty, in three parts the
+                gate runs side by side -- the one long session, the living
+                prompt, the shells of their own -- the pager, and completion)
+                check_selftest.py (a standalone entry to spark check --selftest)
+                install_test.sh get_test.sh update_test.sh uninstall_test.sh
+                finish_test.sh (the runit finish scripts, sv and sleep stubbed)
+                gate.sh (the one test list: `fast` is what a commit runs,
+                `full [lint|smoke|serve|rest]` what CI runs, one job per
+                group, lint first and alone;
+                the hooks and ci.yml name no test themselves; the selftest
+                and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
+                stops full at the first suite that fails; full runs the
+                suites side by side through gate_run.py, in CI too, and
+                SPARK_GATE_JOBS=1 one at a time)
+                gate_run.py (full's runner: the suites SPARK_GATE_JOBS at
+                a time, the CPU count by default, the longest first by
+                ~/.cache/spark/gate-times, else by gate.weights, the
+                seconds measured once and shipped for a machine with no
+                ledger; each log printed whole when its suite ends;
+                --selftest on stand-ins)
+                gate.weights (one row a suite of gate.sh, label and seconds;
+                docs_test holds the two lists equal)
+                land.sh (lands a commit: a try/ branch, CI, then main moved
+                forward to the same commit; `--passed SHA` is the one check
+                "ci.yml passed", asked by the pre-push hook and release.yml)
+                land_test.sh (the pre-push hook and land.sh, against a stub gh,
+                a stub curl and a bare repository)
+                tag.sh (the patch tagger: tags origin/main when the CHANGELOG's
+                top heading has three parts, at once for an S1 or S2, on the
+                weekly day for S3 and S4, only on a commit ci.yml passed)
+                tag_test.sh (tag.sh against a bare repository, a stub gh and a
+                scratch key)
+                patch_test.py (the patch lane's fence: under a three-part
+                heading no protected path changes, the help and the row count
+                stay, the diff is under the cap, every bullet is
+                `- S<n>: ... (#N)`; --selftest proves it on a scratch repository)
+                audition.py + audition/ (the editor's briefs against a live
+                model, lints as the judge; audition/ground/ holds the grounded
+                contracts' set of 10 cases, run under --ground alone, scored
+                the same blind way, the score written by hand as
+                MODEL_<NAME>_GROUND; --selftest proves the lints with no
+                model; not in the gate)
+                model_validation.py (the pinned Linux CPU engine and the qwen3-5-2b
+                weights, hashes checked, six synthetic requests on loopback, one
+                JSON record of what was proved; not in the gate, bench_smoke.py
+                runs its selftest)
+                line_audition.py + line_audition/ (the prompt line per OS and on
+                spark's own verbs against a live model; answers graded by each
+                OS's --help snapshot and spark's tree; cases.json holds the
+                questions, 24 of those about spark held out and never tuned
+                on, 24 more second phrasings to tune on; accepted.json
+                holds commands the grader accepted: the
+                line's judge may ask again about none of them (precision);
+                its selftest in smoke)
+                use_cases.py + use_cases/ (the tasks people bring to spark, end
+                to end, against a live model: cases.json, 85 tasks for seven
+                kinds of user, 21 held out and never tuned on; inputs/ the
+                texts, code and logs they read; replies/ the model's replies a
+                run --record kept, which replay serves from a stub engine in
+                the gate; its selftest in smoke)
+                forge_probe.py URL (the page's server's gates asked from the wire --
+                wire.probe_gates, the hardening row's probes -- one line per
+                gate, exit 1 when any does not hold; against a real server)
+.githooks/      pre-commit (tests/gate.sh fast: the privacy gate, syntax one
+                file per call, the cheatsheet's 80 columns, ASCII,
+                shellcheck, docs_test), commit-msg (the privacy patterns
+                over the message -- history is public too), pre-push (no
+                test: main and a v* tag are refused unless ci.yml passed
+                for that commit)
+.claude/        settings.json and hooks/session-start.sh: in a Claude Code
+                cloud session only, the hooks above turned on, the gate's
+                tools installed (shellcheck, zsh, bwrap, ssh-keygen,
+                mandoc) and a user, gate, for the full gate to run as: the
+                session is root, and the knowledge index never builds as
+                root. One line names that command, or what is missing; the
+                rest of .claude/ is local state, ignored
+.github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
+                request, by hand, never a tag; lint runs first, alone
+                (tests/gate.sh full lint and zizmor over the workflows), and
+                every other job needs it; linux and macos run tests/gate.sh
+                full, one job per group of suites (smoke, serve, rest), each
+                job's gate-times ledger kept as an artifact, then a real
+                bootstrap in the rest job; debian, arch, void, fedora
+                and opensuse containers run the one-liner as a new user
+                (void under a runsvdir started for the job: the supervised
+                spark-check is proven there)
+                workflows/release.yml: the GitHub Release from the CHANGELOG
+                section, on a signed v* tag whose commit ci.yml passed
+                workflows/codeql.yml: GitHub's static analysis over the python
+                and the javascript, on a push to main, a pull request and weekly
+                workflows/advisories.yml: weekly, one job per pin: one issue
+                when llama.cpp published a security advisory after the
+                engine pin's date, or sherpa-onnx after the voice pin's
+                workflows/line-audition-help.yml: by hand, each OS's --help for
+                the commands the prompt-line audition names, as artifacts
+                dependabot.yml: the workflows' action sha pins, kept current weekly
+                PULL_REQUEST_TEMPLATE.md; ISSUE_TEMPLATE/bug.yml (the bug form,
+                its fields required), config.yml (no blank issue) and model-row.md
+LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
+assets/         banner.svg -- the banner as rectangles, for the README and the project site
+                (banner-light.svg is the site's light-theme variant; the site reads
+                both from this tree at the newest release tag);
+                banner-svg.py makes both from home/.config/spark/banner; icon-svg.py
+                makes the favicon, the app icons and the social card the same way
+CREDITS.md      every third-party project spark downloads or installs,
+                with its license; spark's own code is LICENSE
+docs/           every document but the 4 at the root. With a release (the
+                landing rule): REFERENCE.md (this file, the maintainer's
+                reference), INSTALL.md (every step and every key),
+                CHEATSHEET.txt (one page, 80 columns, what `lp` prints),
+                CHANGELOG.md (release.yml reads its top section as the notes),
+                ROADMAP.md (what comes after the current release, in order),
+                CONTRIBUTING.md (how a change lands, and the voice). The first
+                hour and the apps are sections of README.md
+```
+
+Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
+`theme.env`, `keys.env`, `mcp.env`, `models.env` (yours),
+`privacy-terms`, `soul`, `personality`, `faces`, `voice` and `memory`
+(the pre-v1.4 facts file, read until the first write). `voice` (0600)
+is the machine's own voice, `KEY=value`: `SID` and `SID_PT`, its two
+speakers. Awaken writes it, or `spark voice on` on an awake
+machine that has none. `personality` (0600) is the paragraph
+`spark awaken` writes after the soul's fixed core. `faces` (0600) is
+`MOOD=frame` per line, every mood, plus `RATE=` and `TEMPER=`. Awaken
+writes it, and every face passes `look.clean` when it is stored and
+again when it is drawn. An older awaken's `words` file is read by
+nothing.
+`theme.env` is a palette a look layer may write, never spark (contract
+3). `soul` is prose, 0600, yours, never linked from `home/`. `memory`
+there is the pre-v1.4 fallback: the facts live sealed in your store
+since v1.4, and the file is read until the first write.
+
+State is `~/.local/state/spark/`, 0700:
+
+- `api-token` 0600, `serve-url`, `serve.pid`, `serve.log`, `serve.lock`.
+- `peer` 0600: what a client's other machine is, one JSON object
+  `{url, kind, n_ctx}`, `kind` `spark` or `engine` (`wire.PEER_FILE`).
+  The probes write it, and again when the kind they see differs.
+  `spark client URL|off` removes it.
+- `forge-token` 0600, `ember-token` 0600, `forge-url`, `forge.pid`,
+  `forge.log`, `forge.lock`.
+- `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
+  models dir, written by `spark serve`.
+- `mcp-tools` 0600: the tools `spark mcp` last listed, one line a tool
+  (contract 16), read by the prompt line's prefix and by `spark do`.
+- `line-seen` 0600, on a client: where its last line turn landed, and
+  the `FORGE`'s newest thread and its turns then
+  (`forge.LINE_SEEN`). A client's `??` reads it.
+- `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain` 0600,
+  `check.json` 0600, `bar` 0600, `bench.jsonl`, `tune.json` 0600. The
+  0600 files here are written by `vault.write_private`, after
+  `state_dir()`.
+- `check.lock` 0600: the flock a check holds while it merges its rows
+  into `check.json`. `check-history.jsonl` 0600: one line per status
+  change of a check row (contract 7). `alert` 0600: the rows that
+  turned worse or healed, for the prompt to say once (contract 6).
+- `proof.<pid>` 0600: the bash widget's proof for the next prompt. The
+  prompt empties it, and the next question and the shell's exit remove
+  it.
+- `notice-shown`: the notice was shown on this machine, an empty
+  marker (`setup.NOTICED`). The notice is `setup.NOTICE`, 3 lines: the
+  licence, no warranty, and that a model can be wrong and the risk is
+  yours. `get` prints the same lines before it clones, and
+  `tests/smoke.py` holds the two texts equal. `spark setup` prints them
+  after the banner, before its first question and before any write. At
+  a terminal without `--yes` it asks `go on? yes/NO: ` once
+  (`confirm()`): a no prints `* nothing changed` and ends setup, exit
+  0, with no marker. With no terminal, `--yes` or `SPARK_YES=1` it
+  prints the lines, asks nothing and goes on. Either way the marker is
+  written, and a later setup says nothing. `get` runs setup with
+  `SPARK_NOTICE_SHOWN=1` in the environment, a seam and not a user
+  key: the lines were shown a moment ago. Setup then prints none of
+  them. It asks the question alone, or nothing where it would not ask.
+  A no there prints `* nothing set up -- ~/.spark/bin/spark setup when
+  you are ready`, the clone's own path, exit 0. `spark update` prints
+  the lines once on a machine that has no marker, a terminal or not,
+  with no question, and does not read the seam. `spark ver --credits`
+  prints them every time.
+- `replaced.bash` and `replaced.zsh`: what each key did in that shell
+  before the widget bound it, `NAME<TAB>KEY<TAB>binding` a line, `-` for
+  nothing. The widget writes it only when it differs, and `spark keys`
+  reads it.
+- `look` 0600: the living prompt's state for the widgets (contract 6),
+  written by `look.render` alone. `news`, `news-seen` and `last-seen`
+  are gone: nothing reads or writes them, and an older machine's copies
+  go with the state at `spark uninstall`. `loads.json` maps a model
+  file to its last load in seconds (`engine.record_load`), for the
+  waking bar's estimate.
+- `threads/`: pre-v1.4 plaintext threads only. `spark user claim` seals
+  them away. A sealed thread of the same id is replaced only when its
+  messages start the plaintext ones, what a crashed claim leaves
+  (`forge._claimed_part`). Otherwise that plaintext thread stays, said
+  in one line.
+- `runs/<id>/` 0700: a sandboxed run. `meta.json` 0600 holds numbers and
+  names only. `lock` is the flock its driver or a `--review`, `--accept`
+  or `--discard` holds. `up/` and `wk/` are the overlay's on Linux.
+  `clone/`, `manifest.json`, `home/`, `tmp/` and `profile.sb` are
+  macOS's. The dir is removed whole once the run is applied or
+  discarded. `runs/.lock` serialises a new run's count and mkdir.
+  `runs/detach.lock` is the one detached run's flock.
+- `sandbox/probe.json`: the probe's answer, keyed by the bwrap version,
+  the kernel and the AppArmor userns switch.
+- `users/<name>/` 0700 per user: `key` and `token.hash` 0600. `key` is
+  the wrapped data key, and on its second line `verifier <sha256>`, the
+  token's verifier. A token change is one atomic replace of `key`,
+  fsynced (`users.write_key`), so a crash leaves the old token or the
+  new one in force. `token.hash` is a copy written after it, the one
+  verifier a store from before v1.77 has (`users.verifier`). Then that
+  user's sealed
+  `threads/`, `kept/`, `memory`, `chat-history` and `ledger`. `kept/`
+  (0700, made on first use) holds the kept threads: the same sealed
+  files, the same header, never pruned or cleared. The box account's
+  store holds `audit` too, the admin actions.
+- `account` 0600, this machine's login (name and token), and
+  `account-key` 0600, the unwrapped data key, so the hot paths never pay
+  the KDF. The cache holds its name and token hash beside the key in
+  one atomic replace (`users.cache_key`). Readers pass the same captured
+  name and token to `users.account_key`: an interleaved login or a token
+  rotation leaves a matching key or a cache miss. A miss is recovered
+  with that token, without changing the login. Older unbound caches
+  are recovered through the token too; their bytes are never trusted.
+
+Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
+once the voice was turned on. Tools are linked into `~/.local/bin`.
+`spark uninstall` (`lib/spark/uninstall.py`) removes all of it but the
+sealed stores, the account keys and your prose. The soul and its
+personality stay. The faces and voice files go, and an older awaken's
+words file.
+`--purge` takes those too. It runs bootstrap once first, headless
+undone through its row. It gives back a look an older spark set, as
+the `handback` row does (contract 1). It never runs `site.apply` or
+`check.refresh` after: each would put things back. Root steps become
+`todo` rows when sudo refuses. The clone goes last, only when it is
+`${SPARK_HOME:-~/.spark}` and clean.
+
+## Contracts
+
+These are the only interfaces between parts. Everything else is private
+and may change freely.
+
+1. `bootstrap.sh --list-packages` prints one package per line, after OS
+   and site branching. `--list-tools` prints
+   `repo-relative-path<TAB>name` per line. `--list-models` prints the
+   model table with a RAM fit per row and marks the chosen one. Its
+   header names the engine build this machine gets: `engine.backend`,
+   metal, vulkan or cpu. Bootstrap evals every such decision from
+   `lib/spark/facts.py`. A line of its own says what the speed cap held
+   back, when it did. `--fetch URL DEST SHA` runs the download primitive
+   alone: download, verify sha256, or die having removed its own partial
+   file. `spark check --chaos` rehearses that. Nothing else calls it.
+   `--dry-run` prints rows `ok|would|skip|todo <what>  <why>` and ends
+   with `Nothing to do` or `N to do`. A `todo` needs the user, such as a
+   placeholder in site.env. `--dry-run` never calls sudo. An apply run
+   prints only what it changed and what needs the user, and ends with
+   `Nothing to do`, `N changed`, `M need you` (`1 needs you` for one) or
+   `N changed -- M need you`. Its `ok` and
+   `skip` rows and its section headers are silent unless `--verbose`,
+   because a converged machine has nothing to report. `--dry-run` stays
+   the full report: `spark check`'s configs row and
+   `tests/install_test.sh` read those rows. An apply run that will need
+   root asks for sudo once, before it touches anything (`sudo_upfront`),
+   and only at a terminal. Over ssh or a pipe there is nobody to answer,
+   and a run needing no root, such as `spark update` on a converged
+   machine, must not be made to ask. No sudo on the machine at all is
+   one line and exit 1, up front. The `rc` row appends one marked line
+   (marker `config/spark/hook.`) to the end of the login shell's rc
+   file: `~/.bashrc` or `~/.zshrc`, by `$SHELL`, else the passwd entry.
+   It creates the file if absent and never truncates it. A symlinked rc
+   file is treated like any other file: the marker looked for, the line
+   appended. Another shell, or a bash older than 4, is a `todo` naming
+   the fix. On bash, a regular `~/.bash_profile` that neither sources
+   `~/.bashrc` nor holds the marker shadows the hook on a console login.
+   The `rc-login` row appends the same marked line there. The line is
+   added whatever the keys are: it carries `PATH`, `TAB` completion,
+   the `? words` line and the row above the prompt. `spark setup` asks
+   at a terminal whether to add the keys too (`setup._keys`). A no is
+   written as `KEYS=off` in `keys.env` with the other writes
+   (`setup._write`), never before. So a setup that stops at a question
+   leaves no file. `spark keys off` writes the same line and touches no
+   rc file. `spark uninstall` removes the rc line, through a symlink
+   too (`uninstall.strip_rc_line`). It reads and writes bytes, through
+   a temp file renamed over the link's target. A link into a git work
+   tree is another project's tracked file (`uninstall.rc_tracked`, a
+   `.git` above the target). It is left as it is, and one `!` line
+   names the file. `spark keys` says `off` and why when the rc file
+   lacks the line or the shell has no prompt line (`keys.no_line`), and
+   `spark keys on` never promises keys such a shell cannot load. Three
+   hand-back
+   rows cover what older sparks made. The `micro` row removes the plugin
+   links a pre-v1.10 install left under `~/.config/micro` and names the
+   app's own repository. The `agent` row removes the Pi runtime v1.104
+   to v1.105.1 kept under the data directory, once, and says `the Pi
+   runtime is off this machine now`. The `handback` row, run by `spark
+   update`,
+   gives back the look a pre-v1.62 spark set: the stock console palette
+   and font, a loud boot, the motd and `/etc/issue`. On macOS it removes
+   the Terminal.app spark profiles. It is idempotent, and once it acted
+   it says `the look is off this machine now`.
+2. `install.sh --dry-run` prints rows `ok|would link|would render|would
+   back up  <path>` and the same final line. Apply is quiet the same
+   way: an `ok` row, already in place, prints only with `--verbose`.
+   Link is a symlink into the repository. Render is a regular file
+   written from `templates/`, the launchd plists. An existing regular
+   file, or a symlink that points outside the repository, moves to
+   `<path>.bak`, never overwritten. A stale symlink into the repository
+   is replaced. The rc file is contract 1's.
+3. Config files are `KEY=value` lines. Every reader refuses any other
+   non-blank, non-comment line (``^[A-Z_][A-Z_0-9]*=[^;`$()|&<>]*$``).
+   Keys start with an uppercase letter or underscore; digits may
+   follow. Unknown well-formed keys still load. Lines end with `LF` or
+   `CRLF`; the last line needs no ending. Blank lines and comments may
+   start with ASCII whitespace. Only a whole-line `#` starts a comment.
+   One pair of surrounding double quotes is removed. Other quotes,
+   backslashes, spaces and inline `#` are literal. A leading `~` or
+   `~/` then expands to the home directory. Empty values are absent.
+   Within each file, the first non-empty value of a key wins.
+   Every line is checked, even a duplicate or a shadowed value; a bad
+   line refuses the file before any of its values are applied.
+   The keys:
+   - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
+     SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
+     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE`. A key an older spark
+     wrote, such as `SITE_THEME` or `SITE_QUIET_START`, still loads: a
+     well-formed key spark does not know is not refused, and nothing
+     reads it.
+   - `spark.env`: `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL
+     SPARK_SERVE_HOST SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL
+     SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
+     SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB SPARK_API_KEY_FILE
+     SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK
+     SPARK_HEIGHT SPARK_VOICE SPARK_VOICE_RATE SPARK_VOICE_DEVICE
+     SPARK_HISTORY SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE
+     SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT
+     SPARK_FORGE_TOKEN_FILE SPARK_FORGE_CERT SPARK_FORGE_KEY
+     SPARK_FORGE_NAME SPARK_CA_FILE`.
+     `SPARK_FORGE_CERT` and `SPARK_FORGE_KEY` are the page's
+     certificate pair, PEM files, the key 0600, both or neither: with
+     them the page serves https (`spark serve https`, contract 9).
+     `SPARK_FORGE_NAME` is the name in the page's links, the bind
+     address when unset. `SPARK_CA_FILE` is a PEM bundle trusted beside
+     the system store for every TLS connection spark makes. What `spark
+     client URL --ca FILE` and `--pin FINGERPRINT` save lives under
+     `~/.config/spark/trust/`, one file a host, 0600: a root verifies
+     that host by name, a leaf pins it. The pair `spark serve https
+     own` mints lives under `~/.local/state/spark/https/`.
+     `SPARK_REVEAL_CPS` is optional: the reveal pace in characters a
+     second (`spark reveal`).
+     `SPARK_LOOK` is `auto`, `on` or `off`, `off` until `spark awaken`
+     sets `auto` (`spark look on|off|auto`). Motion, colour and words
+     follow it, each by its own `auto` rule (`look.active`): a terminal,
+     not `TERM=dumb`, and for colour `NO_COLOR` unset. An older
+     `SPARK_LOOK_*` key still loads, and nothing reads it.
+     `SPARK_HEIGHT` is 1 to 5, default 1 (`spark height N`). The 6
+     `SPARK_*_SGR` variables are environment only, never read from a
+     file.
+     `SPARK_VOICE` is `off`, `clear` or `on`, default `off`, anything
+     else `off` (`spark voice clear|on|off`). `SPARK_VOICE_RATE` is the
+     clear voice's speed, 50 to 300, default 100 (`spark voice rate
+     N`). `SPARK_VOICE_DEVICE` is the ALSA device the voice plays to
+     and listens on (Linux), such as `plughw:1,0`, default ALSA's own.
+     `SPARK_VOICE_LEAD_MS`, 0 to 1000, is environment only, never read
+     from a file. It is the silence in milliseconds a stream opens with,
+     or a clip starts with after `voice.WAKE_AFTER` of quiet, 250 by
+     default (`voice.LEAD_IN_MS`).
+     `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
+     `soul` row warns while it is set.
+   - `models.env`, and `~/.config/spark/models.env` for your own rows:
+     `MODEL_<NAME>="<file> <url> <bytes> <sha256> <ram_gb>"`, with
+     `MODEL_<NAME>_LICENSE="<name> <url>"` on every row.
+     `MODEL_<NAME>_TESTED="line"` marks a row proven on `spark line`.
+     With an open license (`config.OPEN_LICENSES`: Apache-2.0 or MIT) it
+     is a row `auto` may pick. `MODEL_<NAME>_NOTE` is one optional line.
+     `MODEL_<NAME>_GROUND="<kept>/<run> <YYYY-MM-DD>"` is the grounding
+     audition's score, written by hand from a `tests/audition.py --json`
+     run, the way `_TESTED` carries the line proof. `spark model list`
+     shows it in the proof column and spark.forgewright.ai/models/
+     renders it. The list's order is the priority: `auto` takes the
+     first tested row that fits, for the prompt line and for the chat
+     model beside it (`engine._choose`). A name in both files is
+     refused, naming both.
+   - `distro/<id>.env`, one per Linux package family the oracle
+     `distro()` knows (`debian`, `arch`, `void`, `fedora`,
+     `opensuse`): `PM PM_INSTALL
+     PM_TARGET PKG_CORE PKG_ENGINE PKG_AI`, the same 6 keys in every
+     file (`packages.KEYS`, and `tests/docs_test.py` asserts it).
+     `distro()` lives in `lib/spark/__init__.py` beside `is_wsl()`,
+     bootstrap.sh evals it from `lib/spark/facts.py`, and
+     `SPARK_OS_RELEASE` pins it. `init_shape()` sits beside it, and
+     `SPARK_ETC_RUNIT` and `SPARK_VAR_SERVICE` pin the runit answer.
+   - `voice.env`: `VOICE_RUNTIME_VERSION`, then
+     `VOICE_RUNTIME_LINUX_X64`, `VOICE_RUNTIME_LINUX_ARM64`,
+     `VOICE_RUNTIME_MACOS`, `VOICE_MOUTH`, `VOICE_EARS` and `VOICE_VAD`,
+     each `"<url> <bytes> <sha256>"`, and `VOICE_RUNTIME_LICENSE`,
+     `VOICE_MOUTH_LICENSE`, `VOICE_EARS_LICENSE` and
+     `VOICE_VAD_LICENSE`, each `"<name> <url>"`. `lib/spark/voice.py`
+     and the SBOM read it, and `tests/docs_test.py` looks every licence
+     up in `CREDITS.md`.
+   - `~/.config/spark/voice`: the machine's own voice, `SID SID_PT`,
+     the English speaker and the Portuguese one. Its reader takes
+     these two keys and ignores any other line, so a file an older
+     spark wrote keeps its speaker. A speaker that is missing or out
+     of Kokoro's table reads as no voice.
+   - `~/.config/spark/theme.env`: a palette a look layer may write,
+     `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_ANSI_0..15`.
+     spark writes none. `THEME_LOGO` is optional: 6 colour names, one
+     per banner row, `bright-` allowed. `spark ver` draws the logo in
+     them (`cli.recolour`), and the bar line takes its accent slot from
+     the file (`bar._accent`). Without the file both keep their own.
+   - `~/.config/spark/keys.env`: the keys the widgets bind, written by
+     `spark keys` alone: `KEYS_ASK KEYS_RECALL KEYS_HEIGHT KEYS_LISTEN
+     KEYS_STOP`, each `Esc a`, `Ctrl-g` or `none` (`keys.NAMES`,
+     `keys.CTRL_OK`). Both widgets read it line by line as the shell
+     starts, never sourced. A value of another shape keeps the default.
+     `KEYS` is `on` or `off`, absent is `on` (`spark keys on|off`,
+     `keys.is_on`). With `off` the widgets bind none of the 5 and leave
+     the Esc wait alone. Enter, Ctrl-U, Ctrl-L, paste, the `? words`
+     line and the row work as with the keys on. The per-key lines are
+     kept across off and on.
+   - `~/.config/spark/mcp.env`: the MCP servers spark may start
+     (contract 16), written by `spark mcp add`, `rm` and `trust`, 0600:
+     `MCP_SERVER_<NAME>="<absolute path> [words]"`, `NAME` matching
+     `[A-Z][A-Z0-9_]{0,31}`, and `MCP_SERVER_<NAME>_TRUST`, `yes` or
+     `no`. A key that ends `_TRUST` is no server.
+   Precedence: non-empty environment, then `spark.env`, then `site.env`,
+   then default. Empty values do not hide a lower-precedence value.
+   `tests/config/cases.json`, run by `tests/smoke.py`, holds the shared
+   shell and Python fixtures.
+4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
+   prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
+   `answer` or `error`. Line 2 is the hint, the answer or the reason:
+   one line, cut at a word to a character budget. A hint or a reason is
+   80 at most, an answer `cli.ANSWER_MAX`. Line 1 is written the moment
+   the command is complete, and lines 2 and 3 follow; after line 1, a
+   failure makes line 2 its reason and exits 1. The verdict
+   (`judge.verdict`) runs before line 1 is written. A command it finds
+   wrong is asked again once, with the tool's own manual lines as a
+   Reference block in the user message. Line 1 is never repainted:
+   still wrong, it lands and the hint names what to check.
+   `SPARK_KNOWLEDGE=off` is the line without it. A finding has a kind
+   (`judge.Finding`). `missing` is a program that is not on this
+   machine, and `flag` an option its manual does not name. `command` is
+   a word the manual's list of commands lacks. `verb` is a word or an
+   option spark does not take, and `placeholder` a `<name>` left in the
+   line. `quote` is a quote, a `$(` or a backtick left open. `slot` is
+   a capital word of spark's own help copied as it stands, such as
+   `NAME` or `URL`. A slot is the user's own value, so it is never
+   asked again: the line lands and its hint ends `type the NAME before
+   Enter`. Unknown is not wrong: a program with no entry, or a line the
+   judge cannot read, earns no finding. On spark's own commands the
+   judge reads the help's rows and the completion's words
+   (`grounding.spark_tree`). A leading option must be one `bin/spark`
+   answers, such as `--version`. A verb's options are held to its own
+   `-h`, the store's `spark VERB` entry, and a verb with no entry is
+   unknown. Where the words a verb takes first are a closed set, the
+   word must be one its rows or the completion list. Where a row writes
+   two words, the second is held too: `spark serve boot maybe` is a
+   finding. So is a word after one its row ends with (`spark keys off
+   x`). The words of `spark keys` are closed by the completion's own
+   list. A manual's list of commands closes a program's first word
+   only when it can be trusted whole (`intake.command_set`). The reader
+   takes an alias in parentheses, as in `search (se)`, and a tag that
+   ends in `...`. A list that holds a word of prose
+   (`intake.PROSE_WORDS`) or a word a line break cut is no list.
+   Neither is one over `intake.COMMANDS_MAX` words. A list keeps `seen`
+   beside it: the other command words the page shows the program
+   taking. The judge takes a word of either. The list is stored with a
+   version (`intake.COMMANDS_V`). One of another version reads as no
+   list, so it closes nothing until the store is built again. The
+   line's prefix carries spark's own commands as a map
+   (`grounding.shell_map`), made from the rows of `spark help`. It is
+   one help row a line (`grounding._map_lines`): every form the row
+   writes, in full, then ` -- ` and the row's own words. No `a|b` is
+   written, because a model copies what it reads, and `<words>` is
+   `WORDS`. `tests/smoke.py` holds the map within `grounding.MAP_MAX`,
+   3800 characters. Its first line says the commands are for a
+   question about spark itself, and that a word in capitals stands for
+   the user's own text, written as they wrote it. The brief
+   (`persona.MODE_LINE`) puts the machine first: every question about
+   it takes the system's own command. Then it names the topics that
+   are spark's own, and says the system's users, services, packages,
+   files, logs and network are never spark's. It never says what the
+   model itself can or cannot do: such a sentence bred answers that
+   refused. It asks for the user's own words and names as written, and
+   for the help's own word (`NAME`, `URL`) where the user gave no
+   value. It
+   says spark keeps the last answer and the facts it was told. An
+   answer in words may name one of spark's own commands: `spark VERB`
+   with a verb of the tree, never inside a noun phrase
+   (`cli._own_named`). Or it may tell the user which program to run
+   (`cli._tool_named`): the word after use, run, try, type, execute or
+   via, when it is a program on this machine (`judge.present`). Such an
+   answer is asked again once for the command itself
+   (`cli._as_command`, `OWN_AGAIN`, `TOLD_AGAIN`). The second reply
+   lands only when the judge clears it (`_Early.only`). It must be a
+   spark command, or for a named program a command of the system. The
+   answer may have named the wrong program. Else the answer
+   stands as it came. Such an answer's line 1 waits for its words, and
+   with `SPARK_KNOWLEDGE=off` no answer is asked again. A second ask
+   about a program that is not installed names the installed ones that
+   do its job. With none, or when the user asked for the program by
+   name, it asks for the package manager's command that installs it
+   (`cli.NOT_HERE`, `cli.BY_NAME`). The
+   request
+   asks the engine for slot 0 (`id_slot`), so the line's prefix stays
+   warm; a server that refuses the field is asked again without it. The
+   reply is one JSON object (`persona.LINE_SCHEMA`), held by a grammar:
+   `wire.gbnf(schema)` rides the request as `grammar`. Every request a
+   schema shapes sends it, and none sends `response_format`. Each one
+   streams, `wire.chat_json` and `wire.chat_grammar` too. So
+   `SPARK_TIMEOUT` is the wait for the next token, never for the whole
+   reply: a long here-document at 20 tokens a second still arrives.
+   llama-server binds a `response_format` schema only after the
+   template's thought channel closes. So a model could open a thought,
+   spend the whole cap there and answer nothing. A grammar binds from
+   the first token. Measured on `gemma4-e4b`, on the questions that had
+   come back empty: 0 of 120 asks were empty with the grammar, 15 of 72
+   without. A net stays under it. A streamed request with a schema
+   stops at the first reasoning delta (`wire.chat_stream`). When
+   nothing of that reply had been written, the prompt line asks once
+   more (`cli._line_ask`). The second ask is the same messages with
+   `cli.LINE_RETRY_NUDGE` on a line of its own after the last user
+   message, and `cli.LINE_RETRY_BODY` merged into the body. The system
+   message stays byte for byte the same. The hint row says `no answer
+   came -- asking again` meanwhile. When no answer comes, asked again
+   or not, the reply is `error` with the reason in line 2, exit 1. That
+   turn is recorded with the kind `empty`: numbers alone, on no thread.
+   A turn records `empties`, its replies that were a thought and no
+   answer. A reply the model ended after line 1, by a thought or the
+   cap, says `cli.HINT_LOST` in line 2: `the reply was cut before its
+   hint -- read the command before Enter`. A reply the cap cut before
+   line 1 says so (`wire.CUT_OUT`), never the raw JSON. The wire's own
+   failures keep their reasons. An engine's refusal is one plain line,
+   never its JSON: a request the context cannot hold says its size and
+   the context's (`wire._engine_error`). `SPARK_RECORD=FILE` is a test
+   seam. Each reply read appends one JSON line there, 0600: `stream`,
+   `content` and `finish`, nothing of the request (`wire._record`).
+   `tests/use_cases.py` replays them.
+   `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the
+   turn's numbers, marked `bench`, and opens no thread. A `danger`
+   line's hint may open with `<- <facts> -- `: `persona.blast`'s count
+   for a recursive `rm`, the files, bytes and git-tracked, read from the
+   command with nothing run. The facts lead, so the cut eats the
+   model's words first.
+   The widget trims to the terminal's own width. An optional line 3,
+   `proof<TAB>command` on a cmd or danger reply, is one read-only check
+   that the command did what was asked: `test ! -d build` after `rm -rf
+   build`. The brief asks for it. `persona.proof_ok` refuses a proof
+   that is not read-only, so a refused proof is never printed. It reads
+   argv (`shlex.split`, a bad quote refuses) against a named allowlist
+   of head words: test, ls, stat, grep, git status, systemctl is-active
+   and the like. No compound, no redirect, no control character, and
+   none of `persona.PROOF_DENIED` anywhere in argv. That list holds the
+   options that make a read-only head write or run something:
+   `--output`, `-o`, `--ext-diff`, `--textconv`, `tail -f`, `git -c`,
+   `-exec`, `-delete`, `file -C`, `sort --compress-program` and more.
+   A one-letter option is caught inside a cluster too, with a value
+   glued on or not. An unquoted glob or brace before `--` can expand
+   to an option: beside a file named `-oMakefile`, `sort *` writes the
+   Makefile. So it is no proof, past the heads whose every option reads
+   (`persona.GLOB_READS`: du, ls, wc, grep, head and the like). The
+   widgets show the proof in the hint row after the command runs and
+   offer it on `Esc s`. `spark do` offers it after
+   each confirmed step like a step of its own: Enter runs it,
+   `do.PROOF_TIMEOUT` seconds at most. `e` edits it, and the edit runs
+   when `proof_ok` still takes it, else it is skipped. `spark do` shows
+   the result and sends the model the exit code alone: a proof's output
+   never rides a request. `spark do` lands each step's feedback on the
+   thread the moment the step ran (`do.land`). The feedback is the
+   command that ran, `edited from` the proposal when the user changed
+   it, its exit code, the proof that ran and its exit code. So the last
+   step of a run is recorded like every other. After a step that is
+   not read-only (`judge.read_only`), the feedback ends with what it
+   changed, as spark read it (`do.told`). In a sandbox that is every
+   path whose status or bytes moved in the copy (`sandbox.state`, the
+   review's own reading), or `This step changed no file.` after a step
+   that can destroy data. Outside one it is the paths the step names,
+   at most `do.NAMED_MAX`: each one created, removed or changed, and
+   each named file that kept its bytes after such a step. A named
+   directory whose names stayed is not told. A step that moves its
+   directory first tells no path: `cd`, `pushd`, a `-C`, `--directory`
+   or `--chdir` option, `find -execdir`, a subshell (`do.CHDIR_WORDS`).
+   Without it, a step that exits 0 and prints nothing, a sed whose
+   pattern matched nothing, reads as done. A sandboxed run whose copy
+   reads slower than `do.STATE_SECONDS` tells no more steps. A step
+   that can destroy data is held to it: `do.danger`, or the model's
+   flag past the lowering. When one ran and the copy holds nothing new,
+   a done is asked again once (`do.NOTHING_CHANGED_AGAIN`), then shown
+   as `nothing changed: HINT`. A run that only read ends as it said. A
+   done right after a step that exited non-zero is asked again once with
+   its exit code (`do.FAILED_AGAIN`). A second one is shown as `the last
+   step exited N: HINT`, and the run exits 1. A step is a line or
+   a block: two or more lines, kept exactly as
+   written and never joined
+   (`do.step_text`). A here-document that writes a file is the block
+   the brief allows (`persona.MODE_DO`). `do.refused` reads a step
+   before any pattern does. A line may carry no `do.CONTROL` character:
+   C0, DEL, C1 and the bidi controls U+200E/F, U+202A-E and U+2066-9.
+   A block may carry the line feed alone (`do.BLOCK_CONTROL`). A line
+   is `do.DO_LINE_MAX` (4096) characters at most, a block
+   `do.DO_BLOCK_MAX` (16384). A control character in the model's
+   command or proof refuses the reply whole, a `done` with
+   `do.REFUSED_CONTROL`. A step past its cap is a `done` with
+   `do.REFUSED_SIZE`. An edit `do.refused` refuses is skipped. The
+   terminal shows a block whole before the confirm: the step line with
+   its first line and `(K lines)`, then every line numbered beneath
+   it. A line break cannot carry a second command unseen. `e` on a
+   line is readline's edit. On a block it opens `soul._editor`
+   (`$VISUAL`, `$EDITOR`, else micro, nano or vi) on a 0600 temp file,
+   removed after. No editor, an editor that fails or an empty edit is
+   one line, and the step is unchanged. Danger is `do.danger`:
+   `persona.is_dangerous` over the whole text and over each line, a
+   line continued with a backslash read as one. `persona._read` cuts
+   the text into commands as the shell does and judges each with its
+   wrappers removed (`persona.WRAPPERS`, judge's list too). The text
+   inside `sh -c`, `eval`, `trap`, `watch` and `find -exec` is read as
+   commands. Three more things are danger. One is a command word the
+   shell rewrites (`persona.REWRITTEN`: a quote, `$`, braces, a glob or
+   a backslash). One is a command carrier (`persona.CARRIERS`: ssh with
+   a command, a session's exec, a deferred run, a command inside an
+   option or a variable, a tool's own script). The last is a text too
+   deep to read (`TOO_DEEP`). `persona._DANGER` is the list of named
+   lines, a pattern each. A package cache cleaned is one on every
+   family: `apt`, `apt-get` and `aptitude` with `clean` or `autoclean`,
+   `dnf` and `yum` with `clean`, and `zypper` with `clean` or `cc`.
+   So are `pacman -Sc`, `paccache -r` and `brew cleanup`. Its options
+   are read only before the
+   command word, so `dnf search clean` stays plain. spark's own lines
+   hold the verbs that destroy or end logins, and `spark serve off`,
+   which stops the engine and the page. `spark client URL` stops them
+   too and answers from another machine from then on, so it is one;
+   `spark client off` is plain. They hold a sandboxed run
+   applied unseen or dropped (`spark do --accept`, `--discard`) and a
+   ledger cleared (`--ledger clear`) too. So `spark do` asks for the
+   typed `yes` there, and the page for its confirm. On the prompt line
+   `persona.is_dangerous` always wins. Past it the model's own flag
+   marks a command, lowered when spark's read-only proof holds for
+   every stage (`judge.read_only`). On a command whose every stage is
+   `spark` (`judge.own`) that flag is dropped: spark's own list is the
+   whole answer there (`cli._Know.flagged`). A line that mixes spark
+   with another command, or whose effect cannot be read, is not spark's
+   own and keeps the model's flag. So does `SPARK_KNOWLEDGE=off`.
+   `spark do` lowers the model's flag the same way (`do.propose`): a
+   step whose every stage reads, `du -sh * | sort -rh | head`, asks for
+   Enter, not `yes`. `proof_ok` denies any abbreviation of a
+   denied long option. `do.danger` reads past one shape alone
+   (`do.heredoc_file`): the whole step is one here-document writing
+   one file, with nothing before or after it. The file is named
+   nowhere else, its directory is reached without a symlink, and the
+   file is not there yet. An unquoted delimiter's body holds no `$(` or
+   backtick. No other pattern is ever read past. `r` at the prompt
+   prints a block again, numbered, and in clear mode speaks each line.
+   A `sudo` step is a danger step: the typed `yes`. A
+   goal is at most `do.DO_GOAL_MAX` (8 kB), else one signed line, exit
+   2, nothing sent. The budget keeps the goal whole, so it must fit.
+   The OS is `spark do`'s harness. An agent's harness is its tools, its
+   permissions, its context, its triggers and its memory. spark brings
+   only the last. The tools are the programs on PATH and their man
+   pages: a step refused for an option brings back its own page's
+   lines. The permissions are the kernel's sandbox (bubblewrap's
+   namespaces and no_new_privs, `sandbox-exec` on macOS) and the user's
+   Enter or `yes`. The context is the shell: the directory, the exit
+   code, the output. The triggers are the OS's own timers starting
+   `spark do --sandbox --detach`: a systemd user timer, launchd, cron, a
+   `spark watch` line. The memory and the audit are the `FORGE`'s sealed
+   threads. No tool schema rides a request: a small model's context
+   holds the task, not the harness. The MCP tools `spark mcp` listed
+   ride as `spark mcp call` lines, names and titles alone (contract 16).
+   `spark do` is bounded, measured and
+   held. A proposal's messages fit the served context (`do.budget`):
+   `SPARK_CTX`, 8192 when unknown, at `reveal.CHARS_PER_TOKEN`, a
+   `CTX_SHARE` of 0.8, less the system message and the reply's
+   `DO_MAX_TOKENS`. `do.fit` keeps the goal and
+   the newest step, shortens the oldest outputs to `(output trimmed,
+   exit N)` first, then drops the oldest exchanges. Oversized newest
+   feedback keeps its head, tail and a trim marker. A goal that cannot
+   fit is refused whole. `forge.history`
+   (mode `do`) cuts the same way and rebuilds each user message with its
+   `[cwd]` line, so a replayed prefix is the one that was served. Every
+   proposal is a turn record through `Session.record`: the server's
+   timings, the stem that answered, and a kind. The kinds are `cmd`,
+   `danger`, `done`, `skipped`, `reasked`, `missing`, `refused`,
+   `stopped` and `quit`, with `held` and `man` as numbers on a step.
+   What a step
+   printed passes `do.hold` before a program sees it or it rides a
+   request: `text.SOURCE_SHAPES`, plus spark's own secrets held by their
+   contents wherever they appear (`do.own_secrets`). Those are the
+   api-token, the file `SPARK_API_KEY_FILE` names, the forge-token, the
+   ember-token, the shared engine's token, the account key and the
+   login's token. Each is `OWN_SECRET_MIN` 16 characters at least. One
+   stderr line says `held=N`. The one named exemption is
+   `do.CHECKSUM_LINE`. When the step's argv[0] is one of
+   `do.CHECKSUM_TOOLS` (md5sum through b2sum, and shasum), a line of the
+   checksum shape whose digest length is in `DIGEST_LENGTHS` keeps its
+   digest. The same line from any other command is held. A step that
+   exits non-zero with an option refused (`do.BAD_OPTION`) brings back
+   `do.man_excerpt`. That runs `man HEAD` as argv through
+   `intake.man_page`, with `HEAD` a plain name. Both it and `man` must
+   be found on `$PATH` with its empty and relative entries dropped
+   (`intake.abs_path`): a `man` planted in the step's directory is not
+   the machine's. man runs from `/` in one clean environment
+   (`MANPAGER=cat`: `man -P cat` fails on the mandoc man Void ships) and
+   `MANWIDTH=80`, on `MAN_TIMEOUT` 5 seconds with the process group
+   killed. Overstrikes are stripped, and at most `MAN_MAX` 1500 bytes
+   around the refused flag go back. The tool itself never runs for it,
+   and `persona.SENDS` names it. A step nobody watches runs on
+   `do.STEP_TIMEOUT` (120 seconds): rc 124, the process group killed,
+   its pipe read `LEASH_GRACE` 0.5 seconds more and no longer. So a
+   grandchild that left the group with `setsid` and holds the pipe
+   cannot keep the step alive. That covers the page's steps, a sandboxed
+   run's and a program's. `spark do --sandbox` (`lib/spark/sandbox.py`)
+   moves the user's Enter and never removes it: containment replaces
+   the per-step Enter, and the Enter moves to the apply.
+   `sandbox.probe()` answers first (the `sandbox` row). A no is one
+   signed line with the reason and the install line, exit 2.
+   `sandbox.new_run` refuses a run dir inside the cwd (`spark do -- the
+   sandbox needs a project directory, not ~ or /`) and a sixth run
+   running or waiting (`SANDBOX_MAX_WAITING` 5, the count and the mkdir
+   hold `runs/.lock`). Linux is one bwrap a step: `--ro-bind / /`, the
+   git config files read-only one by one, the project an overlay whose
+   upper dir keeps every write, `--clearenv` and `sandbox.STEP_ENV`. An
+   empty tmpfs covers each of `sandbox.HIDDEN`: the homes, /root, /run,
+   /tmp, /var/tmp, /media, /mnt and /etc/spark. `sandbox.BWRAP_FLAGS`
+   gives fresh user, ipc, pid, net, uts and cgroup namespaces,
+   `--disable-userns`, `--die-with-parent` and `--new-session`. bwrap
+   sets no_new_privs, so sudo and setuid do not elevate. The rest of the
+   system stays readable (/usr, /etc, /opt, /var): the review, a diff,
+   is the gate there too. macOS is an `APFS` clone under `sandbox-exec`
+   with `sandbox.PROFILE`: `cp -c` on the same volume,
+   `SANDBOX_MAX_ENTRIES` listed within `SANDBOX_LIST_SECONDS`, a
+   manifest at clone time. The
+   profile is a named line each, every path a `-D` parameter, and
+   `[cwd]` names the clone. It allows by default, because a deny-default
+   profile breaks dyld. It denies every network socket, TCP and unix, so
+   the ssh and gpg agents are out of reach. It denies reads of /Users,
+   /Volumes, the home, spark's state and config, /private/etc/spark and
+   the temp dirs (/private/var/folders, /private/tmp, /private/var/tmp).
+   It denies reads of the system keychain, root's home and the package
+   manager's service config (/opt/homebrew/etc, /usr/local/etc). The
+   public files git, openssl, node and clang read stay readable. It
+   denies every write but the clone, the run's own home and temp and the
+   null devices, and it denies the terminal. zsh writes a here-document
+   under `TMPPREFIX`, not `TMPDIR`, so the step's environment points
+   both into the run's temp folder (`sandbox._step_env`). It denies the
+   mach
+   services, so a program the step builds cannot reach them either. They
+   are Apple events, Launch Services, the clipboard, the keychain
+   daemons, Shortcuts and the workflow runner, and login items and
+   launchd jobs. The preferences daemons, recent items, plugins, mounts,
+   file providers and consent are denied too. It denies the exec of
+   osascript, osacompile, open, launchctl, sudo, security, pbcopy,
+   pbpaste, shortcuts, automator, defaults and sfltool. It also denies
+   screencapture, lsregister, lsappinfo, pluginkit, qlmanage, tccutil,
+   hdiutil, diskutil, tmutil, crontab, at, fileproviderctl and brctl.
+   setuid programs do not run. It does not make the machine private: a
+   step reads everything else, sees the process list, and can talk to
+   any system service the profile does not name. The review is the gate.
+   sandbox-exec is Apple's, and its own man page tells developers to
+   move off it. Steps and proofs run without asking, `proof_ok` still
+   applying, `STEP_TIMEOUT` each, under `RLIMIT_FSIZE`
+   (`sandbox.preexec`). The copy's total is weighed every
+   `do.WATCH_SECONDS` (2 seconds) during a step: past
+   `SANDBOX_MAX_BYTES` (1 GB) the step's group is killed (rc 124).
+   Between steps the same cap stops the run (`cap`). A run is 8 steps. A
+   danger step runs, contained, and is named. Only the goal is an
+   instruction, and nobody reads a sandboxed step before it runs. So a
+   step that deletes files (`persona.deletes`, a named line each) runs
+   only when the goal asked for a deletion (`do.DELETE_WORDS`). Else it
+   is held: one line says so, the model hears why (`do.UNASKED_DELETE`),
+   and the turn's kind is `refused`. The same step again ends the run.
+   `persona.deletes` is the cheap pre-check; the guard is the copy
+   itself. After each step spark reads what the copy lost against the
+   project (`sandbox.lost`: a file or link gone, or a file emptied,
+   whose bytes are nowhere the copy added). On a keep run that stops the
+   run and the review refuses those paths (`sandbox.KEPT`), so no apply,
+   `--accept` or a program's accept ever drops them. A rename keeps the
+   bytes, so it is no loss. A run whose goal asked for a deletion keeps
+   none of this.
+   A step's own group is
+   killed when it ends, so a background writer cannot outlive it. Its
+   echo passes `sandbox.visible`: output nobody confirmed cannot redraw
+   the screen the review is read on, and a refusal's paths pass it too.
+   The goal carries `do.SANDBOX_NOTE`.
+   The system message stays byte-identical to plain do's. The review is
+   `sandbox.changes`: entries sorted by path, each with a status from
+   `sandbox.STATUSES` and its sha256. The statuses are added, changed,
+   deleted, mode, link, binary, and the two that never apply, held and
+   refused. `diff_text` (through `page()`) is a heading an entry and a
+   unified diff under a changed text. Every control character is shown
+   as an escape (`VISIBLE`: C0 but TAB, DEL, C1, the bidi controls, a
+   lone surrogate). An entry whose name, link target or text holds one
+   says `(control characters)`: a review cannot be redrawn by the text
+   it reviews. A text over `DIFF_MAX` (256 kB) is a heading. Past
+   `REVIEW_MAX` (2 MB of texts) every later entry is a heading, `too
+   large to show`. Then `apply N changes to DIR? type yes:`. Git
+   directories go by shape, not name (`GITDIR`). One is a directory
+   named `.git`, case folded with the characters HFS+ ignores taken out,
+   or one holding a `HEAD` file and an `objects/` directory. It counts
+   in the project or the copy, and the project itself counts when it
+   sits inside one. Every item inside is its own entry, under one count
+   line per git directory. Only `sandbox.GIT_KEEP` applies: objects (but
+   not `objects/info/alternates` and `http-alternates`), refs, logs,
+   index, `HEAD`, `ORIG_HEAD`, `FETCH_HEAD`, `MERGE_HEAD`, packed-refs,
+   `MERGE_MSG`, `COMMIT_EDITMSG`, description and `info/exclude`.
+   Everything else is held with its reason (`GIT_WHY`): config and
+   config.worktree, hooks, commondir and gitdir, worktrees and modules,
+   anything else. A `.git` that is not a directory is held (`GITFILE`).
+   `sandbox.apply(run, reviewed)` applies only what the review showed.
+   The entries' fingerprint (path, status, kind, modes, sha256) must
+   match the copy's now, and every file's bytes are hashed against it as
+   they are staged, before the project is touched. A copy changed after
+   the review is `the copy changed after the review -- nothing applied`,
+   and the run waits. `--accept` passes nothing, since nothing was
+   shown, and applies what the copy holds. The apply masks setuid and
+   setgid. It refuses a device, a fifo, a socket, an overlay metacopy or
+   redirect, and a link that leaves the project. It marks an added `+x`.
+   It writes fd-relative with `O_NOFOLLOW` at every component, staged
+   temps renamed into place. It refuses whole on a git lock file in the
+   change set. It refuses whole on a conflict too: a touched project
+   path whose mtime or ctime is newer than the run's start. No step can
+   set ctime back. The run then waits. Anything but `yes` leaves the run
+   waiting. An I/O error stops apply at the failed operation and keeps
+   the copy waiting. Staging finishes before any delete or placement;
+   a staging error applies nothing. `ApplyError` carries the count of
+   completed changes and the intentional exclusions separately. A
+   failed operation may itself be partial, such as deleting a tree.
+   Both interfaces report error, never done, and retain the run.
+   A retry computes the remaining differences and needs a fresh review.
+   Completed files already matching the copy are skipped. The original
+   start time and conflict checks stay: a partly deleted tree can
+   require manual recovery before the run is discarded.
+   A run that changed nothing is said and removed. Ctrl-C or
+   `SIGTERM` leaves it waiting too. A run's life is `sandbox.STATES`:
+   `running` while a process drives it and holds the run's flock,
+   `runs/<id>/lock`, then `waiting`. Applied or discarded, its dir is
+   removed whole. A run recorded running whose lock is free lost its
+   driver and reads waiting. `runs/<id>/meta.json` holds numbers and
+   names (id, thread, cwd, start, os, state). The goal's words live in
+   the sealed thread. `--detach` needs no tty. It holds
+   `runs/detach.lock` (`sandbox.detach_lock`, an flock: one detached run
+   at a time, refused in one signed line), prints the id and leaves the
+   changes waiting. `--review` lists the runs: id, age, changes or
+   `running`, and the goal's first words from the thread. `--review ID`
+   is the diff and the typed `yes`, at a terminal only. Otherwise one
+   line points at `--accept`. `--accept ID` applies without showing,
+   every named refusal still holding. `--discard ID` drops it. Each
+   claims the run first (`sandbox.claim`: its lock taken here) and
+   refuses one still running (`run ID is still running`). Bare `spark`
+   and the bar line say `N runs waiting` (`bar.waiting`), a running run
+   not counted. `--` ends the options: a goal that starts with `-` or is
+   `help` is words. Without it, a first word that starts with `-` and is
+   not an option is refused (`no option -x`, exit 2). `spark line
+   --paste` is the paste inspection: a multi-line paste on stdin, no
+   command back. It answers one `answer` or `danger` line naming what
+   the paste does, and a locally dangerous line forces `danger` whatever
+   the model says. Over 8 kB it is one line and nothing is sent. A paste
+   that looks like a secret is one `answer` line naming the shape, and
+   nothing is sent either. `text.SECRET_SHAPES` holds a private key
+   block, an AWS, GitHub, Slack or `sk-` token, a `password=` or
+   `token:` line, and a 64+ run of base64 that mixes letters and
+   digits. The widgets hook the
+   bracketed paste: bash rebinds the paste-begin sequence, zsh wraps
+   `bracketed-paste`. Two or more lines into an empty prompt get the
+   answer in the hint row. The paste itself always lands in the buffer
+   untouched, and nothing runs until the user's own Enter. `spark off`
+   and `SPARK_OFF` disable it. Exit 0 for the first 3 kinds, 1 for
+   error. A buffer starting with `??` continues the newest thread, kept
+   or not. A file that is a header alone is skipped: a thread a program
+   made and has not written yet is not a conversation to go on with.
+   Any other starts a new one, no heuristics. On a logged-in client of a
+   `FORGE`, `??` continues the newest thread on the `FORGE`
+   (`forge.peer_newest`, the requester's own store over contract 9) and
+   the turn lands there. The one exception is the client's own last line
+   turn. A `?` there lands in its own store, and `state/line-seen` keeps
+   the `FORGE`'s newest thread and turns of that moment. While the
+   `FORGE`'s newest is still that, `??` goes on with the client's own
+   turn (`forge.line_mine`). Once the page, the machine's prompt or
+   another client moved it, `??` goes on there. No clock is compared.
+   Any trouble falls back to the local store. A turn whose line 1 went
+   out is on its thread even when the person moves on before the rest.
+   The widgets stop `spark line` at the next Enter, key or prompt: a
+   SIGTERM, a Ctrl-C's SIGINT, or line 2's write into a reader gone.
+   Each keeps the question and the command handed over (`cli._Landing`),
+   so `??` goes on with the newest answer. The fix after an explain (`?
+   fix it`, `SPARK_EXPLAIN_CMD` and `_RC` set) goes on with that
+   explain's thread when it is the newest. So the model reads why the
+   command failed. It never lands the command that failed as its own
+   fix: asked once more, then line 1 is an answer, `no other command
+   fixes this`.
+   `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5, lets `spark
+   line`, `spark line --paste` and `spark recall` draw the pulse
+   (`text.Busy.hint_row`) N rows above the cursor on `/dev/tty` while
+   the model answers. The widgets set it on those 3 calls, N the
+   height. Each frame saves the cursor, goes up N rows,
+   clears that row, draws the mark and the dots, and restores. Awake,
+   the dots are the scanner with the face (grammar rule 6). After line
+   1 the row keeps the mark, the face and the dots until line 2
+   (`cli._Pulse`). The
+   widgets' own lines (`_spark_say`) go to the same row. Where the
+   face is on, each carries a face after its mark. It is pleased on an
+   answer, a paste's too, and on the done line. It is alarmed on a
+   danger and on the failure line. A check row's warning is alarmed
+   and its heal pleased. It is puzzled when nothing came, listening
+   on `Esc v`, and thinking before `spark line` and `spark recall`.
+   Any other line carries the idle face. The face is on when the
+   look file says `AWAKE=yes`, `MOTION` and `WORDS` are each `on`,
+   or `auto` with
+   `TERM` not `dumb`, and `spark off` is not set. At an idle prompt
+   the resting face sits alone in that row. Enter erases it, so the
+   scrollback keeps none. In zsh a `Ctrl-C` at a prompt leaves none
+   either: the next prompt's hook erases the face still standing,
+   when the line took one row. In bash a `Ctrl-C` can leave one,
+   because bash has no safe hook for it. The face is drawn only where
+   the blank row is known: the prompt opens with a newline and has as
+   many lines as the height, or starship draws the row. In zsh it
+   blinks at the temperament's rate, sleeps after 5 minutes without
+   a key and wakes
+   on the next one. That is zsh's own `sched` and `zselect`: no
+   process is started, and it moves only at an empty line with no note
+   in the row. In bash the face is still, because readline has no idle
+   timer. Not awake, or with the look `off`, every byte is what it
+   was. The row is the one
+   place for spark's lines at the prompt. Each replaces the one before,
+   never one above another. The failure line waits for the
+   prompt and is drawn there by the line editor's start (zsh's
+   `zle-line-init`, bash's next prompt), so a command's last output row
+   is never eaten. The failure line is `* failed (N) -- Esc s asks
+   why`, or `HEAD not found; Esc s gets the install line` for exit 127,
+   or `last time this fixed it: FIX` from the failure memory.
+   A key `spark keys` moved is named in these lines in place of `Esc
+   s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none`, or the
+   keys off, the failure line ends `? words asks about it` and the
+   proof line is `* done -- check it: PROOF`. No line names a key that
+   is not bound. The
+   others are `* Enter explains the error`, `* Enter runs the check`
+   (the proof), `* Enter remembers the fix`, `* type a question, then
+   Esc s` and `* spark writes here -- Esc k moves it`. A check row
+   that turned worse is `! ROW: VALUE -- REMEDY`, and its heal `* ROW:
+   ok again, after N` (contract 6). Not awake, each is the same line
+   with no face. A hint no longer names the manual it was checked
+   against. A hand-run `spark line` never touches that row, and
+   stdout stays the two lines either way. With `SPARK_VOICE=clear`,
+   `spark line` reads its lines
+   aloud once they are written, from a detached process
+   (`voice.aloud_later`, `voice.line_words`). stdout stays this
+   contract byte for byte, and the widget waits for no speech. Mode
+   `on` never speaks here. The widgets bind `Esc v` and `Esc x` only
+   when the voice is on or clear as the shell starts (SPARK_VOICE from
+   the environment, else spark.env). `Esc v` is `spark voice listen
+   --buffer`: the words heard land at the cursor, on an empty line as a
+   `? ` question, and nothing runs until the user's Enter.
+   `Esc x` is `spark voice stop`. In clear mode `spark do` at a
+   terminal reads aloud too (`voice.Reader`, `voice.step_words`). It
+   reads each step, a danger step's warning first. In a block it reads
+   every line outside a here-document's body with its symbols, and the
+   body as "a here-document writing F, N lines of text". Then the
+   choices once a run, each output's last 3 lines and the end.
+   Nothing spoken answers a prompt: a danger step stays the typed
+   `yes`. The Reader is two stages. An engine thread makes each line's
+   clip, 16-bit PCM in memory, at most `voice.AHEAD` ahead. A player
+   thread plays them in order, so the next line is ready when one ends.
+   The engine is `voice.Engine`: Kokoro loaded once, at the Reader's
+   first line, through the runtime's C API by ctypes. Its structs are
+   mirrored from the pinned `c-api.h`. Each call makes one sentence,
+   its language and speed riding the call. Every text is made in the
+   spark process (`voice.process_engine`): no tool is started, so no
+   spoken text is on a command line. A runtime it cannot load is one
+   line, `voice.NO_ENGINE`, and silence. Mode on is the kept speaker,
+   with no effect over it (`voice.clip`). On Linux the player is one
+   `voice.Stream` a burst:
+   `aplay -t raw`, or `paplay --raw`, reading PCM on its stdin. It
+   opens at the first clip with `voice.LEAD_IN_MS` of silence. It is
+   fed `voice.STREAM_CHUNK` of silence while the next clip is made. It
+   closes `voice.STREAM_IDLE` after the last clip with nothing to
+   come. So the card is opened once a burst, and no sentence's start
+   is clipped by its waking. macOS plays each clip with afplay, the
+   lead-in before the first after `voice.WAKE_AFTER` of quiet. A cut
+   drops the text that waits and the ready clips, and kills what plays,
+   the stream with what it held. The chat speaks a reply as it streams,
+   through `cli.stream_turn`'s `voice` (a `forge._Spoken`). With the
+   reveal on at a terminal of this machine (no `SSH_CONNECTION`), the
+   text follows the voice. Each chunk goes to `voice.Sentences` as it
+   comes, and each sentence to the Reader at once. `Reader.when(tag)`
+   says when its sound starts and how long it is. A thread of its own
+   shows the sentence's text from then, `forge.FOLLOW_EARLY` ahead, at
+   the pace that ends it with `forge.FOLLOW_SHARE` of its sound. A sound
+   not known within `forge.FOLLOW_WAIT` lets the rest go at the reveal's
+   pace. Otherwise the voice has each chunk once the wrap printed it.
+   `Reader.sounds(tags)` says whether one of a reply's sentences sounds
+   now, and the face talks while it does (`forge._Face`). A
+   reply's first sentence goes at its first comma, semicolon or colon,
+   or after `voice.FIRST_WORDS` words with none. The shell widgets
+   depend on nothing else.
+5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
+   and exits 0, or exits 1. `<model>` is the spark role's model, the
+   file stem. `forge` means `/api/health` there says `forge: true`. This
+   is the check's only AI probe.
+6. A live widget writes `~/.local/state/spark/widgets/<pid>` containing
+   `<shell> <pid> <epoch> [hook]` and removes it on shell exit. The
+   fourth field, the literal word `hook`, says that shell's exit-code
+   hook is armed: the failure moment. Readers ignore fields they do not
+   know, so old markers and old readers both survive. The marker is
+   also the widget's stamp for `~/.local/state/spark/look`. A shell
+   reads that file again only when it is newer than its marker. It reads
+   it line by line, never sourced or eval'd, and drops a value with a
+   control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`,
+   `WORDS` (each `SPARK_LOOK`'s value, `off` unawakened), `HEIGHT`,
+   `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`, `BLINK` and `TEMPER`
+   (`look.content`). The widgets read `AWAKE`, `MOTION`, `COLOUR`,
+   `WORDS`, `HEIGHT`, `SGR_ACCENT`, `SGR_WARN` and `FACE_<MOOD>`, and
+   zsh reads `BLINK` too. A face is kept only as printable ASCII, 8
+   characters at most. Where the face is on, a shell also stats `off`
+   at each prompt and each line it draws. `SPARK_HEIGHT` in the
+   environment wins over `HEIGHT`. The `look` row compares the file with
+   what `spark.env` and the faces file say now. The marker is the
+   stamp for `~/.local/state/spark/alert` too, the file `spark check`
+   writes when a row changes (contract 7). A prompt pays one `-nt`
+   test of it against the marker. A newer file is read with `read
+   -r`, line by line, 8 lines at most, never sourced or eval'd. No
+   pane writes it. A line is `<seq> <epoch> <mark> <mood> <row>
+   <text>`, one a row, 8 at most (`check.ALERT_MAX`). A row that
+   turned worse is the mark `!` and the mood `alarmed`: ok or na to
+   warn or fail, or warn to fail. Its text is `ROW: VALUE -- REMEDY`,
+   the remedy's command, or `spark check ROW` when the row names
+   none. A heal is `*` and `pleased`, in the row's place: `ROW: ok
+   again, after N`. A row that goes from warn or fail to na loses its
+   line. One that goes from fail to warn has its text written again
+   under the same seq, so nothing new is said. The text is one line
+   of printable ASCII with no secret shape, 160 characters at most
+   (`check.ALERT_CHARS`). One that is not becomes `ROW needs you --
+   spark check ROW`. A seq only grows. A check's run drops a line 24
+   hours after its change (`check.ALERT_HOURS`). The rows `prompt`
+   and `failure` are recorded and never said (`check.ALERT_QUIET`):
+   both turn warn when the last shell closes. The rows `serve`,
+   `forge`, `ember`, `peer`, `sends` and `watchdog` settle
+   (`check.ALERT_SETTLE`). They are red while a server starts or a
+   model loads. The last two flap for a few seconds at a restart.
+   Their turn for the worse is held in the row's `held` key, and said
+   only when the row is still red 180 seconds later
+   (`check.ALERT_SETTLE_SECONDS`). One that heals before that is never
+   said. The history records both
+   changes at once. A server may come up on a Wi-Fi backup at boot,
+   before a slow wire. When the `serve` or `forge` row says the
+   machine's address moved under it, the timer fixes it
+   (`check.follow_address`). Once the
+   same row has stood red 180 seconds, the timer's run restarts that
+   unit, at most once an hour a unit (`check.MOVE_GAP`, the row's
+   `moved` key). The line is `ROW: the address changed to IP --
+   restarted`, said once and logged. A server started by hand has no
+   unit and keeps the row's remedy. A person's run never restarts
+   anything. A widget cleans each
+   line. It keeps one whose seq is 1 to 12 digits, whose mark is `!`
+   or `*` and whose row is a-z. The text must be printable ASCII, 200
+   characters at most. Any other line is dropped. A line whose epoch
+   is 24 hours or more from now is passed over, the age a check's run
+   applies: a client has no check timer to drop it. It does not use
+   the mood: the mark picks the face. It shows
+   one line a prompt in spark's row (contract 4), once in each pane.
+   What a pane has said lives in memory alone: the highest seq shown
+   and the rows whose warning it showed. A heal shows only in a pane
+   that showed its warning. A new shell reads the standing file once,
+   so it shows a standing warning once. A failure line or the proof
+   line goes first, and the warning waits one prompt. `spark off` is
+   silent, and the lines wait for `spark on`.
+7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
+   row never fails. Bare, it prints only the rows that need you, `warn`
+   and `fail`, each with its remedy, then the totals line. No header, no
+   categories, and `na` rows stay hidden. A machine with nothing to fix
+   prints the totals line alone. `--all` prints every row by category
+   under the header. `spark check NAME...` prints those rows, ok or
+   not, then the totals. A name that is no row is `spark check -- no
+   row named NAME`, exit 2. `--porcelain` prints
+   `category<TAB>status<TAB>name<TAB>value<TAB>remedy`, every row. A
+   run merges its rows into `~/.local/state/spark/check.json` for the
+   bar (`check.write_snapshot`). The merge holds the flock
+   `check.lock`, and the file is replaced whole. Each row there
+   carries `at`, the start of the run that saw it, `since`, its last
+   status change, and `red`, when it left ok. An ok or na row has no
+   `red`. The newest observation of a row wins, so a slow run records
+   no false heal. A full run sets `ts`. A named run replaces only its
+   rows and keeps `ts`: the bar's age and the watchdog row go on
+   meaning the last full run. With no snapshot yet, a named run
+   writes none. The same step records each status change in
+   `check-history.jsonl`, one JSON object a line:
+   `{"ts","row","from","to"}`, and on a heal `red`, the seconds the
+   row was red. It holds names, statuses and numbers, never a row's
+   value. A change is read by row name, on the status alone. ok to na
+   and back is none, and a row never seen before is the baseline.
+   Every full run prunes the file to `SPARK_HISTORY` days and
+   `check.HISTORY_MAX` (2000) records. With `SPARK_HISTORY` off none
+   is kept, and `spark clear --history` removes the file. The step
+   also rewrites `alert` (contract 6). `spark check --history [NAME]
+   [--porcelain]` prints the changes kept, newest first, and runs no
+   row. A line is the local date and time, the row, the two statuses
+   as `ok -> fail`, and a note. The note is `red N` on a heal, and
+   `still red, N` on the newest change of a row that is red now. The
+   last line is `* N changes in D days`, or `* no changes kept in D
+   days`. `--porcelain` there prints
+   `epoch<TAB>row<TAB>from<TAB>to<TAB>red`, the last field empty when
+   there is none. Any other option is `spark check -- --history takes
+   a row name and --porcelain`, exit 2. A name that is no row is
+   refused as above. With history off it prints `spark check --
+   history is off (SPARK_HISTORY)` and exits 0. The `knowledge` row
+   asks bootstrap's own question (`intake.fresh`), so its remedy,
+   `spark update`, heals it. It warns `read N ago, this machine
+   changed since`. Programs that wait their turn are ok, said in
+   words: `37 waiting their turn`, or `still reading`. The `answers`
+   row reads the prompt line's turns of the last `check.ANSWERS_DAYS`
+   (7) days, for the model served now (`stats.answers`). It counts the
+   questions that got no answer, the turns of kind `empty` (contract
+   4). With no question asked it is `na`. It warns when those are
+   `check.ANSWERS_MIN` (2) or more, and `check.ANSWERS_SHARE` (2 %) of
+   the questions or more. Its remedy is `spark model list`, because a
+   larger model answers more often. Below that it is ok and says the
+   count. It is a `CAPABILITY` row and never fails.
+8. Signing. The first line of `spark --help` and of every subcommand's
+   help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
+   can draw it. A refusal signs the same way. An invocation mistake is
+   `spark <verb> -- no word X; spark <verb> -h lists them`, exit 2, and
+   an unknown verb `spark -- no command named X; spark help lists
+   them`. A failure at run time (`die()`) is `! ` and the line on
+   stderr, never a `spark:` prefix, and bootstrap's errors are the same
+   `! `. A declined yes/no prints `* nothing changed`. `spark setup
+   --` is the offer bare `spark` prints after the banner, on a clone
+   with no `site.env` at a terminal. `spark bar` is core: it answers
+   everywhere. `spark uninstall -- not a terminal: spark
+   uninstall --yes runs it` is the refusal of a non-terminal without
+   `--yes`: the plan printed, exit 2. On WSL 2 the same shape: `spark
+   serve -- WSL 2 stops with its last window: it cannot stay on and
+   answer (a Linux machine can)` (exit 2), from `spark serve boot on`.
+9. The `FORGE` HTTP API. `lib/spark/forgeserve.py` serves it on
+   `SPARK_FORGE_HOST:SPARK_FORGE_PORT`: one LAN address, never the
+   unspecified address in any spelling. `bind_check` in
+   `lib/spark/__init__.py` reads IPv4 the way the socket layer does, so
+   `0`, `0.0` and `00.0.0.0` are `0.0.0.0` and refused like `::`. An
+   address neither private nor loopback is bound with a warning, said
+   and logged. `spark serve` shares the check. `GET /api/health` answers
+   without a token: `{status, forge: true, name, version, model,
+   upstream, models, roles, names}`, where `models` is `{role:
+   loaded|unloaded}`, `roles` is `{role: model file stem}` per served
+   role and `names` the same roles by the list's name
+   (`config.model_name`). A program reads `roles`. The page's header
+   shows `names`: `line NAME`, then `chat NAME`. It is the client's
+   `FORGE` detector and the `forge` row's probe. `GET /`, `/login`,
+   `/static/<f>`, `/manifest.webmanifest` and `/apple-touch-icon.png`
+   (a 180x180 PNG the server draws) are the page, no token. The page
+   is chat-first, and both roles land in the chat view. The hash
+   routes are chat, monitor, do, config and help, chat the default,
+   and navigation is one header menu button. For a user only chat,
+   config and help exist. Monitor and do redirect to chat. The login
+   link `/login#t=<token>` signs in by itself: `spark
+   serve --login` and `spark user add` draw it as a QR at a
+   terminal. The page reads the fragment before routing, strips it with
+   history.replaceState, and posts it to `/api/login` once. A stale link
+   is one 401, never a retry loop. A browser never sends a fragment, so
+   it cannot reach the server or its log, which drops query strings
+   besides (`_dispatch` logs `urlsplit().path`). Auth. The forge-token
+   is admin: the whole machine and the box account's own store. The box
+   account is the code's name for this machine's own login. Every other
+   caller is a named user (`spark user add NAME`) presenting a personal
+   token, verified against its stored sha256, its data key unwrapped in
+   memory only. Every non-human caller is a named user of its own with
+   its own token: a script, an app, a CI job. The admin's forge-token is
+   the machine's, never shared. The `FORGE` is the account authority,
+   and a client never mints: `spark setup --model none` skips the
+   account row, and `forge.local_store` keeps nothing on a client with
+   no login. A client logs in with a token minted here, and the `peer`
+   row there says whether this `FORGE` accepts it. `POST /api/login`
+   takes `{token}`, goes through the write gate like every other POST,
+   and answers `{ok, name, role, user}`, setting the cookie. So a page
+   on another origin cannot log a browser in. The session id is minted
+   at random for that login, the admin's included, never derived from
+   the token: two logins hold two cookies, and a captured token yields
+   none. Sessions live in memory only. One expires with its cookie (90
+   days). It dies on logout (`POST /api/logout` drops the session, not
+   only the cookie) and with its token's rotation or removal, and it is
+   gone on a restart. A restart sends every browser, the admin's too,
+   back to the login. A wrong login costs 1 second and is counted: 401,
+   then 429 after 10 wrong per minute from one address. While locked
+   out, that address gets 429 on a bearer as well, before it is
+   compared. A wrong bearer costs 1 second and is counted likewise. An
+   unknown cookie is only a 401, because after a restart every browser
+   holds one. The v1.3 shared ember-token is not accepted. Every route
+   the server answers is one row of `forgeserve.ROUTES`: `(method,
+   pattern): none|user|admin`, a `*` one path segment. `_route` consults
+   nothing else, so a request off the table is 404. A method off it is
+   the same 404 through the same path, never the stdlib's 501:
+   `Handler.__getattr__` dispatches every `do_*` the table lacks. HEAD
+   is not GET. It is off the table, a 404 with no body, and it opens no
+   stream. `none` is open. The two with a gate of their own keep it
+   (`/api/login` the write gate, `/v1/chat/completions` the bearer).
+   `user` needs the cookie or a token as a bearer, else 401. `admin` is
+   the forge-token. A user there is 403 `{error: {kind: role}}`, because
+   the soul is the machine's one identity. `tests/docs_test.py` holds
+   this table equal to the code, entry for entry, and
+   `tests/policy_test.py` proves every row with 3 callers:
+
+   ```
+   GET     /                          none
+   GET     /login                     none
+   GET     /static/*                  none
+   GET     /static/fonts/*            none
+   GET     /manifest.webmanifest      none
+   GET     /apple-touch-icon.png      none
+   GET     /api/health                none
+   POST    /api/login                 none
+   GET     /api/me                    user
+   GET     /api/check                 user
+   GET     /api/stats                 user
+   GET     /api/events                user
+   GET     /api/soul                  user
+   GET     /api/memory                user
+   GET     /api/models                user
+   GET     /api/threads               user
+   GET     /api/threads/*             user
+   GET     /v1/models                 user
+   POST    /v1/chat/completions       user
+   POST    /api/logout                user
+   POST    /api/chat                  user
+   POST    /api/memory                user
+   POST    /api/threads               user
+   POST    /api/threads/*/append      user
+   POST    /api/user/token            user
+   DELETE  /api/threads               user
+   DELETE  /api/memory/*              user
+   GET     /api/serve                 admin
+   GET     /api/gpu                   admin
+   GET     /api/bench                 admin
+   GET     /api/config                admin
+   GET     /api/users                 admin
+   POST    /api/users                 admin
+   DELETE  /api/users/*               admin
+   POST    /api/run                   admin
+   POST    /api/do/propose            admin
+   POST    /api/do/run                admin
+   POST    /api/check/refresh         admin
+   POST    /api/soul                  admin
+   ```
+
+   Seven admin rows act on this machine: `POST /api/run`, `POST
+   /api/do/propose`, `POST /api/do/run`, `POST /api/check/refresh`,
+   `POST /api/soul`, `POST /api/users` and `DELETE /api/users/*`. They
+   are every admin `POST` and `DELETE` row (`forgeserve.ACTS`), a `*`
+   read as the table reads it. Over plain http they answer this
+   machine and a peer on one of its own networks alone. The networks
+   are the interface
+   prefixes `own_networks` reads, or the private and link-local ranges
+   when it reads none. A routed peer is 403 `{error: {kind: boundary}}`
+   before any body is read, with the remedy, and one line in `forge.log`
+   says so. Over TLS a valid session acts from anywhere. spark reads no
+   `Forwarded` or `X-Forwarded-*` header: a reverse proxy is the peer,
+   and its address decides. `tests/policy_test.py` holds `ACTS` to the
+   table and to this paragraph; `tests/forge_smoke.py` proves the
+   boundary with synthetic peers. `GET /v1/models` lists one entry a
+   served role, in the shape the router lists: the file's stem as id,
+   the role among its aliases, its status. Nothing of the engine's own
+   listing passes, never a path. A `model` that is neither a role nor a
+   name `/api/health` shows is 400 `{error: {kind: model}}`.
+
+   `POST /api/soul` takes `{text, core?}` and answers `{chars, cut,
+   part}`, `part` the one written: `personality` after an unchanged
+   core once awaken gave one, else `soul`. A changed core there is 409
+   `{error: {kind: core}}` unless `core` is true.
+   `GET /api/me` answers `{role, user, name, version, faces, blink}`:
+   how the page decides which console to draw and whom to greet. The
+   faces are the machine's own (`look.faces`), with their blink rate,
+   for the face in the page's bar. For the admin it carries `newest`
+   too, the newest release tag this checkout knows (`version.newest`:
+   the refs read, no subprocess). The page's header says `newest
+   vX.Y` when that is past the version it runs. `update` under machine
+   runs `spark update` through `/api/run`. `GET /api/stats?days=N` (1,
+   7 or 3650) answers the turns' numbers for the window and `sends`,
+   the rows of `spark stats --sends` for it. A row is day,
+   destination, bytes and turns: what left this machine, never a word
+   of it. The page shows them under activity, and under a user's
+   settings. `GET /api/models`
+   answers this machine's model table `{name, total_gb, budget_gb,
+   budget_pct, backend, cap_note, models: model.model_rows}`, what
+   `spark model` on a client prints instead of its own numbers. The
+   server answers every route from site.env and spark.env as they are
+   now: `ForgeServer.cfg` re-reads them when either changes, the
+   forge-token's rule. `spark model NAME` on the machine restarts
+   spark-serve, not the `FORGE`. The chat, thread and memory routes are
+   scoped to the requester's own sealed store: a user's to their
+   `users/<name>/`, the admin's to the box account's. Nobody holds a key
+   to anyone else's. `GET /api/users` (admin) answers `{users: [{name,
+   threads, kept, last, account}]}`: counts and stamps, never a title,
+   a body or a token. `account` marks the box account's own store.
+   `kept` counts the kept threads among `threads`, read from
+   the plaintext headers without a key. That is the whole of admin
+   visibility. `POST /api/users` (admin) takes `{name}` and mints a
+   user as `spark user add NAME` does. It answers `{name, token, link,
+   qr}` once: the token, its login link and the link's QR as a matrix
+   the page draws for that person's phone. Nothing is stored; a name
+   the verb refuses is 400, one in use 409; it acts, with an audit
+   record `user add`. `DELETE /api/users/*` (admin) removes that user
+   as `spark user remove NAME` does: the store and every kept thread,
+   gone, and their sessions die with the verifier. The box account is
+   409 `{error: {kind: self}}`, removed at the terminal alone; an
+   unknown name is 404; it acts, with an audit record `user remove`.
+   `POST /api/user/token` (user) rotates the requester's own token,
+   returned once with its login link and the link's QR, as `POST
+   /api/users` answers them, never stored. `DELETE /api/threads` clears
+   the
+   requester's own regular threads and answers `{cleared, kept}`: the
+   kept threads stay, and `kept` says how many. `GET /api/threads` rows
+   are `{id, ts, title, turns, kept}`. `GET /api/threads/<id>` answers
+   `{id, messages}`, each record as stored but its `source`: a chat
+   `/read`'s file goes to the model, never to the page. Every known
+   route needs one
+   `Host` this machine answers to (400). Every `POST` and `DELETE`
+   under `/api/`, `/api/login` included, also needs `X-Spark: 1` and,
+   when sent, one `Origin` whose scheme, host and port are the
+   request's own (403). An API client may omit the `Origin`. A second
+   `Host` or `Origin`, or one that does not parse, is refused, and a
+   forwarded header changes neither check. With a certificate pair
+   (contract 3) the listener is TLS: 1.2 or newer, one port and one
+   scheme, no plain listener beside it and no redirect. The pair is
+   read again when its files change, at most once a minute, with no
+   restart. A pair that does not load keeps the old one, and the
+   `https` row says so. The cookie carries `Secure` there, and every
+   answer to a Host that is a name carries `Strict-Transport-Security:
+   max-age=604800`, one week. The names the page answers to grow by
+   `SPARK_FORGE_NAME` and the certificate's DNS names. The links say
+   `SPARK_FORGE_NAME` when it is set, and `state/forge-url` keeps the
+   bound address. In own mode (`spark serve https own`) a second, plain
+   listener runs on the page's port plus one, with two routes and
+   nothing else. `GET /` says what to do, and `GET /ca` is the root in
+   DER (`application/x-x509-ca-cert`). No cookie, no token, 404 to
+   every other route and method. `lib/spark/tls.py` holds the readers,
+   the contexts, the trust and the minting. A `POST` there needs a JSON
+   object body sent as
+   `Content-Type: application/json` besides (415 otherwise). A `DELETE`
+   carries no body. `POST /v1/chat/completions` takes the bearer only. A
+   cookie does not open it (401), so a browser's login cannot be ridden
+   into the model from another origin. The forwarded body asks for at
+   most `forgeserve.V1_MAX_TOKENS` (8192) completion tokens.
+   `max_tokens` is set when absent, not a positive integer or larger,
+   and `n_predict` and `max_completion_tokens` are capped the same when
+   present. `POST /api/threads` makes a kept thread in the requester's
+   own store with no model turn: how a program keeps what it must not
+   lose. The body is `{id?}`. A thread id is `forge.valid_id`: 1 to 64
+   letters, digits, `-` and `_`, checked before any path is joined, else
+   400. No id mints a timestamp one the way `Store.new_thread` does
+   (`-2`, `-3` on a clash), 201 `{id, kept: true}`. A new id is made,
+   201. An id already kept answers 200 as it is. A regular thread of
+   that id is moved to kept, a rename: the header is the AAD (`thread
+   <id>`), so every record still opens, 200. An id in both directories
+   is 409 `{error: {kind: both}}` and left as it is. A user keeps at
+   most `forge.KEEP_MAX` (2000) threads, counted over `kept/*.sealed`:
+   past it, 409 `{error: {kind: full}}`. It works with `SPARK_HISTORY`
+   off. Kept threads live in `kept/` beside `threads/` in the same
+   store. `Store.prune`, `forge.prune_stores`, the stale-header sweep
+   and `Store.clear` read `threads/` alone. A kept thread leaves through
+   `/keep off` in `spark chat` (a rename back to `threads/`) or `spark
+   user remove NAME` (the whole store). Every store method that takes
+   an id finds the thread in either directory, `kept/` first. `POST
+   /api/threads/<id>/append` puts one message onto the requester's own
+   thread: `{role: user|assistant, text}`, with `mode` and `kind` as
+   short optional fields. That is how a client's `??` lands its turn
+   here, so the machine's prompt line, a client's prompt line and the
+   page share one thread. It is how a program writes its kept thread
+   too. The answer tells the truth. Stored is 200 `{ok: true, chars,
+   cut}`: `chars` the length stored, `cut` true when the text was cut at
+   `forge.HISTORY_MAX_CHARS`. History off and the thread not kept is
+   409 `{error: {kind: off}}`, nothing stored. A kept thread takes
+   appends with history off. The store failing (a seal or disk error,
+   logged) is 500 `{error: {kind: store}}`. `Store.append` returns
+   True or False to say which. `GET /api/check` returns `check.json` as
+   written plus `age` in seconds to the admin, and `{ts, counts, age}`
+   to a user. `POST /api/do/propose` answers
+   `{thread, reply, ms, driver, unchecked}`: `driver` is the `ember`
+   role's model stem, `unchecked` the done hint's numbers no user
+   message of the thread backs (`[]` otherwise). A new thread's text is
+   the goal, `do.DO_GOAL_MAX` (8 kB) at most, 400 otherwise. On a
+   continued thread the text is held before the model sees it
+   (`do.hold`). The command is read from its `Output of` first line for
+   the checksum exemption. The proposal is a turn record. `POST
+   /api/do/run` (admin) takes `{command, cwd?, confirmed?}`, runs the
+   command as typed through the login shell on `do.STEP_TIMEOUT` (120
+   seconds: rc 124, the process group killed) and answers `{rc, tail}`.
+   When the step was refused for an option, `man` carries
+   `do.man_excerpt`'s lines, and the page appends it to the feedback it
+   proposes on, as the prompt line does. The command is a line or a
+   block, as contract 4 says, and `do.refused` reads it before any
+   pattern does. A control character (`do.CONTROL` in a line,
+   `do.BLOCK_CONTROL` in a block) is 400, `a command is printable
+   text: a line, or lines a line feed separates`. So is a line over
+   `forgeserve.DO_COMMAND_MAX` (4096) characters or a block over
+   `do.DO_BLOCK_MAX` (16384). The page shows a block whole in a `pre`,
+   every line, before its Run button.
+   Both do routes take `cwd` as sent (`HOME` when empty) and refuse one
+   with a control character or that is not the absolute path of a
+   directory (400). A command `do.danger` flags runs only
+   with `confirmed: true`, else 400 `{error: {kind: confirm}}`,
+   which the page sends after its second click. The log line carries a
+   sha256 prefix of the command and its length, never its text, and a
+   second line the rc. The server holds at most
+   `forgeserve.MAX_CONNECTIONS` (64) connections, one more is 503. A
+   user holds `EVENTS_PER_USER` (4) event streams, one more is 429. A
+   name keeps `SESSIONS_PER_NAME` (20) sessions, the oldest dropped.
+   Generation admission is shared by `/api/chat`, `/api/do/propose` and
+   `/v1/chat/completions`, streaming or not. One generation runs at a
+   time. At most four requests wait (`GENERATION_WAITERS`), and an
+   account holds at most two outstanding requests
+   (`GENERATIONS_PER_USER`), counting its running request. Cookies and
+   bearers share the account's allowance; the admin is one account too.
+   A full allowance or queue answers HTTP 429 `busy`, with `Retry-After:
+   1`, before SSE headers. Admitted requests take the model in arrival
+   order, without priority for a route or account. Admission when full
+   is not guaranteed. Waiting ends after 30 monotonic seconds
+   (`GENERATION_TIMEOUT`). A JSON or v1 request gets HTTP 504 `timeout`,
+   with `Retry-After: 1`. A chat whose SSE headers are out gets `error
+   {kind: timeout, hint, retry_after: 1}`. No inference or new thread
+   starts for either. Waiting sockets are checked every 0.2 seconds and
+   again at handoff; cancellation, expiry and completion free their
+   slots. This deadline bounds waiting only; the running generation
+   keeps its existing limits. The two-request allowance keeps one active
+   turn plus one queued turn. Four waiters use the existing small
+   event-stream budget as a starting point, leaving most of the 64
+   connections for other routes. Thirty seconds matches the HTTP socket
+   timeout. No model parallelism changes.
+   Every JSON and SSE answer carries `X-Content-Type-Options:
+   nosniff`. `POST /api/soul` writes an audit record too. Every admin
+   action is one sealed record in the box account's `audit`
+   (`lib/spark/audit.py`, kind `audit`,
+   `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
+   digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
+   removed or rotated `{ts, ip|cli, action, name}` (`spark user
+   add|remove|token --new`, `POST /api/users`, `DELETE /api/users/*`,
+   `POST /api/user/token`), `spark serve
+   --login --new` `{ts, cli, action}`, and a tools/call `{ts, cli,
+   action, who, server, tool, args, error}` (`mcp/call`, contract 16).
+   Numbers and names, never a
+   command's text or its arguments. `spark serve --audit [N]
+   [--porcelain]` prints the newest N (50 by default), one line each. A
+   trail that does not open is one signed line, exit 2, never written
+   over. `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`,
+   whatever spark.env holds. It carries `https` too: the page's `mode`
+   (`off`, `own` or `pair`) and its `link`. In own mode it adds the
+   root's `ca` link on the port plus one and that link's QR (`ca_qr`).
+   The machine card and a new user's card draw them for the phones.
+   `https` under machine runs `spark serve https own` through
+   `/api/run`.
+   Streams are SSE. `/api/chat` (mode
+   `chat|answer`) emits `queued` when the model is busy, `delta {t}`,
+   `done {thread, ms, model}`, `model` the list's name, and `error
+   {kind, hint, thread?}`. `talk`
+   and `ask` are still accepted as aliases of `chat` and `answer`, and
+   records write the new names. `thread` rides an error after content,
+   including a timeout: the partial already landed once, so the page
+   and terminal continue that thread. A timeout before content saves
+   no turn. Only a `down` before content can retry once.
+   A client that hangs up mid-stream (the stop button) still
+   lands the turn. The user line and any partial answer (`partial:
+   true`) go on the thread, and the log line says 499. A client that
+   leaves while queued pays no prefill and lands nothing, 499 likewise.
+   `/api/run` emits `line {s}` then `done {rc}`. A verb runs in a
+   session of its own (`forgeserve.run_verb`), `RUN_CAP` seconds at most
+   (rc 124). When it ends, times out or the page hangs up, its process
+   group is killed and it is reaped. A service it starts in a session of
+   its own stays. `/api/events` emits `check` and `serve` on change,
+   and a `:keepalive` comment every 15 seconds. A verb that restarts
+   the page (`update`, `serve https own`) ends its own stream: the
+   page expects that and says what comes next.
+   `/v1/chat/completions` and
+   `/v1/models` are OpenAI-shaped and proxied to the llama-server with
+   the api-token. The request's `model` field routes, and a missing
+   `model` means `ember`. Only a served role routes: `spark`, `ember`,
+   or a role's file stem or list name as `/api/health` shows them in
+   `roles` and `names` (`Handler._v1_role`). A stem or a name goes
+   upstream as its role. Any other value is 400 `{error: {kind:
+   model}}`, and nothing is sent. The identity is injected into the
+   system message only for an `ember` request. It is the soul, plus the
+   requester's own remembered facts: a user's sealed memory, or the box
+   account's for the admin. A `spark` request passes through untouched.
+   A body with `"identity": false` keeps an `ember` request untouched
+   too, for a program that brings its own system prompt. `true` or no
+   field injects the identity, and any other value is a 400. The field
+   never goes upstream. The identity is no security boundary, since a
+   `spark` request is bare already. JSON or SSE bytes come back as they
+   are. Every `/api/*` answer is `Cache-Control: no-store`. The page and
+   its files are served with `Content-Security-Policy: default-src
+   'self'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
+   `X-Content-Type-Options: nosniff`, and depend on nothing else.
+   Errors are `{error: {kind, hint}}`.
+10. `spark edit` is the editor's protocol: the text on stdin. `--at N`
+    prints what goes at byte offset N, a completion: 4 kB before the
+    cursor and 2 kB after it are sent. `<words>` prints the whole text
+    rewritten, at most 12 kB, else refused: the output replaces the
+    input, so head plus tail makes no sense. The rewrite is held until
+    it ends and printed only once it is whole (`edit._place`): a small
+    model asked about one part often answers with that part alone. A
+    placement is sure or does nothing. The units are paragraphs, or
+    lines when the text has no blank line. The reply prints as it came
+    when it is all of the text's units unchanged, or has about as many
+    units as the text. So does a reply that spans the text's first unit
+    to its last, or holds a unit from outside its own run (a merge).
+    So does a shorter whole. It opens with the text's opening unit and
+    ends with its closing one, and it draws on more than half of the
+    units between, two at least (`edit._draws_inner`). Fewer is a
+    fragment with the rest gone: the opening, the part asked about and
+    the closing are refused.
+    Fewer of the text's own units, unchanged, is a deletion or a part
+    left untouched, and the reply alone cannot tell which. The model
+    hears so in one sentence (`persona.EDIT_PART_AGAIN`) and is asked
+    once more (the turn records `again`). The same units again print as
+    the deletion they are. A reply that is not part of the text goes
+    through the placement, and another part is refused. A reply placed
+    nowhere prints as it came when it draws on most of the text (a new
+    text). A run of the text's units goes back in their place between
+    the text before and after them (the turn records `spliced`), its
+    carriage returns kept. Each unit of the run is found by a first line
+    equal to exactly one unit's. Else it is clearly the most like one
+    unit, by its characters or the share of its words. A tie never
+    places it. Nothing of the text may be missing inside the run, and
+    nothing new may sit at an edge the text goes on past. A reply that
+    opens with a heading or a header (`def f():`) the text holds once,
+    and stays inside that section, replaces the section. Anything else
+    is refused in one line, exit 1, nothing printed (`unplaced`). A
+    `--part` rewrite and a text written from nothing stream, since their
+    reply is all there is. `? [words]` answers about it: head 4 kB plus
+    tail 12 kB with a visible cut mark, and `?` alone reviews.
+    `--type FT`, `--name NAME`, `--about TEXT` and `--part` are hints
+    that ride in the user message. `--part` says the text is a selection
+    from a larger file, so the rewrite replaces exactly it. The name is
+    a basename, never a path, and no `[cwd]` line rides, ever. Output is
+    raw text: no mark, no wrap, a code fence around the answer removed,
+    a rewrite ending the way the input ended.
+    Every chunk passes `text.Printable` first (`edit._printable_feed`):
+    no escape or control character reaches the terminal or the buffer.
+    A carriage return stays when the text on stdin has one. When every
+    line of the text ends `CRLF`, every line of a rewrite does too,
+    printed whole or streamed (`edit._crlf`), and no carriage return is
+    doubled.
+    An empty text with words is written from nothing (a new file in the
+    editor), the reply ending with a newline. Exit 0, 1 when `?` or
+    `--at` find no text, a rewrite cannot be placed, or no model
+    answers, 2 for the usage. No thread
+    is kept. The turn record is numbers (`kind`, the character count,
+    `ms`). A `?` is two requests: the reading and the answer. The
+    reading (`edit-read`) is a JSON `{language, kind}` from the first
+    800 characters, restated as `You read this as: ...`. Any failure is
+    silence. Its cost is a turn of its own, mode `edit-read`, kind
+    `reading`, so `spark stats` shows what every grounded answer pays
+    before it starts. When stderr is a terminal it says so there:
+    `reading ...` while it runs, then the language and kind it named,
+    one line. So the seconds before the first answer line are something
+    to read. When stderr is a pipe, nothing: an editor's job,
+    spark-w3m's capture and the tests keep stdout and stderr as the
+    contract states them. Awake, with stdout and stderr both
+    terminals, a pulse runs on stderr until the first chunk
+    (`text.wait`, the `read` kind). An editor pipes stdout, so its
+    plugin never sees a frame. A `?` answer streams line by line through
+    `text.Anchors`. Every quoted span (double quotes, curly quotes,
+    backticks, 3 to 200 characters) is checked against the text on
+    stdin, both folded (whitespace, quote marks, case). Trailing
+    punctuation may be stripped, and the span holds at word edges
+    alone (`text.at_edges`). A quote that starts or ends inside a word,
+    "answers 4" against "answers 422", anchors nowhere, in every
+    grounded contract. One that does not anchor is followed by
+    ` [not in the text]` where it stands. A span right after `->`, a
+    Unicode arrow or `=>` is the model's proposal. It is not checked,
+    not counted, and followed by ` [proposed]`, so a reader can tell a
+    quote from a proposal. Under `--source` a source proposes nothing,
+    so such a span is checked and counted like any other quote. The
+    turn records `quotes` and `unanchored`.
+    `--sel A B` is a `?` with stdin the whole file. It sends one window
+    of at most 16 kB (`edit._edit_window`). The selection goes whole,
+    with head, cut and tail past 12 kB, between the lines `[selection
+    starts]` and `[selection ends]` the brief knows. The file around it
+    is split evenly, with cut marks where it goes on. The reading runs
+    on the 800 characters from 200 before the selection. `--thread ID`
+    (a `?`, the client names the id, `forge.valid_id`) keeps the
+    exchange in the account's sealed store like a chat thread
+    (`forge.open_thread`, `SPARK_HISTORY` prunes it, `spark history`
+    lists it). The same id again rides the earlier pairs. It sends the
+    words alone when the text on stdin is the one the first turn carried
+    (`text_sha` on that message), else `File NAME, as it is now:` and
+    the text. The reading runs on the first turn only. Anchors always
+    check the text on stdin now. Without `--thread`, or with history
+    off, no thread is kept. `--source` (a `?`) picks the
+    reading-discussion brief (`persona.MODE_EDIT_DISCUSS`, mode
+    `edit-discuss`, the turn stays `kind` answer) over the editor's
+    review brief. The text is a published source the reader discusses,
+    not their draft, so the model answers the question and never
+    suggests edits. The reading apps (spark-w3m, spark-newsboat) pass
+    it. The editors never do. The flag is the caller declaring which
+    posture, no auto-detection. A source is text that is not yours, so
+    a `? --source` holds back every span that looks like a secret right
+    after stdin is read. `text.SOURCE_SHAPES` is the paste's shapes plus
+    two.
+    A one-time code is its digits, whole or split once or twice by a
+    space or a hyphen. It stands within 30 characters after or before
+    code, otp, pin, passcode, verification, or the Portuguese codigo
+    (with its accent) or senha. The word stands alone, never an option
+    like `--pin` or the start of "pinned", though a name like `SMS-Code`
+    counts. Digits right after a host's colon are its port, and digits
+    right after a slash a URL's path: neither is a code. A link token is
+    every token-like parameter of an http(s) URL. It is found as a pair,
+    the URL first and then its parameters, so no one regex backtracks
+    over a crafted megabyte. A named `s` group is the part held. Each
+    becomes `[held]`. The reading, the context, `--sel`'s offsets, the
+    anchors and the thread's `text_sha` all see the held text: what the
+    model saw. `--name`, `--about` and `--type` ride in the same message
+    and are held the same way. The ledger keeps the name as given. One
+    stderr line says how many and which shapes. The turn records `held`,
+    a number. A rewrite, `--at` and a `?` without `--source` send the
+    author's own text as it is. `--` ends the options: every argument
+    after it is a word, so a question that says `--name` cannot eat the
+    flag after it. `--decline --name NAME` (the pane's `d`) keeps the
+    note on stdin in the ledger: `lib/spark/ledger.py`, the account's
+    sealed `users/<name>/ledger`, by file NAME, 300 characters a note,
+    30 a name, 200 in all. A later `?` about NAME carries `Declined
+    before -- do not raise these again:` and the notes, newest first,
+    1200 characters at most. A note whose first quoted span is no longer
+    in the text has retired, dropped there and then, and every note
+    leaves after `SPARK_HISTORY` days. `--ledger [clear] --name NAME`
+    lists or drops them (the pane's `ledger` and `ledger clear` at the
+    `spark>` prompt). There is no shell verb. The micro plugin depends
+    on nothing else. `spark edit --watch FILE` is the live form. It
+    watches a draft on disk: poll by mtime, re-open by path so an atomic
+    save is caught, and a read that fails mid-swap waits a tick. It runs
+    the `?` review path over each fresh stanza as it is saved
+    (`edit.stanzas`, `_review_context`, `text.Anchors`), and a
+    whole-draft review after `EDIT_WATCH_IDLE` seconds idle. A non-empty
+    draft owes itself a review rather than baselining its work into
+    `seen`. A transient model gap skips a comment in silence
+    (`session.once`). The writer answers back through the `Alt-s` ask
+    key, not a built-in chat: the loop keeps to one concern.
+11. `spark read` is the reader's protocol: the source on stdin (a page,
+    a message, a document), a question in the words, the answer raw
+    streamed text out. Never a path, never a `[cwd]` line. Bare asks
+    what the source covers. The law is contract 12's turned from
+    questions to claims, enforced after the model (`text.Gate`, line by
+    line). A line whose quotes are not in the source is dropped
+    (`text.UNGROUNDED`). So is a line that quotes nothing
+    (`text.UNQUOTED`): an unquoted sentence about a source is the
+    model's own knowledge wearing the source's clothes. A quote counts
+    when it is two words or twelve characters, not all stop words
+    (`text.substantial`). One word counts too when the source says it
+    three times at most (`Ground.weighs`, `text.DISTINCT_MAX`). That is
+    a value with a digit, such as `96%` or `/dev/sda1`, or a word, such
+    as a login. A value the source lacks counts as well, so an invented
+    figure is caught. A figure of two digits or more that a line states
+    outside its quotes must be the source's own (`read.unsourced`). A
+    sum the model worked out is its claim, not the text's, and drops the
+    line. A line that is
+    the source's own words copied whole, 5 words or more
+    (`text.VERBATIM_WORDS`), quotes it with no marks
+    (`Ground.verbatim`). It is found at word boundaries, from where a
+    line or a sentence of the source starts. A double-quoted span may
+    hold quotes escaped as `\"`, in pairs: it is one span, anchored
+    unescaped and written between backticks. A lone backslash before a
+    quote, a path's, escapes nothing. A line with a quote mark that
+    opens no span is read with the next, 2 more lines at most
+    (`Gate.JOIN_MAX`): a model hard-wraps near 70 columns. The lines
+    are one unit only when every quote across the break anchors, and a
+    line ending in `?` is never held. Otherwise each line is judged
+    alone. Kept lines stream marked. One request a part read. The
+    answer's first line is the model's reading of the source,
+    `[Language, kind]`. `read.Reading` takes it out before the fence
+    and the gate (`read.reading_of` knows the shape). At a terminal
+    stderr shows it as `reading ... English, essay`; it is neither kept
+    nor dropped. A first line that quotes is
+    an answer line. When nothing survives, stdout stays untouched and
+    the reply is one line on stderr, exit 1. That line shows the
+    source's own opening words (`read.opening`), composed in code and
+    never asked of the model. A client tells "no answer" from "an
+    answer" by the exit code. Awake, with stdout and stderr both
+    terminals, a pulse runs on stderr from the request to the first
+    kept line (`text.wait`). A reader's wrapper pipes stdout and never
+    sees a frame. At most `READ_MAX` (16000) characters a
+    part. A longer source is parts, each opening with the last
+    `PART_OVERLAP` (400) characters of the one before. `--part N` reads
+    that part. Without it spark picks (`read.ranked`): BM25 over the
+    parts by the question's words, intake's tokenizer with a camelCase
+    word split, no model. A word's forms meet (`read._key`: "logging"
+    and "log", "deleting" and "delete"). A reader's word and the text's
+    word for the same thing count as one term (`read.SAME`, a named line
+    each: computer and machine, folder and directory). The text's word
+    counts at `SAME_WEIGHT` (0.5) of the reader's own, and the term is
+    as rare as its whole line. The best part is read first, the next
+    only when it does not answer, `TRIES` (2) at most. Each is a whole
+    request, about 10 s of prefill on a CPU box. A bare question, or
+    words no part holds, reads part 1. At a terminal the turn says
+    `reading ... part 5 of 6, part 4 does not answer`. Two parts read
+    and neither answering is one line, `parts 4 and 5 of 6 do not
+    answer -- read another: --part N` (exit 1). The answer's first
+    line is `[part N of M]`, written by the code before the first kept
+    line. An answer from part 2 that does not say so cannot be told
+    from an answer about the whole. Each part read is its own turn.
+    `--name NAME` (a basename) never leaves the machine. It names the
+    ledger record (kind `read`, `ledger.RULES`) written after a kept
+    answer: the questions asked of this source, so a second reader sees
+    what has been asked. Nothing invalidates them but age and `--ledger
+    clear`, and they never suppress: a question asked twice of a source
+    is a fair question twice, unlike a note declined in a draft.
+    `--ledger [clear] [--name NAME]` lists or drops them. Exit 2 for the
+    usage, a bad `--part`, or empty stdin. At a terminal with nothing
+    piped in, that is the usage plus where a question for spark itself
+    goes. An empty pipe is one line on stderr naming `2>&1`, and stdout
+    stays empty. The turn record is numbers: `kind`,
+    the character count, `ms`, `part`, `parts`, `kept`, `dropped`,
+    `quotes`, `unanchored`, and `first_ms`, the wait to the first kept
+    line. That is the number the prompt cache moves, and `spark stats`
+    shows it beside each mode's cache hit rate. Both times start before
+    the answer's session setup. `ms` ends
+    after the output gate closes; `first_ms` is absent when no line
+    survives. Both use a monotonic clock and leave out ledger writes.
+    The source stands first in the request under `Source:`, the words
+    last under `The reader asks:` (`read.context_of`). So the served
+    prompt's cached prefix holds the source across questions, and a
+    second question about the same source costs its own tokens.
+    `--warm` sends that request without the words, for one token, and
+    prints nothing. A long source needs `--part N` for it, or it is
+    refused with the count (exit 1, nothing sent): a warm has no words
+    to pick a part by. Exit 0; a turn of kind `warm`, numbers only; no
+    ledger record. A client calls it the moment the text is known,
+    before the reader types. The question's request then processes
+    only its own tokens. The source is always held back first
+    (`text.hold_secrets`, contract 10's `--source` rule). Every span
+    that looks like a secret becomes `[held]` before the parts are cut,
+    one stderr line names the count and the shapes, and the turn records
+    `held`. `/read @FILE [question]` in `spark chat` is a client inside
+    the chat: the file is the source, the same law holds, and the
+    exchange lands on the chat's thread. The user record carries the
+    file's text as `source`, held back the same way: the part that
+    answered, which `read.answer` returns. So the turn after it answers
+    from the file, not from the kept lines alone. Some chats
+    have no thread: history off, or a client not logged in. There a
+    turn goes on with the chat's own turns this session (`forge.SAID`,
+    in memory), capped as a thread is (`forge.said_history`).
+12. `spark ask` is the questioner's protocol: the text on stdin (a plan,
+    a draft, a decision) and questions about it out, raw, one per line.
+    Never a path, never a `[cwd]` line. Mode comes from the argument
+    shape, no mode flags: bare asks what the text does not answer,
+    `<words>` says what the author is deciding. `--name NAME` (a
+    basename) and `--about TEXT` are hints that ride in the user
+    message. A reading pass runs first (`session.reading`, contract
+    10's). `--thread ID` (the client names the id, `forge.valid_id`)
+    keeps the exchange in the account's sealed store. The same id again
+    rides the earlier pairs and sends the words alone when the text is
+    the one the first turn carried (`forge.same_text`). A follow-up
+    obeys the same law: the moment a reply may assert, this is `spark
+    chat`. The law is enforced after the model, never by the brief
+    alone. Every line of the output ends in a question mark or it never
+    reaches stdout (`text.Gate`, line by line). Five filters run, in
+    this order. The first drops a line that is not a question. The
+    second drops one whose every quoted span is missing from the text
+    (`text.UNGROUNDED`). The third drops anything past the cap of 3,
+    a cap and never a target. The fourth drops a repeat, or a question
+    the ledger holds as answered. The fifth drops a question that could
+    be asked of any plan: `ask._GENERIC`, a named list, forgiven when
+    the question shares a word of its own with the text. When nothing
+    survives, stdout stays empty and the refusal is one line on stderr,
+    exit 1. A client tells "no question" from "a question" by the exit
+    code, never by reading prose. At most 12 kB in, else one line and
+    exit 1. Exit 2 for the usage. stdin with no text prints it plus
+    where a question for spark itself goes (`spark <words>`).
+    `--answered --name NAME` keeps the question on stdin in the ledger
+    (kind `ask`, `ledger.RULES`). Nothing invalidates it but age and
+    `clear`: a plan moves, an answer stays an answer. `--ledger [clear]
+    --name NAME` lists or drops them. A round where nothing survived is
+    not written to the thread: a refusal is not a turn to follow up on.
+    The turn record is numbers (`kind`, the character count, `ms`,
+    `asked`, `dropped`, `quotes`, `unanchored`).
+13. `spark drill` is the practice protocol: the source on stdin, one
+    question at a time out, the answer at the terminal. Never a path.
+    Both halves come from the source. The model proposes a verbatim span
+    as the answer and a question that span answers
+    (`persona.DRILL_SCHEMA`, a JSON reply). `drill._ground` drops any
+    item whose answer does not `text.anchor` in the source before it is
+    ever asked: a drill built on an invented answer teaches the
+    invention. Awake, at a terminal, the same pulse runs on stderr
+    while the items are made. `DRILL_MAX` in, `ITEMS_MAX` a session.
+    Too little to
+    drill is one line (the source's opening, `read.opening`) and exit 1,
+    never padded from the model's own knowledge. It is self-graded: the
+    learner sees the source's span and says whether they had it. Model
+    grading is a second opinion, not the source. The answers are graded
+    on this machine and never sent. The source comes on stdin, so the
+    answers come from `/dev/tty`. The `SPARK_DRILL_TTY` seam points them
+    at a file in tests. No tty is a signed refusal, exit 2. The ledger
+    kind is `drill`, and it schedules rather than suppresses, the
+    inversion `ledger.RULES` exists for. `--name` keeps a schedule
+    (`ledger.drill_grade`, `drill_due`, records carrying `misses`,
+    `streak`, `due`). A missed item comes back at `INTERVALS` days (1,
+    3, 7, 21, 60), widening each miss, until `RIGHT_TWICE` in a row
+    rests it. `drill.schedule` is the policy. Alone among the kinds
+    these never age out (`age: False`): a schedule that expires is not
+    one. `--ledger [clear] --name NAME` lists or drops. Without
+    `--name`, a session is practice kept nowhere. The turn record is
+    numbers (`kind`, the character count, `items`, `right`, `wrong`).
+14. `spark watch` is the monitor's protocol. A live stream comes on
+    stdin (log lines, build output, a running process), an instruction
+    in the words, and one line goes out when a line matches it. Never a
+    path. Bare, with no words, is refused. The law is the grounded one,
+    and spark keeps it by construction. The window goes numbered, `[1]`
+    the oldest. The model opens its reply with the number of the line
+    that matches, then a few words of its own. spark prints that line
+    from the window, so the line out quotes the stream, never the
+    model's copy of it. A line with double quotes of its own, a web
+    server's or a JSON log's, prints as it is. A number the window does
+    not hold prints nothing, so "a 500 appeared" cannot fire when none
+    did. A number anywhere but the reply's start is no line number: the
+    model's prose, or a log line's own `worker [3]`. A quote the window
+    holds wins over any number, at word boundaries (`text.anchor`).
+    An escaped quote reads as a quote, and a quote the reply's
+    cap cut short reads up to its last whole word. A log line the model
+    copied whole, unquoted, is that line. A reply that says nothing
+    matches names no line, whatever number it mentions (`watch.match`).
+    Silence is the answer when nothing matches, and the healthy state. A
+    window closes at `WINDOW_LINES` lines or `WINDOW_SECS` old,
+    whichever comes first, at most `WATCH_MAX` characters to the model.
+    Every line goes to the model once, the oldest first, so a backlog is
+    several windows. No more than one call runs per `MIN_INTERVAL`, 10
+    seconds since v1.45. A chatty journal is one look every 10 seconds,
+    not a pinned GPU, so the watch is cheap enough to leave running. A
+    live stream that outruns the model keeps `BACKLOG_LOOKS` windows
+    waiting at most. The oldest lines past that go unseen, and one
+    stderr line says how many. A file on stdin, or a pipe that ended
+    before the first look, is a finished input. Its windows go back to
+    back. One that needs more than `FILE_LOOKS_MAX` looks is refused
+    before the first, exit 2, naming grep, `spark read --part N` and
+    `tail -f`. The watcher never
+    watches itself. spark's own units log into the journal, and
+    spark-serve carries llama-server's every slot and task line. A
+    `journalctl -f | spark watch` once fed the model's own inference
+    back to it, each look writing the lines that triggered the next. So
+    a journal line under spark's identifier and a bare llama-server log
+    line are dropped before the window (`watch.own_line`, `OWN_LINE`). A
+    window of only those is no call at all. A transient model gap (down,
+    loading, busy, timeout, cut) keeps the window's lines for the next
+    look (`session.once`, the shared recovery `spark edit --watch` uses
+    too). At the end of the input such a look is tried `RETRIES` times
+    more, and past that one stderr line names the lines never looked at,
+    exit 1. Otherwise stdin closing ends it (exit 0), `SIGINT` 130. No
+    ledger: a live
+    stream has nothing stable to name. It is local in the strongest
+    sense: the stream never leaves the machine, and the same model the
+    prompt line uses answers. The turn record is numbers.
+15. `spark do --porcelain [--sandbox] [--] <words>` is the task verb for
+    a program: contract 4's `spark do`, driven over a pipe. No tty is
+    needed. One stderr line (`do.PORCELAIN_BANNER`) says a program
+    drives the run. stdout carries JSON Lines and nothing else, one
+    object a line:
+    - `{"ev":"start","thread","sandbox","run"}`, with `run` null outside
+      the sandbox.
+    - `{"ev":"step","n","command","hint","danger","proof","lines"}`:
+      `lines` is 1 for a line and K for a block of K lines, whose
+      `command` holds its line feeds.
+    - `{"ev":"output","n","text"}`: the step's last 4 kB after
+      `do.hold`, what the model reads.
+    - `{"ev":"rc","n","rc"}`.
+    - `{"ev":"note","text"}`: the driver line, a refusal, a skip, the
+      man excerpt's count, an apply's result.
+    - `{"ev":"review","run","files"}`, each file
+      `{"path","status","old","new","exec","reason","control"}`. `path`
+      is relative to the cwd and `status` one of `sandbox.STATUSES`.
+      `old` and `new` are the whole texts, a
+      link's targets, a mode's octal, or null where there is none or it
+      is too large to show. `exec` is true when the file became
+      executable. `reason` says why it is held or refused, else a note
+      (the setuid bit dropped, a binary's size, too large to show), ''
+      when none. `control` is true when its name, link target or text
+      holds a control character. Every item inside a git directory is
+      its own entry.
+    - `{"ev":"end","reason","hint","rc"}`, `reason` one of done, cap,
+      quit, refused, stopped and error.
+    `stopped` is spark stopping the run: a skipped step proposed again,
+    verbatim, after it was re-asked once, or a held delete proposed
+    again. A done after a failed step is `done` rc 1, its hint the exit
+    code's line (contract 4). A held delete is a note. A sandboxed run's
+    `end` is its
+    review's, however the steps stopped, and a note says that: `done`
+    (applied, discarded, nothing changed), `quit` (the run waits) or
+    `error`. Only an `error` before the review skips it, the copy then
+    waiting when it holds a change. `end` is always the last line:
+    Ctrl-C is `quit` rc 130, `SIGTERM` `quit` rc 143, an exception
+    `error` rc 1, and the event goes out before the exception does. `n`
+    counts step events, a proof's included. stdin is read only when
+    something waits, one word a line. Outside the sandbox a step waits
+    for `run`, `skip`, `quit` or `edit <command>`. Its proof is a step
+    of its own (hint `proof of step N`, danger false, proof null) that
+    waits for `run`, `skip` or `quit`. Inside the sandbox nothing waits
+    per step: steps and proofs run, and the review waits for `accept` or
+    `discard`. On `quit` or EOF there, the run waits for `spark do
+    --review`. `accept` applies only what the review event showed
+    (`sandbox.apply`'s `reviewed`). A copy that changed after it applies
+    nothing: a note, `end` reason `error` rc 1, and the run waits. There
+    is no `yes` word. Outside the sandbox the line is all that is
+    checked before a step runs. A step that can destroy data
+    (`do.danger`, or the model's danger flag) is refused without
+    waiting. So is one whose effect cannot be read from the line
+    (`persona.OPAQUE`). The refusal is a note, and the model hears it
+    was skipped. `persona.OPAQUE` is a command substitution, a backtick,
+    eval, a backslash inside a word, an interpreter handed inline code
+    or a script on stdin, and a curl or wget upload. It is also
+    `REWRITTEN`, the 5 `CARRIERS` and `TOO_DEEP`, named before a danger
+    reason. And it is `OFF_MACHINE`, a command that sends data off this
+    machine, read through `persona._read` past wrappers and pipes. That
+    is scp or rsync to a host, and nc, socat, ssh or mail fed a file or
+    a pipe. It is a variable inside a URL or a header, wget's body from
+    a file, and a /dev/tcp redirection. A download, git push and fetch,
+    ssh HOST alone, a local rsync and nc -z are not. Like the upload
+    line, it is no danger: it destroys nothing, and at a terminal a
+    person reads the line before Enter. A block is read
+    whole and line by line. An edit is held to the same two. `edit
+    <command>` is one line: its whitespace folds, so an edit turns a
+    block into a line. Anything else runs on the program's `run` with
+    the user's own rights. A program that cannot vouch for every step
+    drives the run with `--sandbox`. EOF while a step waits is quit.
+    Every refusal before the run is one `end` event, reason `refused`,
+    rc 2, and nothing else on stdout. The refusals are an option spark
+    do does not take, no goal, a goal over 8 kB, `--detach`, the probe,
+    the cwd and the waiting cap. `--review`, `--accept` and `--discard`
+    are refused there too, because they are not runs. No model to drive
+    the run is one `end`, reason `error`, rc 1. Outside the sandbox the
+    steps run on `do.STEP_TIMEOUT`. `SIGTERM` ends the run and its step.
+    The exit code is the `end` event's rc. Its first app is spark-acp
+    (README.md, Apps), an Agent Client Protocol agent: a step is a
+    Run or a Skip, a review one Accept or Discard.
+16. `spark mcp` and `spark steps` are spark as an MCP host, stdio only
+    (`lib/spark/mcp.py`, `lib/spark/steps.py`). A server is a named line
+    in `~/.config/spark/mcp.env`, read by contract 3's reader:
+    `MCP_SERVER_<NAME>="<absolute path> [words]"`. A server not on the
+    list is never started. `spark mcp add NAME PATH [WORDS]` writes the
+    line. It refuses a path that is not absolute, and a program that
+    others may write, it or any directory above it, the link resolved
+    (`mcp.program_problem`, ssh's StrictModes). A group may write one
+    only when it is the owner's private group (`mcp.private_group`), and
+    a root-owned sticky directory such as /tmp is safe. It refuses a
+    word holding a quote, a space or ``;`$()|&<>`` too. `spark mcp rm
+    NAME` removes it. A list that others may write is refused, never
+    read. spark starts a server with no shell: argv, the program's
+    resolved path, cwd `HOME`, the environment `mcp.ENV_KEEP` names and
+    nothing else, a named line each. stdin and stdout are the wire,
+    stderr is thrown away, and the server has its own process group.
+    Closing it is stdin closed, then `SIGTERM` and `SIGKILL` to its
+    whole group, 2 seconds apart, whatever its leader did. A server that
+    fails its handshake is closed. The protocol is JSON-RPC 2.0, one
+    message a line, `mcp.PROTOCOL` pinned: 2025-06-18. A server that
+    answers initialize with another version is closed. spark declares
+    `elicitation` alone: never sampling and never roots, and a sampling
+    request is answered as no method. There is no HTTP transport. A line
+    from a server over `mcp.LINE_MAX` (64 kB) closes it, but for the
+    answer to a resources/read. So does one that is not a JSON-RPC 2.0
+    object. A resource read is `RESOURCE_MAX` (256 kB) at most.
+    initialize and tools/list wait 5 seconds, a resource read 10. A
+    tools/call waits `mcp.CALL_TIMEOUT`, `do.STEP_TIMEOUT` (120
+    seconds), a ceiling no progress extends. A request past its wait is
+    cancelled at the server (`notifications/cancelled`) and refused. A
+    message to a server is written within `WRITE_TIMEOUT` (5 seconds). A
+    server that sends more than `SERVER_ASKS_MAX` (64) requests of its
+    own while spark waits on one is closed. Progress is heard for the
+    call's own token alone, and only while it increases. A server's list
+    is read `PAGES_MAX` (8) pages, `TOOLS_MAX` (128) tools. A tool is
+    offered only when its name matches `mcp.TOOL_NAME`
+    (`^[a-z][a-z0-9_]{0,63}$`), its title as sent matches `mcp.TITLE`,
+    and its input schema is an object whose property names match
+    `mcp.ARG_WORD`. Every string a server hands on passes `mcp.scrub`:
+    `text.printable`, then `mcp.ZERO_WIDTH`, a named line each. A tool's
+    description never rides a request, a brief or a record. Trust. A
+    tool's annotations are believed only from a trusted server. That is
+    `mcp.TRUSTED_CHAIN`, spark's own programs, a named line each. A
+    program counts when its name, the link resolved, is one of them. It
+    must live in a clone of that very forgewright-ai repository
+    (`mcp.chain_member`, by the clone's origin). Another program of that
+    name is not the chain. Or it is a server whose
+    `MCP_SERVER_<NAME>_TRUST` is `yes` (`spark mcp trust NAME on|off`),
+    and `no` turns a chain member off. The spec's defaults hold: no
+    readOnlyHint is false, and no destructiveHint is true. From a
+    trusted server a tool that may destroy takes the typed `yes`. From
+    any other server every tool does (`Tool.needs_yes`). The gate comes
+    before every tools/call (`mcp.call_line`, `mcp.prepare`). The tool
+    is in the server's tools/list now. The arguments validate against
+    its input schema (`mcp.validate`): an object, no argument it does
+    not name, every required one, each its type, enum, range and length.
+    A string carries no control, bidi or zero-width character, and with
+    no `maxLength` it is 4096 characters at most. An array is 32 items
+    at most. A server may list a resource named `rows`, in the rows
+    schema of the desktop's providers. Where it names the tool with its
+    required arguments, the call names one of those rows exactly,
+    credentials aside (`mcp.rows_gate`). A rows resource that does not
+    read refuses the call. And a person saw the step: the command line
+    they entered, then the typed `yes` where `needs_yes` asks it. With
+    nobody at a terminal, a tool that asks the yes is refused. A
+    credential (`mcp.CREDENTIAL_WORDS`, or `format: password`) is never
+    a word on the line: `spark mcp call` refuses `password=...`, and a
+    row's `ask` names the credential spark asks for through getpass.
+    Elicitation is answered at the prompt, and only while a tools/call
+    is in flight. The server's name and its message go on stderr, then
+    each field, a credential through getpass and never echoed. The march
+    stops first. A server that is not trusted never gets a credential
+    asked. A server asks `ELICIT_PER_CALL` (3) questions a call and
+    `ELICIT_PER_MINUTE` (6) a minute over every spark process
+    (`mcp-asked` in the state dir), and the rest are declined. With
+    nobody to ask, every one is declined. Every tools/call sent is one
+    sealed audit record (`audit.record`, action `mcp/call`): `{ts, ip,
+    action, who, server, tool, args, error}`. `args` is the first 16 hex
+    digits of the sha256 over the arguments' JSON with every credential
+    out (`mcp.digest`). Numbers and names, never an argument or a
+    result. A trail that will not take the record never stops the call.
+    `spark mcp` bare lists every server on the list and its tools, and
+    writes `mcp-tools` in the state dir, 0600: one line a tool,
+    `server<TAB>tool<TAB>flags<TAB>arguments<TAB>title`. The flags are
+    `t`, trusted, `r`, read-only and believed, and `y`, the typed `yes`.
+    `spark mcp NAME` is one server, with its optional arguments and its
+    resources. `spark mcp call NAME TOOL [KEY=VALUE ...]` is one call,
+    each value typed by the schema: a number, `yes` or `no`, a comma
+    list, else text. Exit 0 is the tool's result on stdout, 1 a refusal
+    or the tool's own error on stderr, 2 the usage. At a terminal a call
+    shows the march while it runs. `spark mcp read NAME [URI] [--watch]`
+    lists the resources or reads one. `--watch` subscribes and reads it
+    again on each `notifications/resources/updated`, until `Ctrl-C`. The
+    prompt line never starts a server or talks to one (contract 4).
+    `persona.prefix` carries `mcp.brief_tools()`: the tools file, read
+    line by line and never sourced. Each line is held to its shape
+    (`mcp._LINE`, `mcp._ARG`) and dropped when its server is off the
+    list. The names, the required arguments and the titles of trusted
+    servers ride as `spark mcp call` lines, `BRIEF_MAX` (1500)
+    characters at most, and none under `SPARK_LINE_BENCH=1`. With no
+    tools file the prefix is byte for byte what it was. A `spark mcp
+    call` line whose tool asks the yes, or is not listed, is a danger
+    line (`persona.tool_danger`) at the prompt and in `spark do`. `spark
+    do` runs a step that is one `spark mcp call` line of plain words
+    itself (`do.tool_step`, `mcp.call_words`), through the same gate.
+    The typed `yes` of a danger step stands as the call's, and a tool
+    that asks a yes nobody typed is refused. Over `--porcelain` a danger
+    tool step is refused as any `do.danger` step is (contract 15). In
+    the sandbox a tool step is refused, because a tool acts outside the
+    copy (`do.TOOL_IN_SANDBOX`). A result rides the next turn as the
+    step's output, after `do.hold`, as data: no call follows it without
+    a person's Enter. `spark steps [--about TEXT] [--] <words>` is the
+    planner's protocol: an MCP tools/list result, or its list, on stdin,
+    256 kB at most, and one JSON object out, `{"answer", "steps",
+    "refused"}`. A step is `{"name", "arguments"}`, and nothing runs.
+    The request carries each tool as one line (`steps.tool_brief`). That
+    is its name, then its arguments as `KEY=KIND`, the optional ones in
+    brackets with a range where the schema has one, then its title. The
+    lines are `STEPS_BRIEF_MAX` (32 kB) at most, else exit 2, and
+    `STEPS_TOOLS_MAX` (128) tools, a desktop's whole tree. The tool
+    lines stand first in the request and the words last. A list that
+    is the same bytes from one call to the next stays in the served
+    prompt's cached prefix, so a request pays its own words. The words
+    and `--about` are 2000 characters at most. The reply is held by
+    `wire.tools_gbnf`:
+    `{"answer": string, "steps": [...]}`, 8 steps at most, each one of
+    the tools, its name a literal and its arguments typed by its schema.
+    An optional argument may be left out, and a credential is never in
+    it. A tool a grammar cannot hold is not offered, and stderr says how
+    many were not. The client gates after: a step whose tool was not
+    offered, whose arguments `mcp.validate` refuses or that writes a
+    credential is a line in `refused`, never a step. The brief is
+    `persona.MODE_STEPS`, the spark role, with the machine line for its
+    prefix. No path, no `[cwd]` line, no thread. Exit 0 with the object,
+    1 when no model answers, 2 the usage. The turn record is numbers:
+    kind `steps`, `tools`, `steps`, `refused`, `chars` and `ms`.
+    `persona.SENDS` names what leaves: the steps row, the line's tool
+    lines and a tool's result in do. The `mcp` check row reads the list
+    and never starts a server. It is na with no server, and a warn when
+    others may write `mcp.env`, a line is not `KEY=value`, or a program
+    is one spark would refuse to start.
+
+## The grammar
+
+One grammar for every verb. A verb that breaks a rule is a bug.
+
+1. A bare verb shows and never mutates, and `spark bar` piped still
+   prints the bar line.
+2. `on|off` is the only switch vocabulary at the CLI: serve, serve boot,
+   serve share, memory. One verb holds the two servers: `spark
+   serve on|off` writes `SPARK_SERVICE` and `SPARK_FORGE` together,
+   through their units, and they answer as one. There is no
+   `start`/`stop` pair beside it, and `--force` is a flag of `off`. A
+   setting of the servers is a word after the verb (`serve boot`, `serve
+   share`), and an action on them a flag (`serve --login`, `serve
+   --audit`). Stored values are storage, not interface: `SITE_HEADLESS`
+   and `SITE_SHARE` stay `yes|no` in `site.env`, and the verb
+   translates. Choices keep their value grammars (`model
+   NAME|auto|none`, `client URL|off`, `look on|off|auto`, `voice
+   clear|on|off`). The one
+   carve-out is bare `spark off` / `spark on`, which silences and
+   restores the whole prompt: it is the global mute, and reads better
+   without a noun in front of it.
+3. `status` is an alias of bare for every stateful verb. The one
+   exception is spark itself: bare `spark` is one line, what answers,
+   and `spark status` is the full report, with what the engine answers
+   (`spark brain --porcelain` stays contract 5). Its `check` row says
+   what the last check found, read from the snapshot and never run
+   (`cli._health`): `N need you -- spark check`, `ok, N ago` or `not
+   run yet -- spark check`. `list` is the table
+   word (`model list`, `model --chat list`). A noun keeps its own verbs
+   as sub-words rather than taking top-level ones: `spark soul
+   edit|reset`, `spark memory add|forget|clear`. A command reads verb
+   first, its object a flag or a word after it: `spark clear
+   --history`, with the old `spark history clear` kept as an alias
+   named nowhere. The spellings `spark
+   serve` and `spark model --chat` took over stay as aliases too, never
+   in help or completion, named in `docs/CHANGELOG.md` alone.
+4. Every verb answers `-h|--help|help` first, before any gate or config
+   read, signed per contract 8.
+5. One confirm shape: `<question>? yes/NO: `. Only `y` or `yes`
+   proceeds. Enter or EOF is no (`confirm()` in `lib/spark/__init__.py`,
+   beside `say()`). The one deliberate second shape is the typed word
+   `yes`: `spark do`'s danger step, the sandbox's apply (`apply N
+   changes to DIR? type yes:`) and `spark uninstall`.
+6. One progress vocabulary. curl's bar for downloads. One dot-spinner
+   for every wait on a server coming up: `wait_ready(label, probe,
+   timeout, interval)` in `lib/spark/__init__.py`, plain dots that
+   survive in a log. One pulse for every wait on a reply: `text.Busy`,
+   the mark and `.` `..` `...` redrawn in place, a tty only (the hint
+   row, chat, explain, an answer, `spark do`, `spark recall`). Awakened,
+   with the look
+   active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells with
+   the face. What moves in the cells says what spark is doing, one of
+   5 kinds (`look.PROGRESS`). `think` is a light that bounces: chat,
+   explain, a question, the prompt line and `spark recall`. `read` is
+   an arrow that crosses: `spark edit`, `read` and `drill`, a paste
+   and `/read`. `steps` is one step after another: `spark do`'s
+   proposal. `swell` is a bar that grows and shrinks: a model loading
+   with no estimate, in `spark awaken` too. `march` is marks that
+   move right: `spark update` and `spark model verify`. A frame is
+   0.12 seconds, 0.10 for the playful temperament and 0.15 for the
+   warm one (`look.STEPS`).
+   `spark edit`, `read` and `drill` pulse on stderr only when stdout
+   and stderr are both terminals (`text.wait`). It runs on every
+   terminal:
+   ssh on a LAN and the console keep up with it, and every frame is
+   ASCII. The look `off` keeps the dots. The wait
+   escalates, never louder: from 2 seconds the elapsed seconds, from 15
+   seconds (or three quarters of the verb's timeout) one sentence. A
+   model loading shows `text.Estimate`: a bar filled by the time over
+   that model file's last load (`engine.last_load`), never past 95 %.
+   Past the estimate it says `longer than last time (N s) -- spark check
+   says why`. With no measure it is the `swell` and the seconds.
+   Awakened, `spark check` counts its rows on stderr while they run,
+   the thinking face first: `(o.O) checking 3/40`.
+7. Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
+   (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
+
+## Adding things
+
+- **A doc.** The project site (spark.forgewright.ai) is the docs
+  rendered outside this tree, at the newest signed release tag, never
+  main:
+  `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, `models.env`,
+  `docs/CHANGELOG.md`, `docs/ROADMAP.md`, `docs/CONTRIBUTING.md`,
+  and `CREDITS.md`. A change here reaches it with the
+  next release, nothing to do, and nothing in this tree builds or
+  publishes it (Releasing, step 3). Its look is this tree's: its build
+  copies `lib/spark/forge/tokens.css`, `theme.js` and `fonts/` from the
+  checkout at the tag, and its test holds its own copy equal to them.
+  `tests/docs_test.py` keeps the docs true (pre-commit, CI). Every
+  package and every model upstream is
+  in `CREDITS.md`, the check-row and model counts the docs state are the
+  tree's, and no retired word survives. A new fact a doc states that the
+  tree can derive goes there as one more check: the test is the
+  consistency, not a reviewer. What a new user reads (`README.md`,
+  `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, the site's front) is minimal
+  and step by step and speaks two nouns, spark and spark apps. No
+  `FORGE`, `ember` or `brain` as a noun there, no "smart app", and
+  nothing private named anywhere in the tree's docs. docs_test holds the
+  word list. This file and `AGENTS.md` keep the contracts' names.
+  `CLAUDE.md` is what a Claude session loads: `AGENTS.md`, imported,
+  and this file's sections named by topic, under 200 lines (docs_test
+  holds it). Every document but `README.md`, `CREDITS.md`, `CLAUDE.md`
+  and `AGENTS.md` lives in `docs/`. Each is in the Layout and is
+  pointed to, because a doc nobody is sent to is dead.
+  `docs/CONTRIBUTING.md`, "Voice", is the style sheet every document,
+  help and usage text follows.
+- **A package.** Linux: the right `PKG_*` group in every
+  `distro/<id>.env`, with a comment saying why, under the name that
+  family's manager knows. Its credit goes in `CREDITS.md` (docs_test
+  looks every name up). `PKG_CORE`, `PKG_ENGINE` and `PKG_AI` are the
+  AI, always installed. spark installs no shell tool. The mac core
+  needs nothing from Homebrew. No editor, no app and no contributor tool
+  (shellcheck is the contributor's own). The `packages` row and `spark
+  uninstall` read the same files through `lib/spark/packages.py`.
+  Bootstrap's `pkg_installed`, `pkg_available` and `pkg_install` are the
+  sh twin, the one place that switches on the manager. Nothing else to
+  update.
+- **A config file.** First ask whether the app rewrites its own config.
+  If it only reads, put it in `home/` (shared) or `<os>/home/`, and
+  `install.sh` links it. If it rewrites, it cannot be linked: write it
+  once from `templates/` as a rendered regular file, and note it in
+  `docs/INSTALL.md`. Test by changing a setting in the app and running
+  `ls -l` on the path: still a symlink, or now a regular file?
+- **The landing rule.** Nothing is done until it is in all of: `spark
+  help` (`bin/spark`), a `spark` command, and a `spark check` row when
+  it is a promise the machine makes. Add contract 3 above if it is a
+  key, and `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
+  `docs/CHANGELOG.md`. A key without a command, or a command without a
+  row and a doc line, is half a feature. A verb or an option lands in
+  its help row, the verb's own `-h` and both completion files. The
+  prompt line's map of spark is made from the help's rows
+  (`grounding.shell_map`), and its judge reads that `-h` and the
+  completion. A choice is a `SITE_*` key
+  with a default in `site.env.example`, applied by `bootstrap.sh` or
+  rendered by `install.sh`. Its `spark <verb>` sets and applies it
+  (`site.set_keys`, `site.apply`): editing `site.env` by hand is the
+  fallback, never the interface. The rule binds the core
+  documentation, and core documentation moves with a release:
+  `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, `spark help`,
+  this file and `docs/CHANGELOG.md` are updated as a version ships,
+  together.
+- **A check row.** A function `row_<name>(ctx)` in `lib/spark/check.py`
+  decorated `@row(CATEGORY, fixture=True)` or `@row(CATEGORY,
+  fixture=False, reason="...")`. If it is fixture-testable, extend
+  `make_fixture` so the row is ok in the good fixture and not ok in the
+  bad one. `--selftest` refuses otherwise. `CAPABILITY` rows use `warn`
+  or `na`, never `fail`, so `spark check`'s exit code keeps meaning
+  "something reproducible is broken".
+- **A chaos scenario.** A function `chaos_<name>(m)` in
+  `lib/spark/chaos.py` decorated `@scenario(row=..., expect=..., ...)`.
+  It breaks the throwaway machine `m` one way and returns `""` or why
+  the break did not take. The runner then asks the row, runs the heal
+  and asks again. The heal is the row's own remedy string wherever the
+  remedy is a command (`heal="remedy"`, a parenthetical aside after two
+  spaces is for the reader, not the shell). That is the point of the
+  suite, and it is how a remedy naming a renamed verb gets caught.
+  Where nothing here can run it, `heal=None` and `unhealed` must say
+  why, so an unrehearsed half is visible instead of silent. `healed=NA`
+  is for a remedy whose promise is to forget a thing, not bring it
+  back. A scenario with no row (`row=None`) must say what it proves
+  instead. `mood` picks the model's behaviour: `ok`, `slow`, `hang`,
+  `loading`, `cut`, `garbage`, `blackhole`. A scenario is not a check
+  row. Chaos is a prover, like `--selftest`, not a promise the machine
+  makes: neither has a row, and obligation 3 is met by the row the
+  scenario judges. Before trusting a new one, take the fix away and
+  watch it go red.
+- **A prose data file.** The soul is the pattern. It is user-owned text
+  under `~/.config/spark/`, never linked from `home/`. After `spark
+  awaken` it has two parts: the fixed core (`soul.DEFAULT`) and the
+  personality paragraph in `personality`, sent after it. A bare `spark
+  soul edit` then edits the paragraph, and `--core` the whole soul. A
+  soul file of your own replaces both, whole, and awaken keeps it. A
+  `spark` verb writes it 0600, and the page writes it through the same
+  code. It is capped (`SOUL_MAX`), sent to the model on every request,
+  and reported by its own check row (mode, size, cap). It is config, not
+  state: pruning and `spark clear --history` never touch it. The memory
+  follows the same rules but lives sealed in the account's store since
+  v1.4 (`users/<name>/memory`, `FACT_MAX`, `FACTS_MAX`, `TOTAL_MAX`).
+  The pre-v1.4 plaintext file is read as a fallback until the first
+  write or `spark user claim` seals it away. Turns are the opposite
+  pattern: telemetry, numbers only. `session.record` strips every
+  free-text field (`session.TEXT_FIELDS`), and the words live only in
+  the sealed threads. A thread lives `SPARK_HISTORY` days, unless it is
+  kept. A kept thread sits in `kept/` beside `threads/`, and pruning and
+  `spark clear --history` never touch it (`/keep` in `spark chat`, `POST
+  /api/threads` for a program, contract 9). `spark clear --history`
+  also removes the check's history, `check-history.jsonl` (contract
+  7). What a request weighed and
+  where it went do ride the record: `out_bytes` and `dest` (`host:port`,
+  or `local` for loopback), `wire._sent`'s pair on every chat shape's
+  timings. A turn that made more than one request records their sum
+  (`Session.note_sent`). A request the prompt line asked again, one
+  stopped at a thought and one the server refused all count. So the
+  `sends` row and `spark stats --sends` count what left
+  by destination and day without a word of it. A prompt-line question
+  that got no answer is a turn of the kind `empty` (contract 4).
+  `spark stats` prints `no answer N of M questions (asked again: K)`
+  when N or K is above 0, and `--porcelain` always carries `line_empty`
+  and `line_reasked_empty`. `spark last` says `(no answer came)` for
+  such a turn. The `hardening` row asks
+  contract 9's gates of the served `FORGE` (the other machine's, on a
+  client) from the wire: `wire.probe_gates`, the probes
+  `tests/forge_probe.py` runs against a real server.
+- **A route.** In `forgeserve.py`: one row in `ROUTES` (`(method,
+  pattern): none|user|admin`, plus the POST rules) and its handler in
+  the matching branch of `_route`. Answer through `_json` or `_sse` so
+  it is `no-store` and logged. Add the same row in contract 9's table
+  (`docs_test` holds the two equal, `policy_test` proves the row) and a
+  case in `tests/forge_smoke.py`. An admin action writes its audit
+  record (`Handler._audit`). The page calls verbs through `/api/run`'s
+  allowlist (`RUN_VERBS`) rather than writing config. The page is a
+  door to the same identity, not a product of its own: a page change
+  lands only when it is the client side of a contract change. A verb
+  that restarts the page (`update`, `serve https own`) restarts it
+  through its unit in one command, last (`forgeserve._restart_page`,
+  `update._restart_units`). systemd stops a unit's whole cgroup, the
+  verb's process in it, and a restart it was asked for happens all
+  the same. A stop followed by a start would end at the stop.
+- **A shell thing.** The look and the tools of a machine are not spark's
+  business: the console's palette and font, a quiet boot, the prompt,
+  the desktop. `spark look` dresses spark's own lines, never the
+  prompt's own text. The resting face sits in spark's row above it.
+  spark's side of any renderer is 3 things. `theme.env` is a palette a
+  look layer may write, a `KEY=value` file spark reads for its logo and
+  its bar accent (contract 3). The 6 `SPARK_*_SGR` variables are what an
+  rc may export: colour at the prompt's marks, plain when unset. The
+  bar line (`spark bar line`) is for any status bar to run. Nothing in
+  this tree names a renderer as a dependency. A coexistence check for a
+  prompt program (the hooks' `STARSHIP_SHELL` test) is not a coupling.
+- **A grounded contract.** One law, 5 contracts (10, 11, 12, 13, 14):
+  what a model says about a text is checked against that text before the
+  reader sees it. The judge is `lib/spark/text.py`. `anchor()` works at
+  the span level and `Ground` at the unit level. `Gate` is the stream
+  that marks what it keeps and drops what it refuses, so a contract can
+  refuse instead of invent. drill checks a single answer span with
+  `anchor()` directly. watch and read run the `Gate`. A new one states
+  5 things, in this file and in its module's own head. It names what
+  grounds its output. It says what happens when grounding fails: one
+  line, and the exit code that says so. It states its caps. It names its
+  ledger kind and the rule that retires a record there, because
+  `ledger.RULES` holds each contract's own rule, and a rule that
+  generalised would fit none of them. It says what leaves the machine.
+  Text on stdin, raw text out, never a path: that is what lets an editor
+  with no plugin at all be a client.
+- **A spark app.** Nothing in this repository. A tool becomes smart as a
+  client of one spark surface (Principles, "The spine"). Its plugin
+  lives in its own repository, `spark-<app>`, installed the app's way
+  with its own keys, tests and channel. spark keeps the verb and its
+  judge. The editor briefs live in
+  `persona.MODES` (`edit-complete`, `edit-rewrite`, `edit-answer`,
+  `edit-read`): no table routes by filetype or genre. The model reads
+  what the text is, and for a `?` its own reading is restated to it,
+  because small models drift otherwise. The audition
+  (`tests/audition.py`) scores those briefs against a live model. micro
+  is the first app, forgewright-ai/spark-micro. It spawns `spark edit`
+  with the text on stdin and streams the answer back. It never speaks
+  HTTP, never sees a token and never sends a path. Its pty test, its
+  `Alt-s` line and its README are its own. Nine apps today: micro,
+  neovim, vim, helix, nano, w3m, newsboat, aerc and acp. The editors
+  take two shapes. A full plugin (micro, neovim, vim) carries the whole
+  prompt and completes at the cursor. A prompt plugin (helix, nano,
+  editors with no cursor hook) pre-fills the editor's own prompt with
+  `spark edit `. It is proven the same way, by a pty test whose config
+  is the shipped snippet itself. The readers (w3m, newsboat, aerc) are
+  clients of contract 11, `spark read`: a keymap snippet and a
+  stderr-folding wrapper, the same laws, their own repositories.
+  spark-acp is the task verb's client (contract 15, `spark do
+  --porcelain`). It is an Agent Client Protocol agent for Toad or Zed.
+  It starts nothing but spark, never speaks HTTP, and has no `yes` to
+  give. The README's Apps section lists the known apps, and every
+  one of them is in `CREDITS.md` and on the site's front. docs_test
+  reads the app names out of that section and looks them up in
+  `CREDITS.md`. The site's front is checked the same way where it is
+  rendered. A new one is one line in each. A pull request
+  that adds an app, an app package or an app check row here is turned
+  into a pointer to the app's repository.
+- **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
+  (`config.client`, `spark client URL|off`, `site.cmd_client`) means
+  nothing runs here. Bootstrap skips the `engine` and `services` rows
+  (`$client`), `install.sh` links no unit and renders no plist, and the
+  rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
+  forge, ember) read `na`. `--selftest`'s third pass asserts that with
+  the `peer` row ok. The `peer` row is where a client's health lives. A
+  machine that served stops both of its servers when it becomes a
+  client: `spark client URL` stops and removes the engine's unit and
+  the page's unit, and says each. A client stays a client until `spark
+  client off`. `spark model`, `model
+  --chat list` and `model budget` there print the other machine's table,
+  never this machine's RAM as a budget (`model.peer_models`, `GET
+  /api/models` with the login token). When the other machine is down, a
+  bare server or an older `FORGE`, they print the rows alone, without a
+  fit. `bootstrap.sh --list-models` does likewise. `spark model
+  NAME|auto|none`, `model budget N`, `model rm` and `spark model --chat
+  NAME` are refused with one line (`model._client_no`): each would have
+  made a server of the client in silence. `spark client off` is the one
+  deliberate promotion. It ends the shape, then runs `spark model auto`.
+  Off means off: from then on the other machine is never asked, even
+  while it answers, until `spark client URL` names it again. The other
+  machine may be this same machine's raw engine (`spark serve share on`
+  there). The client injects its own soul and memory (forge=False), so
+  it stays sovereign. `cmd_client` records
+  `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that group-readable token is
+  present, rather than minting one the engine would reject.
+  `config.token_file` also falls back to it for a user with none of
+  their own. Bootstrap's `token` row mints nothing on a client: a
+  client serves nothing, so it has no key to issue.
+  A client has no check timer, so a row's change is
+  recorded, and said at the prompt, when a check runs there. Its
+  `spark update` reads the knowledge until nothing waits: bootstrap
+  asks `python3 -m spark.intake fresh whole` there. A server's build
+  runs `--help` for 30 seconds (`intake.HELP_BUILD_SECONDS`), and its
+  timer reads the programs left, 16 a run.
+- **Your own llama-server.** The other machine may be a `llama-server`
+  the user runs, on this machine or another. `wire.peer_kind` says what
+  the peer is, `spark` or `engine`. It reads the record in the state
+  dir (`wire.PEER_FILE`), which the probes spark already makes keep:
+  `resolve_brain`, `spark client` and the `peer` row. `wire.plain` is
+  true on a client of a plain engine that is not this machine's shared
+  engine. Four rules hold there. spark never signals a server it did
+  not start. `engine.own_pids` is the pid in `serve.pid` and any
+  `llama-server` on the port whose command line carries what only
+  spark passes: `--api-key-file` with this user's token file
+  (`engine.server_cmd`). Where the binary lives says nothing: with no
+  engine of its own, spark's engine dir is the system's. On a client
+  only the token spark mints counts, never a key file the user named.
+  `spark client URL`, `spark uninstall` and `spark serve off` stop
+  those alone. `spark serve off --force` is the one way to stop
+  another. Shutdown waits use a monotonic deadline and reap only named
+  children. Linux reads zombie state from `/proc/PID/stat`; macOS uses
+  `ps` within the remaining budget. An unreadable state stays pending.
+  Other parents must reap their own zombies. Scheduling and OS calls
+  can overrun a deadline; it is not a hard real-time guarantee.
+  This does not track descendants or remove the existing race between
+  a PID identity check and a signal.
+  `spark client off` refuses, exit 2, while another server
+  holds `SPARK_PORT`. That is a `llama-server` in `ps` that is not
+  spark's, or anything that answers `/health` there when spark runs
+  none. A joiner of the shared engine is not refused. The client keeps
+  its own sealed store, minted at the first write as on a machine that
+  serves (`forge.local_store`). Its token never goes to the engine:
+  `forge._peer_req` and `model.peer_models` ask `wire.plain` with a
+  probe when there is no record. The key is a file the user
+  names: `spark client URL --key-file FILE` writes
+  `SPARK_API_KEY_FILE`, and `spark client off` empties whatever key
+  file `spark.env` names. The context
+  size is the engine's own: `n_ctx` from `GET /props`, kept in the
+  record, read by `wire.ctx` unless `SPARK_CTX` is set. Every message
+  says `your engine`: no login line, no `run it there`, and `spark
+  model` names the model the engine serves instead of printing the
+  list. `spark setup --engine URL` writes the shape, and records the
+  kind before it makes the account. It probes the URL before anything
+  is written (`setup._engine_probe`). A spark machine there is
+  refused in one line naming `spark client URL`, exit 2. So is a URL
+  nothing answers at. At a terminal,
+  setup offers it once when such a server answers on `SPARK_PORT` and
+  no model is chosen. One model per server: router mode and Ollama are
+  not supported. A raw engine on another spark machine cannot be told
+  from the user's own `llama-server`, and that is accepted: both are a
+  plain engine, local store and `--key-file` hint.
+- **A shared engine.** `spark serve share on` (`SITE_SHARE=yes`,
+  `site.cmd_share`) lets a machine's other OS users answer from its one
+  engine instead of each loading the model. Bootstrap's `share` row
+  ensures a `spark` OS group and a `0640 root:spark` copy of the
+  api-token at `$SHARE_TOKEN` (`/etc/spark/token`, `SPARK_SHARE_TOKEN`
+  overrides), re-synced each apply. It publishes the engine's address to
+  `$SHARE_URL` (`/etc/spark/url`, `0644`) so a joiner finds it without
+  reading the owner's `$HOME`. The owner's own token stays `0600`. The
+  `share` check row (`CAPABILITY`, `fixture=False`, because the group
+  needs root) reports the group, the token and the url, and warns if the
+  copy drifts. A group member joins as a client with no root.
+  Bootstrap's `share` row and `sudo_upfront` both short-circuit for a
+  client (`$client`), so a joining user never trips a root step or
+  removes the owner's token. `spark setup` on such a machine detects
+  `$SHARE_TOKEN` and offers the join. It writes the client shape for
+  them: `SITE_AI_MODEL=none`, `SITE_PEER_AI_URL` from `$SHARE_URL`,
+  and `SPARK_API_KEY_FILE=$SHARE_TOKEN`. No model is downloaded, and
+  their own soul and memory stay in `$HOME`. Identity
+  stays per `$HOME`. Compute is shared and chosen explicitly. spark
+  never routes to an engine the user did not name. Linux only in this
+  version: macOS and WSL are one user per machine (`site.no_share`), a
+  signed refusal from `spark serve share on` and a skip row.
+- **A model.** One list, `models.env`. A row is `MODEL_<NAME>` with the
+  5 fields, and its `_LICENSE` always. A `_NOTE` goes on when one
+  line helps. A `_GROUND="<kept>/<run> <date>"` goes on once the
+  grounding audition scored it here (`tests/audition.py --json`).
+  `_TESTED="line"` goes on only once the row has answered `spark line`
+  with valid JSON. `auto` reads only tested rows under an open license
+  (`config.auto_rows`, `bootstrap.sh model_rows`). A row under another
+  license is by name and asks before the download (`model._license_ok`,
+  `config.is_open`). Size and sha256 come from the file's Hugging Face
+  metadata: `x-linked-size` and `x-linked-etag` on the redirect
+  `.../resolve/main/<file>?download=true` answers with. The CDN it
+  points at knows neither. A name already in the other file
+  (`~/.config/spark/models.env`, yours) is refused, naming both
+  (`config.model_tables`, `bootstrap.sh model_rows_all`). `spark model
+  add URL` writes your row for you: huggingface.co is auto-verified from
+  that redirect, any other host needs `--sha256`, and `--license "NAME
+  URL"` is always required there. `spark model verify` (and the `models`
+  check row, cached) re-hashes every downloaded file
+  (`lib/spark/verify.py`).
+
+## Context read limits
+
+`forge.read_file` reads at most 64,003 bytes per reference before
+UTF-8 replacement decoding: four bytes per existing 16,000-character
+window, plus three to align its tail. Through 64,000 input bytes, the
+existing character count in the cut marker is exact. Larger files keep
+the same 4,000-character head and 12,000-character tail, with `middle
+cut` in between: counting omitted characters would require reading the
+middle.
+
+Continued local threads use at most 1,000,000 input bytes, header
+included, matching the existing `FORGE` request-body ceiling. The
+header has a 4,096-byte ceiling. Reads proceed backwards in 8,192-byte
+blocks; only whole authenticated records are decoded and parsed.
+Selection stops after the newest 20,000 characters and their turn
+boundary, counted in words: a `/read`'s `source` rides its user
+message while the whole fits. Over the budget the oldest sources go
+first, their words and answers kept, then the oldest pairs
+(`forge._fit`). Malformed records, blank lines and
+empty messages consume the same byte budget. At its edge an incomplete
+record and an orphan answer are left out, with a content-free notice.
+A damaged record still earns the usual skipped-record notice.
+`same_text` scans forwards within the same budget and stops at the
+first user message; no match means sending the source again. Full
+thread display, export and whole-blob vault reads keep their existing
+whole-file authentication and corruption rules.
+
+`bounded.regular` opens with `O_NONBLOCK` and checks the opened inode:
+a named pipe, device, directory, or a symlink to one is refused
+without waiting for a writer. A regular file on an unresponsive
+filesystem can still wait on the operating system. Byte limits do not
+promise a disk deadline. Atomic replacement keeps the opened inode; a
+concurrent truncation can shorten context but cannot enlarge the read
+budget.
+
+Whole-document `/read`, editor stdin (rewrites, byte selections and
+source hashes), draft watching, and explicit thread replay are
+separate operations. They are not silently clipped by these context
+readers. No cache, index, database or new stored format is needed. The
+focused regressions live in `tests/vault_test.py`;
+`tests/context_bench.py` measures synthetic scaling without logging
+source or conversation contents.
+
+## Verifying a claim
+
+```sh
+./bootstrap.sh --dry-run        # must end with: Nothing to do
+spark check                     # must exit 0
+spark check --selftest          # every fixture-testable row flips
+spark check --chaos             # every rehearsed failure: break, red, remedy, green
+spark serve                     # the engine and the page: up, at one LAN address
+python3 tests/forge_smoke.py    # the API and the page, against a stub model
+python3 tests/docs_test.py      # the docs say what the tree holds (credits, counts)
+python3 tests/widget_pty.py pager        # $PAGER at a tty; plain when absent
+python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
+                                # TAB completes verbs and names (bash likewise)
+git status -sb                  # clean, not ahead of origin
+spark check --porcelain | grep privacy   # the tree contains no banned word
+sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand-off to setup
+sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
+sh tests/gate.sh fast           # what a commit runs: privacy, syntax, shellcheck, the docs
+sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI runs it per commit
+sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
+sh tests/land.sh --landed-at SHA   # when it reached main, by GitHub's clock: the rest a patch counts
+```
+
+### Host-dependent test fixtures
+
+`tests/fixtures.py` supplies test-only init defaults; explicit
+per-case overrides win. Installed runit files and a live supervisor are
+separate facts. `tests/platform_test.py` exercises ownership, ancestor
+repository markers (including worktrees), and readline prerequisites
+with synthetic facts. No production ownership or uninstall protection
+is bypassed. Integration fixtures use scratch HOME and XDG paths. An
+rc link beneath any ancestor `.git` must remain untouched, even in a
+temporary directory. The chat PTY fixtures need GNU readline or macOS
+libedit; other backends print a skip with the missing prerequisite.
+MCP integration needs user- or root-owned ancestors. An unavailable
+ownership capability exits 77 with an explicit message; the full gate
+remains unsuccessful. Native CI must pass the real integrations before
+a change is ready.
+
+`spark check` has 42 rows today, by category `8 SOFTWARE, 24
+CAPABILITY, 10 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
+counts them). `--selftest` runs 8 passes. The first two prove every
+fixture-testable row flips between a good and a bad fixture. The good
+one also proves a healed row is recorded once and said once. The third
+is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. It
+runs twice, against a spark machine and against a plain `llama-server`,
+where the `peer` row says `your engine`. On
+Linux the fourth runs under a WSL 2 kernel line, where the 1 row in
+`check.WSL_ROWS` says so and never fails. The fifth runs under
+`ID=arch`: the packages row answers through a pacman stub. The sixth
+runs under `ID=void`: the packages row answers through an xbps stub and
+the services row through an sv stub. The seventh runs under
+`ID=fedora`, and the packages row answers through a dnf stub. The
+eighth runs under an `ID_LIKE` that says `opensuse`, and the packages
+row answers through a zypper stub. `check.ARCH_ROWS`, `check.VOID_ROWS`,
+`check.FEDORA_ROWS` and `check.OPENSUSE_ROWS` are empty, so no row
+there says it cannot serve.
+
+## Releasing
+
+The git tag is the release: one control, not two. There is no `VERSION`
+constant. `spark ver` derives it from git (`lib/spark/version.py`,
+cached): `1.0` exactly at a tag, `1.0+3` 3 commits past it. A major
+is an architecture break only: a feature inside the standing shape is
+a minor, however large. The minor counts on past 99: after `v1.99`
+comes `v1.100`, not `v2.0`. Every version reader parses numbers and
+orders by version, so a third digit is one more number. A release tag
+is signed. `spark update`
+verifies its ssh signature against the installed tree's
+`allowed-signers`. `get` verifies against its own copy of that file
+(`SIGNERS`, docs_test holds the two equal), and `release.yml` against
+the previous release's. Each also requires the tag object's own `tag
+NAME` line to match the ref, and an update moves forward only. The walk
+takes the newest tag that passes and names the newer ones it skipped.
+`allowed-signers` is one line per key, the principal the literal
+`spark-release`, never a real name. So a
+pushed tag alone runs nothing on anyone's install. A key in that file
+does. The `signed` row of `spark check` names the key's principal on a
+release clone. Update `CREDITS.md` when a pin or a model row changes.
+
+Two kinds of tag come off `main`. A major, `vX.Y`, is a planned piece
+of work, and a person signs it. A patch, `vX.Y.Z`, is reported bugs
+fixed through the patch lane (`AGENTS.md`, "The patch lane"), and a
+machine signs it. `tests/tag.sh` is that machine's rule. It tags
+`origin/main` when the CHANGELOG's top heading has three parts. With
+an S1 or S2 bullet in the section, the turn comes once the fix has
+rested 6 hours on `main`. With S3 and S4 alone, it comes on Sunday. The
+rest gives a person time to see the issue and the commit. It is
+counted from when the commit reached `main` by GitHub's clock, the
+created time of its first `ci.yml` run there (`tests/land.sh
+--landed-at`). A date the committer wrote never counts. `--now` is a
+person's word and skips the wait. The tagger keeps its own gates,
+whatever CI said. The tag it patches must itself be a release. It is
+signed by a key the installed spark's `allowed-signers` trusts
+(`~/.spark`, or `SPARK_TAG_SIGNERS`), and named as its object says. A
+tag anyone with a write token could push is no base for a patch. No
+protected path may differ from the tag it patches.
+Each bullet's issue must exist on GitHub, be `approved` and carry the
+bullet's severity. And `ci.yml` must have passed for the exact commit.
+A patch section opens
+only when the top heading is the newest tag. So `main` stays one line
+and every tag sits on it. `tests/patch_test.py` is the fence, in the
+fast gate and in CI. Under a three-part heading, no protected path
+changes. Those are the workflows, the hooks, the keys, `get` and
+`bootstrap.sh`, the landing and tagging scripts, the updater and the
+version reader. The engine, voice, model and distro tables, the web
+fonts and the completion files are protected too. A pin or an updater
+change is a major a person tags.
+`spark help` and the check row count stay as they were. The diff
+outside `tests/` and the CHANGELOG is at most 400 lines, and every
+bullet is `- S<n>: ... (#N)`. The second line of `allowed-signers` is
+the tagging machine's key. Its private half is sealed to that
+machine's hardware and unsealed for a run, never a secret in the cloud.
+Whoever has that machine can sign a release: a known exposure, taken
+by choice. A key change reaches the page's repository too. Its deploy
+pins its own copy of `allowed-signers`, so copy spark's there right
+after the release that adds the key.
+
+Signing, once per machine: `git config gpg.format ssh` and `git config
+user.signingkey ~/.ssh/id_ed25519.pub`, with the private half beside it
+or in the agent. Key rotation is a commit that adds the new key's line
+to `allowed-signers` and to `get`'s `SIGNERS`, released under a tag
+signed by the old key. Every
+clone verifies with the file it has and moves to the tree that knows
+the new key. The old line comes out in a later release, signed by the
+new one. `verify-tag` with an ssh signature needs git 2.34 or newer and
+ssh-keygen (openssh). `get` asks for both before it clones.
+
+1. Write the `## vX.Y` section (a patch: `## vX.Y.Z`) at the top of
+   `docs/CHANGELOG.md`, bullets, newest first. The project site shows
+   the section only once the tag exists, because it renders the newest
+   release tag.
+   `tests/docs_test.py` refuses a heading more than one release ahead
+   of that tag.
+   Commit: the pre-commit hook runs the fast gate. Land it with `sh
+   tests/land.sh`. That pushes the commit to a `try/` branch, waits for
+   `ci.yml`, and on green moves `main` forward to the same commit. On
+   red `main` is untouched: amend and run it again. The pre-push hook
+   refuses `main` and a `v*` tag for a commit CI has not passed.
+2. Tag only what CI passed: `git tag -s vX.Y -m 'spark vX.Y' && git
+   push origin vX.Y`. A patch is tagged the same way by `tests/tag.sh`
+   on the machine with the second key. The tag push runs `release.yml`
+   and no test. Its
+   first step refuses a tag whose commit has no green `ci.yml` run. It
+   verifies the signature against `allowed-signers`. It checks the
+   CHANGELOG heading, and that `spark ver` says `spark X.Y` (or
+   `spark X.Y.Z`) at the tag.
+   Then it creates the GitHub Release with that CHANGELOG section as
+   its notes and two assets. The assets
+   are `get` (`releases/latest/download/get`, the one-liner) and
+   `sbom.cdx.json` (`spark ver --sbom` at the tag: what the tree depends
+   on, CycloneDX 1.5, `lib/spark/sbom.py`). Nothing is rerun.
+3. The project site (spark.forgewright.ai) is rendered outside this
+   tree, at the newest signed tag. Run its render by hand now (`gh
+   workflow run` in the repository that renders it), or let its
+   six-hourly run pick the tag up. Nothing in this tree publishes it.
+4. Deploy is `spark update` everywhere. A main checkout pulls, and a
+   checkout on a tag moves to the new one. Either way it converges:
+   bootstrap.sh, then `spark check`, must both come back clean. `spark
+   ver` there prints exactly `spark X.Y` at the tag, and `spark X.Y+N` N
+   commits past it on a developer clone (`main`, via `SPARK_REF=main`).
+
+Author metadata (the name and e-mail on commits) is outside the privacy
+gate: use the GitHub noreply address. The gate itself reads both the
+tree (pre-commit) and the message (commit-msg). The history is as
+public as the tree.
+
+Re-derive every count in the docs before trusting it. Counts go stale.
+Follow every cross-reference. Sections get deleted. Be most suspicious
+of a sentence that explains why something works: a wrong reason reads
+exactly like a right one.

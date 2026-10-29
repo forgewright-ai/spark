@@ -73,8 +73,11 @@ staged() {
 $hit"
     fi
     # .privacy-terms is the one tracked file allowed to contain the words.
+    # the diff's own + comes off each line: it is a local-part character,
+    # and a line that is "@AGENTS.md" (CLAUDE.md's import) read as an
+    # address with it
     added=$(git diff --cached --diff-filter=ACMR -U0 -- . ':(exclude).privacy-terms' \
-            | grep '^+' | grep -v '^+++' || true)
+            | grep '^+' | grep -v '^+++' | sed 's/^+//' || true)
     [ -n "$added" ] || return 0
     if [ -n "$terms" ]; then
         hit=$(printf '%s\n' "$added" | grep -iEn "\\b($terms)\\b" || true)
@@ -196,7 +199,7 @@ ascii() {
     # The ten in docs/ are named (the glob would miss the .txt), and a named
     # file that is missing refuses: only the glob may come back empty.
     for f in README.md CLAUDE.md CREDITS.md AGENTS.md LICENSE get \
-             docs/INSTALL.md docs/CHEATSHEET.txt docs/CHANGELOG.md docs/ROADMAP.md docs/CONTRIBUTING.md \
+             docs/INSTALL.md docs/CHEATSHEET.txt docs/CHANGELOG.md docs/ROADMAP.md docs/CONTRIBUTING.md docs/REFERENCE.md \
              docs/*.md \
              lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
              lib/spark/forge/tokens.css lib/spark/forge/theme.js \

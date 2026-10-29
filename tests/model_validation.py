@@ -35,7 +35,7 @@ CASES = (
     {"messages": [{"role": "user", "content": "Reply with one short word."}]},
     # The JSON case holds the reply as spark does, with a grammar: llama-server
     # binds a response_format only after the template's thought channel, and
-    # spark never sends one (CLAUDE.md, the prompt line's contract).
+    # spark never sends one (docs/REFERENCE.md, the prompt line's contract).
     {"messages": [{"role": "user", "content": 'Reply with a JSON object containing a word.'}],
      "grammar": gbnf({"type": "object", "properties": {"word": {"type": "string"}},
                       "required": ["word"]})},

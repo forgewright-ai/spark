@@ -192,3 +192,4 @@ DOCUMENTS
   docs/CHANGELOG.md               what each release changed
   docs/ROADMAP.md                 what comes next
   docs/CONTRIBUTING.md            how to send a change
+  docs/REFERENCE.md               the maintainer's reference

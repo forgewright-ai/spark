@@ -53,7 +53,7 @@ jobs:
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           git merge-base --is-ancestor "$GITHUB_REF_NAME^{commit}" origin/main \
-            || { echo "release: $GITHUB_REF_NAME is not on main (CLAUDE.md, Releasing)"; exit 1; }
+            || { echo "release: $GITHUB_REF_NAME is not on main (docs/REFERENCE.md, Releasing)"; exit 1; }
           keys="$RUNNER_TEMP/allowed-signers"
           if prev=$(git describe --abbrev=0 --match 'v[0-9]*' "$GITHUB_REF_NAME^{commit}^" 2>/dev/null); then
             git show "$prev:allowed-signers" > "$keys"
@@ -63,7 +63,7 @@ jobs:
             from="its own allowed-signers (no earlier release)"
           fi
           git -c gpg.ssh.allowedSignersFile="$keys" verify-tag "$GITHUB_REF_NAME" \
-            || { echo "release: $GITHUB_REF_NAME is not signed by a key in $from (CLAUDE.md, Releasing)"; exit 1; }
+            || { echo "release: $GITHUB_REF_NAME is not signed by a key in $from (docs/REFERENCE.md, Releasing)"; exit 1; }
           name=$(git cat-file tag "$GITHUB_REF_NAME" | sed -n '/^$/q; s/^tag //p')
           [ "$name" = "$GITHUB_REF_NAME" ] \
             || { echo "release: the tag object $GITHUB_REF_NAME points to is named '$name'"; exit 1; }
@@ -76,7 +76,7 @@ jobs:
                 && git cat-file -e "$p:allowed-signers" 2>/dev/null; do
             git show "$p:allowed-signers" > "$keys"
             git -c gpg.ssh.allowedSignersFile="$keys" verify-tag "$t" >/dev/null 2>&1 \
-              || { echo "release: $t, a release behind $GITHUB_REF_NAME, is not signed by a key in $p's allowed-signers -- the chain is broken (CLAUDE.md, Releasing)"; exit 1; }
+              || { echo "release: $t, a release behind $GITHUB_REF_NAME, is not signed by a key in $p's allowed-signers -- the chain is broken (docs/REFERENCE.md, Releasing)"; exit 1; }
             t=$p
           done
           echo "release: $GITHUB_REF_NAME signed by a key in $from; the chain behind it verified back to ${t:-$GITHUB_REF_NAME}"

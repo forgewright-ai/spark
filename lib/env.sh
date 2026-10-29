@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034   # the variables set here are read by the sourcing script
 # spark lib/env.sh -- the KEY=value reader shared by bootstrap.sh and
 # install.sh. POSIX sh. lib/spark/config.py is the same reader in python;
-# the two must agree on what a valid line is (contract 3 in CLAUDE.md).
+# the two must agree on what a valid line is (contract 3 in docs/REFERENCE.md).
 #
 # load_env FILE      keep the first non-empty value, environment first
 # site_load          load ~/.config/spark/site.env, then apply defaults

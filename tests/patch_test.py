@@ -2,7 +2,7 @@
 """spark tests/patch_test.py -- the fence of the patch lane.
 
 main holds a patch release when docs/CHANGELOG.md's top heading has three
-parts, `## vX.Y.Z` (CLAUDE.md, Releasing; AGENTS.md, The patch lane).
+parts, `## vX.Y.Z` (docs/REFERENCE.md, Releasing; AGENTS.md, The patch lane).
 Between the tag it patches (`vX.Y` for Z = 1, else `vX.Y.Z-1`) and this
 tree, only a patch's shape may differ:
 

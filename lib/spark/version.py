@@ -88,7 +88,7 @@ def _describe(sha):
         return "0+" + sha[:7]
     if out.startswith("v"):
         out = out[1:]
-    # a release is X.Y, a patch of it X.Y.Z (CLAUDE.md, Releasing)
+    # a release is X.Y, a patch of it X.Y.Z (docs/REFERENCE.md, Releasing)
     m = re.match(r"^(\d+\.\d+(?:\.\d+)?)-(\d+)-g[0-9a-f]+$", out)
     if m:
         return "%s+%s" % (m.group(1), m.group(2))

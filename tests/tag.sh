@@ -3,7 +3,7 @@
 # docs/CHANGELOG.md's top heading has three parts, `## vX.Y.Z`: the fixes
 # of the patch lane (AGENTS.md, "The patch lane"), one bullet each,
 # `- S<n>: ... (#N)`. This script is the policy. A machine that holds a
-# release key runs it every hour (CLAUDE.md, "Releasing").
+# release key runs it every hour (docs/REFERENCE.md, "Releasing").
 #
 #   sh tests/tag.sh                 tag origin/main when its turn has come
 #   sh tests/tag.sh --dry-run       say what it would do, touch nothing
