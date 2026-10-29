@@ -2,6 +2,9 @@
 
 ## v1.108
 
+- CI: the Void job pins the Fastly mirror before xbps runs.
+  repo-default.voidlinux.org maps to any Tier 1 mirror, and the one it
+  mapped to on 2026-10-29 failed, then crawled for hours.
 - `spark serve off` waits for a unit only when one was running. A
   server started by hand does not leave with a unit, so the verb took
   the unit's 20 seconds for nothing, and so did its test (#133).

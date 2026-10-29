@@ -226,10 +226,19 @@ jobs:
     container: ghcr.io/void-linux/void-glibc-full:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Void there is, and -Su moves it to today anyway
     timeout-minutes: 20
     steps:
-      # git first, as in the debian job; xbps itself first (a rolling
+      # the image asks repo-default.voidlinux.org, which maps to any Tier 1
+      # mirror; the one it mapped to on 2026-10-29 failed and then crawled
+      # for hours. The Fastly CDN is Void's own Tier 1 mirror: pinned
+      # first, the handbook's way (xbps/repositories/mirrors/changing).
+      # Then git first, as in the debian job; xbps itself first (a rolling
       # distro refuses every install while xbps is behind); bash for the
       # new user's shell and libstdc++ for the runner's node
-      - run: xbps-install -Syu xbps >/dev/null 2>&1 || true; xbps-install -Syu >/dev/null; xbps-install -Sy git ca-certificates bash libstdc++ >/dev/null
+      - run: |
+          mkdir -p /etc/xbps.d
+          cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/ && sed -i 's|https://repo-default.voidlinux.org|https://repo-fastly.voidlinux.org|g' /etc/xbps.d/*-repository-*.conf || echo 'no repository file under /usr/share/xbps.d -- the image default stays'
+          xbps-install -Syu xbps >/dev/null 2>&1 || true
+          xbps-install -Syu >/dev/null
+          xbps-install -Sy git ca-certificates bash libstdc++ >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0
