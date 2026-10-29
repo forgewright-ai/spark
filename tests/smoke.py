@@ -12727,7 +12727,9 @@ def main():
             q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--name", "box", "--user", "ana"] + list(model),
                                  stdin=s, stdout=s, stderr=s, env=e)
             os.close(s)
-            got, end, sent, went, cut = b"", time.time() + 60, False, False, False
+            # 120 s for setup on a loaded runner; the pty stays open until
+            # setup has exited, or its last flush fails and python exits 120
+            got, end, sent, went, cut = b"", time.time() + 120, False, False, False
             while time.time() < end:
                 r, _, _ = _select.select([m], [], [], 0.2)
                 if r:
@@ -12749,12 +12751,12 @@ def main():
                         cut = True
                 elif q.poll() is not None:
                     break
-            os.close(m)
             try:
                 rc_ = q.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 q.kill()
                 rc_ = None
+            os.close(m)
             return rc_, got.decode("utf-8", "replace").replace("\r\n", "\n")
 
         sh1 = os.path.join(home, "setup-no")
