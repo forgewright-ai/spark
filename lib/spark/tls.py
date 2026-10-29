@@ -526,6 +526,7 @@ def mint_root(names, label="spark"):
               "-subj", "/CN=%s root" % label.replace("/", " "),
               "-addext", "basicConstraints=critical,CA:TRUE",
               "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+              "-addext", "subjectKeyIdentifier=hash",
               "-addext", constraint], OWN_DIR)
     os.chmod(p["root_key"], 0o600)
     fd = vault.open_private(os.path.join(OWN_DIR, "root.names"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
@@ -561,8 +562,13 @@ def mint_leaf(names, ips, label="spark"):
                   "-subj", "/CN=%s" % (names[0] if names else ips[0]).replace("/", " ")], OWN_DIR)
         san = ",".join(["DNS:" + n for n in names] + ["IP:" + i for i in ips])
         with os.fdopen(vault.open_private(ext, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), "w", encoding="utf-8") as f:
+            # the key identifiers written out: OpenSSL 3 added both to a
+            # leaf by itself, OpenSSL 4 does not, and a client in strict
+            # mode (python 3.13 and later) refuses a leaf without the
+            # authority key identifier
             f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\n"
-                    "extendedKeyUsage=serverAuth\n" % san)
+                    "extendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\n"
+                    "authorityKeyIdentifier=keyid,issuer\n" % san)
         _openssl(["x509", "-req", "-in", csr, "-CA", p["root"], "-CAkey", p["root_key"], "-CAcreateserial",
                   "-days", str(LEAF_DAYS), "-out", p["cert"] + ".new", "-extfile", ext], OWN_DIR)
         os.chmod(p["key"] + ".new", 0o600)

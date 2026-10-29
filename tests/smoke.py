@@ -6893,7 +6893,12 @@ def mint_pair(exe, d, leaves, constrain):
         run(["req", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-keyout", name + ".key",
              "-out", name + ".csr", "-subj", "/CN=" + (dns[0] if dns else ips[0])])
         with open(os.path.join(d, name + ".ext"), "w") as f:
-            f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\n" % san)
+            # the key identifiers written out: OpenSSL 3 added both to a
+            # leaf by itself, OpenSSL 4 does not, and a verifier in strict
+            # mode (python 3.13 and later) refuses a leaf with no authority
+            # key identifier
+            f.write("subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\n"
+                    "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n" % san)
         run(["x509", "-req", "-in", name + ".csr", "-CA", "root.crt", "-CAkey", "root.key", "-CAcreateserial",
              "-days", "398", "-out", name + ".crt", "-extfile", name + ".ext"])
         os.chmod(os.path.join(d, name + ".key"), 0o600)

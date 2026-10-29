@@ -432,6 +432,7 @@ def main():
             try:
                 ok(st == 200, "--foreground answers /api/health over TLS")
                 if st != 200:
+                    p.kill()        # a server up but unanswerable would hold communicate() forever
                     print(p.communicate()[0][-2000:])
                 else:
                     for (method, pattern), role in sorted(forgeserve.ROUTES.items()):
