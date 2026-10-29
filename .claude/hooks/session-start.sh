@@ -32,8 +32,9 @@ if [ -n "$pkgs" ] && [ "$(id -u)" = 0 ] && command -v apt-get >/dev/null 2>&1; t
 fi
 # the user the full gate runs as, and this clone trusted for it: git
 # refuses a repository another user owns, and the suites isolate HOME, so
-# the trust is the system's. The command gives gate the system's PATH:
-# root's names folders gate cannot read
+# the trust is the system's. The command gives gate the system's own
+# PATH: root's names folders gate cannot read, and /usr/local/bin holds
+# links into /root
 if [ "$(id -u)" = 0 ]; then
     id gate >/dev/null 2>&1 || useradd -m -s /bin/sh gate >/dev/null 2>&1 || :
     for d in "$PWD" "$PWD/.git"; do    # a clone of the path is checked at its .git
@@ -43,7 +44,7 @@ if [ "$(id -u)" = 0 ]; then
 fi
 full="sh tests/gate.sh full"
 if [ "$(id -u)" = 0 ] && id gate >/dev/null 2>&1; then
-    full="runuser -u gate -- env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin sh -c 'PYTHONPYCACHEPREFIX=\$HOME/.cache/pycache exec sh tests/gate.sh full'"
+    full="runuser -u gate -- env PATH=/usr/sbin:/usr/bin:/sbin:/bin sh -c 'PYTHONPYCACHEPREFIX=\$HOME/.cache/pycache exec sh tests/gate.sh full'"
 fi
 tools=$(missing tools)
 if [ -n "$tools" ]; then
