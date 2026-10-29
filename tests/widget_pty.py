@@ -72,6 +72,8 @@ if [ "$1" = history ]; then
     # to say -- and NEVER fall through to cat (it would eat the tty)
     exit 0
 fi
+# held: wait for the harness's $STUB_GATE, 10 s at most (the streamed line)
+held() { n=0; while [ ! -e "$STUB_GATE" ] && [ "$n" -lt 200 ]; do sleep 0.05; n=$((n + 1)); done; }
 # what reached spark line from the widget's environment (v1.41: the
 # hint-row word), on a log of its own so the asked() count stays honest
 [ "$1" = line ] && printf 'SPARK_HINT_ROW=%s\n' "${SPARK_HINT_ROW-}" >> "$STUB_ENV"
@@ -135,12 +137,14 @@ case $line in
   *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
   *hostile-dead*) exit 1 ;;
   # the streamed line (v1.52): line 1 at once, the rest after a pause --
-  # as spark line writes them when the command closes before the hint
-  *stream-early*) printf 'cmd\techo STREAMED-CMD\n'; sleep 1.5; printf 'streamed hint text\n' ;;
-  *stream-cmd*) printf 'cmd\techo STREAMED-CMD\n'; sleep 1.5; printf 'streamed hint text\nproof\ttest -d .\n' ;;
-  *stream-danger*) printf 'danger\techo DANGER-CMD\n'; sleep 1.5; printf 'removes things\n' ;;
-  *stream-answer*) printf 'answer\n'; sleep 1.5; printf 'The answer in words\n' ;;
-  *stream-fail*) printf 'cmd\techo FAILED-CMD\n'; sleep 1.5; printf 'the server stopped mid-reply\n'; exit 1 ;;
+  # as spark line writes them when the command closes before the hint.
+  # The pause is a latch, not a clock: the rest comes once the harness has
+  # seen what it checks and made $STUB_GATE, so no stall can reorder them
+  *stream-early*) printf 'cmd\techo STREAMED-CMD\n'; held; printf 'streamed hint text\n' ;;
+  *stream-cmd*) printf 'cmd\techo STREAMED-CMD\n'; held; printf 'streamed hint text\nproof\ttest -d .\n' ;;
+  *stream-danger*) printf 'danger\techo DANGER-CMD\n'; held; printf 'removes things\n' ;;
+  *stream-answer*) printf 'answer\n'; held; printf 'The answer in words\n' ;;
+  *stream-fail*) printf 'cmd\techo FAILED-CMD\n'; held; printf 'the server stopped mid-reply\n'; exit 1 ;;
   # a model that thinks before line 1 (v1.56): the question stays on screen
   *slow-think*) sleep 2; printf 'cmd\techo SLOW-CMD\nslow hint\n' ;;
   *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
@@ -1634,6 +1638,7 @@ def main(shell, widget):
         vlog = os.path.join(tmp, "voice.log")
         env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
                "EXPLAIN_LOG": elog, "STUB_ENV": envlog, "STUB_VOICE": vlog, "STUB_HEARD": "list the big files",
+               "STUB_GATE": os.path.join(tmp, "stub-gate"),
                "SPARK_VOICE": "clear",
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
@@ -1747,15 +1752,28 @@ def main(shell, widget):
         # the hint follows into the row above; the mark is on screen
         # before the command; an answer leaves the prompt empty; a failure
         # after line 1 keeps the command and shows the reason
+        gate = env["STUB_GATE"]
+
+        def shut():
+            """the stub holds the rest of its reply until release()"""
+            if os.path.exists(gate):
+                os.remove(gate)
+
+        def release():
+            open(gate, "w").close()
+
         def seen_then(want, then, timeout=8):
-            """(text when `want` first shows, text once `then` shows too)"""
+            """(text when `want` first shows, text once `then` shows too):
+            the stub's rest is released only once `want` was seen"""
             end = time.time() + timeout
             while time.time() < end and want.encode() not in sh.buf[sh.pos:]:
                 sh.read(0.05)
             first = sh.buf[sh.pos:].decode("utf-8", "replace")
+            release()
             sh.expect(then, timeout)
             return first, sh.buf[sh.pos:].decode("utf-8", "replace")
 
+        shut()
         since = sh.mark()
         sh.send("stream-cmd?\r")
         first, full = seen_then("STREAMED-CMD", "streamed hint text")
@@ -1775,6 +1793,7 @@ def main(shell, widget):
         sh.send("\x15")
         sh.settle()
 
+        shut()
         since = sh.mark()
         sh.send("? stream-danger\r")
         first, full = seen_then("DANGER-CMD", "! removes things -- read it before Enter")
@@ -1787,6 +1806,7 @@ def main(shell, widget):
         sh.send("\x15")
         sh.settle()
 
+        release()                                 # nothing here waits on the order
         since = sh.mark()
         sh.send("stream-answer?\r")
         ok(sh.expect("* The answer in words"), "streamed: an answer lands in the row above", since()[-400:])
@@ -1849,11 +1869,15 @@ def main(shell, widget):
 
         # Enter on a landed command while its hint is still on the way: the
         # hint is never drawn over what the command printed
+        shut()
         since = sh.mark()
         sh.send("stream-early?\r")
         sh.expect("STREAMED-CMD")
         sh.send("\r")
-        time.sleep(2.5)
+        # the hint is released only once the command has run and printed
+        sh.expect("STREAMED-CMD\r\n") or sh.expect("STREAMED-CMD\n")
+        release()
+        time.sleep(1.0)
         sh.settle()
         out = since()
         ran = out.rfind("STREAMED-CMD\r\n")       # the command's own output, the last of the two
