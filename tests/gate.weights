@@ -1,0 +1,37 @@
+# tests/gate.weights -- the seconds each suite of tests/gate.sh took, measured
+# once (a 10-core Mac, Apple's python 3.9): the order gate_run.py starts
+# them in where no ledger of its own exists yet, a CI runner. The ledger
+# (~/.cache/spark/gate-times) wins where it has a row. label<TAB>seconds.
+widget_pty session	90.2
+smoke line	88.0
+serve_smoke.py	82.6
+smoke read	82.2
+widget_pty living	78.6
+widget_pty rows	71.9
+smoke machine	62.0
+forge_smoke.py	57.3
+voice_test.py	56.3
+smoke tree	44.2
+install_test.sh	38.2
+chaos	15.0
+get_test.sh	13.5
+use_cases.py	12.9
+vault_test.py	11.4
+update_test.sh	9.7
+sandbox_test.py	9.3
+knowledge_test.py	8.2
+mcp_test.py	7.7
+policy_test.py	7.7
+uninstall_test.sh	7.6
+selftest	7.2
+tag_test.sh	7.1
+land_test.sh	3.9
+bench_smoke.py	3.1
+patch_test selftest	2.9
+widget_pty completion	2.0
+docs_test.py	1.0
+gate_run selftest	0.8
+finish_test.sh	0.7
+widget_pty pager	0.4
+patch_test.py	0.1
+qr_test.py	0.1
