@@ -38,9 +38,8 @@ spark
  spark ver --sbom             the software inside spark: what it depends on
  spark chat [words]           talk with the model (Esc ends, /help)
  spark [@FILE] <words>        ask anything, or ask about a file
- spark do [--sandbox] <words>  a task, step by step
+ spark do [--sandbox] <words> do a task, one command at a time
  spark do --review [ID]       review a sandboxed task's changes
- spark do --agent on          install Pi
  spark edit [?] [words]       the model rewrites stdin; it is no editor (-h)
  spark ask < FILE             what the text does not answer (-h)
  spark read <words> < FILE    answers that quote the text (-h)

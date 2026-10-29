@@ -1,25 +1,10 @@
 # Installing spark
 
-Home tasks, `spark do` and `spark chat` use Pi. Run
-`spark do --agent on`
-once to install its pinned SDK and Node runtime. They live under
-`~/.local/share/spark/agent`; no system Node, npm or background service
-is needed. Allow about 500 MB for the runtime and verified download
-cache. macOS and glibc Linux on arm64 and x64 are supported.
-
-The runtime uses the existing model connection, including
-`spark client URL`; a client needs no local model. `spark do --agent
-status` and the agent row in `spark check` report readiness. `spark
-update` refreshes an enabled runtime when its pins change. A failed
-setup leaves the previous tree in place and reports the failure.
-`spark do --agent off` disables it and removes its downloads. The
-prompt line, one-shot answers and native desktop controls need no Pi.
-
-Pi receives only the capabilities and conversation supplied by Spark.
-It does not discover project extensions, coding tools or skills, save
-its own sessions, receive server credentials or contact a model itself.
-Spark sends model requests using the configured authentication and TLS
-policy. Native hosts still review and execute every proposed action.
+Desktop clients using `spark do --tools` need a spark build that
+includes the tool task adapter. It adds no dependency or background
+service. The adapter uses the existing model connection, including
+`spark client URL`; a client needs no local model. Use `spark do -h` to
+check support; `spark check` checks the adapter with MCP.
 
 Start with the signed installer on a computer you already use. It does
 not reinstall the OS or erase a disk. Section 2 has the steps. Section
@@ -860,7 +845,7 @@ Keep passwordless `sudo` off a machine that serves your network. The
 admin token can run any command here. With passwordless `sudo`, that
 means root.
 
-The check. `spark check` has 43 rows and exits 0 when no row fails.
+The check. `spark check` has 42 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 a bug report, with no names or paths.

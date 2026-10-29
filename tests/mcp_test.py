@@ -23,8 +23,6 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-from fixtures import agent_env
-fixture_agent = agent_env()
 TMP = tempfile.mkdtemp(prefix="spark-mcp-")
 HOME = os.path.join(TMP, "home")
 os.makedirs(os.path.join(HOME, ".config", "spark"))
@@ -34,7 +32,6 @@ for k in [k for k in os.environ if k.startswith(("SPARK_", "XDG_", "SITE_"))]:
 os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STATE_HOME": HOME + "/.local/state",
                    "XDG_DATA_HOME": HOME + "/.local/share", "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8",
                    "SPARK_TIMEOUT": "10"})
-os.environ.update(fixture_agent)
 sys.path.insert(0, os.path.join(REPO, "lib"))
 from spark import audit, do, mcp, persona, steps, wire  # noqa: E402
 
@@ -525,22 +522,6 @@ class Engine(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
         SEEN["body"] = body
-        if body.get("tools"):
-            call = REPLY["steps"][0]
-            args = call["arguments"]
-            if not call["name"].startswith("spark_task_"):
-                args = {"arguments": args, "complete_after": False}
-            chunks = [{"choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
-                {"index": 0, "id": "native_fixture", "type": "function",
-                 "function": {"name": call["name"], "arguments": json.dumps(args)}}]}}]},
-                {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}]
-            data = ("".join("data: " + json.dumps(c) + "\n\n" for c in chunks) + "data: [DONE]\n\n").encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-            return
         self._send(200, {"choices": [{"message": {"content": json.dumps(REPLY)}, "finish_reason": "stop"}]})
 
 
@@ -590,7 +571,7 @@ try:
 except ValueError:
     check("grammar: a required argument of a shape a grammar cannot hold refuses the tool", True)
 
-# The tool adapter uses the real CLI, Pi session and typed tools. The engine
+# The tool adapter uses the real CLI, Session and grammar wire. The engine
 # is scripted; these checks establish integration, not language accuracy.
 task_request = {"version": 1, "goal": "set volume to 30", "tools": json.loads(TOOLS)["tools"][:1],
                 "context": {"view": "Sound", "providers": [{"id": 0}]}}
@@ -603,7 +584,7 @@ except ValueError:
     decision = {}
 check("tool task: real CLI proposes a typed operation", rc == 0 and decision.get("status") == "step", (rc, out, err))
 check("tool task: capability descriptions reach the decision model as data",
-      "SECRET DESCRIPTION" in json.dumps(SEEN.get("body", {}).get("tools", [])))
+      "SECRET DESCRIPTION" in json.dumps(SEEN.get("body", {}).get("messages", [])))
 if decision.get("status") == "step":
     task_request["state"] = decision["state"]
     task_request["observation"] = {"id": decision["id"], "status": "ok",
@@ -614,14 +595,11 @@ if decision.get("status") == "step":
     got = json.loads(out)
     check("tool task: the result returns to the same goal before completion", rc == 0 and got.get("status") == "done"
           and "actual_level" in json.dumps(SEEN.get("body", {}).get("messages", [])), (out, err))
-    task_body = SEEN.get("body", {})
-    native = next(t["function"] for t in task_body["tools"] if t["function"]["name"] == "out_level")
-    check("tool task: completion policy is a required boolean in the tool schema",
-          native["parameters"]["properties"]["complete_after"]["type"] == "boolean"
-          and "complete_after" in native["parameters"]["required"])
-    check("tool task: native arguments stay typed and parallel calls are disabled",
-          native["parameters"]["properties"]["arguments"]["properties"]["level"]["type"] == "integer"
-          and task_body.get("parallel_tool_calls") is False)
+    check("tool task: completion policy is constrained by the grammar", "complete_after" in SEEN.get("body", {}).get("grammar", ""))
+    task_grammar = SEEN.get("body", {}).get("grammar", "")
+    check("tool task: grammar requires one decision without an unused prose field",
+          'steps ::= "[" ws step ws "]"' in task_grammar
+          and '\\"answer\\"' not in task_grammar.splitlines()[0])
     previous = dict(SEEN.get("body", {}))
     task_request["observation"]["status"] = "unknown"
     rc, out, err = spark("do", "--tools", stdin=json.dumps(task_request), env=ENV)

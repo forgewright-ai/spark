@@ -1169,12 +1169,7 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     try:
         # the reply cap (cfg.max_tokens: 1200, or SPARK_MAX_TOKENS); a cap
         # that ends a reply is said out loud below
-        if mode == "chat":
-            from . import agent
-            answer, ms = s._retry_fresh(lambda: agent.chat(s, text, context, on_delta_tap, cfg.max_tokens),
-                                       can_retry=lambda: not collected)
-        else:
-            answer, ms = s.ask_stream(text, context, on_delta_tap, max_tokens=cfg.max_tokens)
+        answer, ms = s.ask_stream(text, context, on_delta_tap, max_tokens=cfg.max_tokens)
     except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
         land(e)
         raise

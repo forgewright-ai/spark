@@ -184,6 +184,14 @@ printf '%s\n' "$out" | grep -qE '^would +micro +the plugin moved to github.com/f
 rm -rf "$HOME/.config/micro/plug" "$HOME/.config/micro/bindings.json"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
 printf '%s\n' "$out" | grep -qE ' micro ' && bad "a micro row with nothing to hand back" || ok "no old plugin links: no micro row"
+# the v1.106 hand-back: the Pi runtime v1.104 to v1.105.1 put under the
+# data dir is removed once (dry-run says would; apply is proven by hand)
+mkdir -p "$HOME/.local/share/spark/agent/releases/old"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (old agent runtime) failed"
+printf '%s\n' "$out" | grep -qE '^would +agent +the Pi runtime of v1.104 to v1.105.1 is still here' && ok "an old Pi runtime: the agent row would remove it" || bad "no agent row for an old runtime: $(printf '%s\n' "$out" | grep -E ' agent ' | head -1)"
+rm -rf "$HOME/.local/share/spark/agent"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
+printf '%s\n' "$out" | grep -qE ' agent ' && bad "an agent row with nothing to hand back" || ok "no old runtime: no agent row"
 printf 'SITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
 printf '%s\n' "$out" | grep -qE '^(skip|would) +sleep ' && ok "SITE_HEADLESS=no: sleep row is skip (or would undo)" || bad "no sleep row for SITE_HEADLESS=no"

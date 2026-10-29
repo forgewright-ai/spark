@@ -173,8 +173,7 @@ def tests_gated():
     check(ci.count('run: sh tests/gate.sh full "$GROUP"') == 2 and ci.count("group: [smoke, serve, rest]") == 2,
           "ci.yml: linux and macos run tests/gate.sh full, one job per group (smoke, serve, rest)")
     groups = set(re.findall(r"(?m)^\s+(\w+)\)\s+group_\w+ ;;$", read("tests/gate.sh")))
-    check(groups == {"smoke", "serve", "rest", "agent"}, "tests/gate.sh full takes the groups ci.yml names (smoke, serve, rest, agent)")
-    check("run: sh tests/gate.sh full agent" in ci, "ci.yml exercises the pinned agent on its platform matrix")
+    check(groups == {"smoke", "serve", "rest"}, "tests/gate.sh full takes the groups ci.yml names (smoke, serve, rest)")
     check("tags:" not in ci.split("\njobs:")[0], "ci.yml runs on no tag push: the tag's commit already passed")
     jobs = set(re.findall(r"(?m)^  ([a-z]+):$", ci.split("\njobs:")[1]))
     m = re.search(r"(?ms)^  green:\n.*?^    needs: \[([^\]]+)\]", ci)

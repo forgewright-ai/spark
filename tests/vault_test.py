@@ -1066,8 +1066,6 @@ def test_bounded_context():
 # file and goes through vault.open_private; a new bare writer, or an
 # entry here that matches nothing, fails the suite.
 BARE_WRITERS = (
-    "agent_runtime.py: locked -- an empty flock file in the private runtime directory; no user data",
-    "agent_runtime.py: install -- the public integrity fingerprint in a private staged runtime; no user data",
     "chaos.py: * -- the drills write scratch homes of their own",
     "do.py: _stdout_gone -- /dev/null, a device: where stdout goes once its reader is gone",
     "check.py: make_fixture -- fixtures in a scratch home",

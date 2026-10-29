@@ -4,7 +4,7 @@
 #
 #   sh tests/gate.sh fast           what a commit runs: seconds
 #   sh tests/gate.sh full           every group below, in order
-#   sh tests/gate.sh full GROUP     smoke | serve | rest | agent
+#   sh tests/gate.sh full GROUP     smoke | serve | rest (one CI job each)
 #
 # fast: the privacy gate over the staged change, syntax, the cheatsheet's
 # 80 columns, ASCII docs, shellcheck, docs_test, patch_test.
@@ -242,7 +242,6 @@ group_rest() {
     # contract 16: the MCP client's gates against a stub server, and spark steps
     run mcp_test.py "$PY" tests/mcp_test.py
     run tool_run_test.py "$PY" tests/tool_run_test.py
-    group_agent
     # the use-case audition's recorded replies, served by a stub engine:
     # spark's own code judged on real replies to real inputs, no model
     run use_cases.py "$PY" tests/use_cases.py replay
@@ -264,14 +263,9 @@ group_rest() {
     run chaos "$PY" bin/spark check --chaos
 }
 
-group_agent() {
-    run agent_test.py "$PY" tests/agent_test.py
-    run agent_audit.py "$PY" tests/agent_audit.py
-}
-
 case $mode in
     fast)
-        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest|agent]" >&2; exit 2; }
+        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2; }
         static
         run docs_test.py "$PY" tests/docs_test.py
         run patch_test.py "$PY" tests/patch_test.py
@@ -282,29 +276,17 @@ case $mode in
         # git dir, and every git -C in them would answer for that instead)
         unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
         "$PY" --version
-        # The optional SDK is exercised for real. Installation touches only
-        # this throwaway tree; no npm scripts or system Node are involved.
-        if [ -z "${SPARK_TEST_AGENT_DIR:-}" ]; then
-            agent_fixture_root=$(mktemp -d "${TMPDIR:-/tmp}/spark-agent-gate.XXXXXX")
-            trap 'rm -rf "$agent_fixture_root"' EXIT HUP INT TERM
-            SPARK_TEST_AGENT_DIR=$agent_fixture_root/current
-            export SPARK_TEST_AGENT_DIR
-        fi
-        SPARK_AGENT_DIR=$SPARK_TEST_AGENT_DIR
-        export SPARK_AGENT_DIR
-        "$PY" bin/spark 'do' --agent on || exit 1
         case $group in
             '')    group_smoke; group_serve; group_rest ;;
             smoke) group_smoke ;;
             serve) group_serve ;;
             rest)  group_rest ;;
-            agent) group_agent ;;
-            *)     echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest|agent]" >&2; exit 2 ;;
+            *)     echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2 ;;
         esac
         printf '== end\n'
         ;;
     *)
-        echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest|agent]" >&2; exit 2 ;;
+        echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2 ;;
 esac
 
 if [ "$fail" -ne 0 ]; then

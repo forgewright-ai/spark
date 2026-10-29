@@ -86,12 +86,6 @@ non-empty value wins. See `docs/INSTALL.md` for quoting and comments.
 
 ## Use it
 
-For chat and tasks, run `spark do --agent on` once. It downloads the
-pinned Pi runtime and Node into spark's own data directory. No system
-Node or background agent is needed. `spark do --agent status` checks it;
-`spark do --agent off` disables it and removes those downloads. The
-prompt line and ordinary desktop controls work without it.
-
 ```
 ? how many files are here       a command for your line
 cmd 2>&1 | explain              what went wrong, and the fix
@@ -123,8 +117,7 @@ No editor app, other service account or second device is needed:
 
 1. `spark check` shows rows that need attention. A healthy check
    prints its totals line alone and exits 0.
-2. `spark do --agent on`, then `spark chat`. Ask a harmless question,
-   such as `What is 2 + 2?`.
+2. `spark chat` and ask a harmless question, such as `What is 2 + 2?`.
    Type `/q`, `Esc` or `Ctrl-D` to leave chat; `Ctrl-C` stops a reply.
 3. At the shell prompt, type `? how many files are here` and press
    `Enter`. Read the proposed command in your line. Press `Ctrl-C` to
@@ -271,11 +264,6 @@ spark downloads itself, the llama.cpp engine and the voice from
 github.com, and your model from huggingface.co. The engine, the voice
 and the model are checked by sha256. Your package manager installs the
 basics and checks for updates. There is no telemetry.
-
-`spark do --agent on` also downloads Node from nodejs.org and Pi's
-locked packages from registry.npmjs.org. Spark verifies their pins
-from the signed tree before unpacking. No package installation
-script runs.
 
 A release is signed. A first install checks it against the key inside
 `get`. Each update checks against the key already installed, and only

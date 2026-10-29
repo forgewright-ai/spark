@@ -504,6 +504,15 @@ if [ "$old_plug" = 1 ] && need micro "the plugin moved to github.com/forgewright
     if [ -L "$mb" ]; then rm -f "$mb"; [ ! -f "$mb.bak" ] || mv "$mb.bak" "$mb"; fi
     ok micro "spark's links removed -- git clone https://github.com/forgewright-ai/spark-micro $mplug"
 fi
+# the Pi runtime v1.104 to v1.105.1 put under the data dir (a Node and an
+# npm tree, about 370 MB a release, two after an update): v1.106 took Pi
+# out of spark. Hand the space back once; a machine that never turned it
+# on has nothing to do here. A later release drops this row.
+adir="$SPARK_DATA_DIR/agent"
+if [ -d "$adir" ] && need agent "the Pi runtime of v1.104 to v1.105.1 is still here: remove it"; then
+    case $adir in */spark/agent) rm -rf "$adir" ;; esac
+    ok agent "the Pi runtime is off this machine now"
+fi
 # the rc hook: one marked line at the end of the login shell's rc file
 # (after fzf: the widget wraps Enter, so it loads last). The marker is
 # `config/spark/hook.`, so the line lands once -- in a file or through a

@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.106
+
+- Pi leaves spark. v1.104 moved Home tasks, `spark do` and `spark chat`
+  onto a pinned Node runtime and the Pi SDK; v1.106 reverts v1.104,
+  v1.105 and v1.105.1 whole. `spark do`, `spark chat`, the page's chat
+  and `spark do --tools` answer through spark's own model path again,
+  as v1.102 did: a grammar over the typed decision, the 60 second wait
+  for a task decision. No runtime to install, no `--agent` words, no
+  agent check row (42 rows again), no Node or npm in the SBOM, no
+  runtime job in CI. `spark chat` works right after the install again.
+- The read of the code behind the decision: the host loop (inspect,
+  ask, act, observe, finish) was spark's and the desktop's since
+  v1.102; the runtime formatted one model call a request. The same 27
+  desktop task scenarios scored 14 of 19 and 4 of 8 on the native path
+  before v1.104 and 19 of 19 and 7 of 8 through the runtime, with the
+  task brief changed in the same commit, so nothing isolated the
+  runtime; a model call took 3.9 s median before and 6.2 s with it.
+- `spark update` hands the space back: a machine that ran `spark do
+  --agent on` has the runtime removed from spark's data directory by
+  the new `agent` row of bootstrap, once, with one line said.
+- Kept from v1.104: `do.fit` keeps the head and the tail of an
+  oversized newest step and refuses a goal that cannot fit, and the
+  task brief's lines on literal note content and reminder titles.
+- The desktop's inspect control says what it does: it reads a
+  provider's state and makes its tools available on the next turn.
+  A task could claim a capability was unavailable when its provider
+  had not been inspected yet (#125)
+
 ## v1.105.1
 
 - S3: a reviewed command could run successfully, then fail when Pi

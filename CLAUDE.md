@@ -20,9 +20,7 @@ for it, and no verb carries the word.
 
 - **Simple.** One command (`spark`), one bootstrap, one install script,
   one config format (`KEY=value`). The code is python3 stdlib, 3.9 or
-  newer, and `sh`. The optional task and chat runtime is the pinned Pi
-  SDK in a separate, restricted Node process. It is not a Python
-  package.
+  newer, and `sh`. Nothing else.
 - **The spine, one command.** spark is the engine, the model, chat, the
   `?` prompt line, the `FORGE` and users. It is always installed: one rc
   line, and nothing else touched. A spark app is a client of one spark
@@ -735,11 +733,14 @@ and may change freely.
    `.git` above the target). It is left as it is, and one `!` line
    names the file. `spark keys` says `off` and why when the rc file
    lacks the line or the shell has no prompt line (`keys.no_line`), and
-   `spark keys on` never promises keys such a shell cannot load. Two
+   `spark keys on` never promises keys such a shell cannot load. Three
    hand-back
    rows cover what older sparks made. The `micro` row removes the plugin
    links a pre-v1.10 install left under `~/.config/micro` and names the
-   app's own repository. The `handback` row, run by `spark update`,
+   app's own repository. The `agent` row removes the Pi runtime v1.104
+   to v1.105.1 kept under the data directory, once, and says `the Pi
+   runtime is off this machine now`. The `handback` row, run by `spark
+   update`,
    gives back the look a pre-v1.62 spark set: the stock console palette
    and font, a loud boot, the motd and `/etc/issue`. On macOS it removes
    the Terminal.app spark profiles. It is idempotent, and once it acted
@@ -952,9 +953,8 @@ and may change freely.
    asks the engine for slot 0 (`id_slot`), so the line's prefix stays
    warm; a server that refuses the field is asked again without it. The
    reply is one JSON object (`persona.LINE_SCHEMA`), held by a grammar:
-   `wire.gbnf(schema)` rides the request as `grammar`. These direct
-   schema requests use it, never `response_format`. Pi task sessions
-   instead send typed tool schemas through the shared adapter. Each one
+   `wire.gbnf(schema)` rides the request as `grammar`. Every request a
+   schema shapes sends it, and none sends `response_format`. Each one
    streams, `wire.chat_json` and `wire.chat_grammar` too. So
    `SPARK_TIMEOUT` is the wait for the next token, never for the whole
    reply: a long here-document at 20 tokens a second still arrives.
@@ -1111,14 +1111,13 @@ and may change freely.
    code, the output. The triggers are the OS's own timers starting
    `spark do --sandbox --detach`: a systemd user timer, launchd, cron, a
    `spark watch` line. The memory and the audit are the `FORGE`'s sealed
-   threads. Pi receives one typed command-proposal schema; it cannot run
-   that command. Its schema is included in the context budget. The MCP
-   tools `spark mcp` listed
+   threads. No tool schema rides a request: a small model's context
+   holds the task, not the harness. The MCP tools `spark mcp` listed
    ride as `spark mcp call` lines, names and titles alone (contract 16).
    `spark do` is bounded, measured and
    held. A proposal's messages fit the served context (`do.budget`):
    `SPARK_CTX`, 8192 when unknown, at `reveal.CHARS_PER_TOKEN`, a
-   `CTX_SHARE` of 0.8, less the system message, tool schema and reply's
+   `CTX_SHARE` of 0.8, less the system message and the reply's
    `DO_MAX_TOKENS`. `do.fit` keeps the goal and
    the newest step, shortens the oldest outputs to `(output trimmed,
    exit N)` first, then drops the oldest exchanges. Oversized newest
@@ -2377,42 +2376,8 @@ and may change freely.
     execution, consent, current capability discovery and resource reads.
     `do._drive` continues to serve shell tasks; this adapter reuses do's
     context budget and secret holding, and MCP/steps argument validation
-    and typed Pi proposals. There is no second desktop executor in
+    and constrained generation. There is no second desktop executor in
     spark.
-
-    The shared generation adapter is `lib/spark/agent.py`, used here,
-    by `do.propose` and by chat-mode `forge.reply`. `agent/worker.mjs`
-    reconstructs a Pi SessionManager from host-owned history for each
-    bounded request. Only committed native observations become tool
-    results. Tool execution yields a proposal and stops; built-in coding
-    tools, resource discovery, external extensions, telemetry, retries,
-    disk sessions and cache warming are disabled. Chat has no tools.
-    Pi may compact chat before continuing, but may not retry after any
-    text has reached the reader. A failed turn cannot reuse an earlier
-    answer. Native consent, task evidence, sandbox, porcelain and sealed
-    history remain host responsibilities.
-
-    The child has a private temporary home and an allowlisted environment.
-    Node permissions deny networking, writes, child processes and native
-    addons. It can read only the worker, verified dependencies and its
-    temporary directory. Model fetch is a versioned, request-bound JSON lines
-    channel: only POST /v1/chat/completions, at most three requests, 1 MB
-    per message and 8 MB per response. Python supplies the configured
-    role, authentication, TLS and redirects through `wire._send` and
-    records numeric timings and sent bytes. SSE requires `[DONE]`. A quiet
-    stream times out using the configured timeout. Cancellation closes
-    the socket and reaps the worker. No credentials or task text ride argv.
-
-    `spark do --agent on|off|status` manages the optional runtime.
-    `agent/node.json` pins Node archives by size and SHA-256;
-    `agent/package-lock.json` pins the complete npm closure by SHA-512.
-    The Python installer verifies each archive, extracts without lifecycle
-    scripts, probes the SDK under its permissions and activates a fresh
-    tree atomically. A failed setup preserves the previous tree. Enabled
-    installations follow new pins through `spark update`; old trees remain
-    until off so in-flight workers can finish. `SPARK_AGENT_DIR` is an
-    environment-only location override for isolated tests and deployments.
-    `spark ver --sbom` includes Node and every locked npm package.
 
     Model output is exactly one typed decision in steps, with the boolean
     complete_after. There is no separate free-text answer slot; answers
@@ -3111,7 +3076,7 @@ ownership capability exits 77 with an explicit message; the full gate
 remains unsuccessful. Native CI must pass the real integrations before
 a change is ready.
 
-`spark check` has 43 rows today, by category `8 SOFTWARE, 25
+`spark check` has 42 rows today, by category `8 SOFTWARE, 24
 CAPABILITY, 10 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The good

@@ -13,7 +13,7 @@ import os
 import sys
 import time
 
-from . import agent, config, do, mcp, session, steps, wire
+from . import config, do, mcp, session, steps, wire
 
 VERSION = 1
 INPUT_MAX = 262144
@@ -60,7 +60,7 @@ CONTROLS = [
              "evidence": {"type": "array", "items": {"type": "integer"}}}, ["summary", "evidence"]),
     control("answer", "Answer a question from observed facts, or explain why the goal cannot be achieved. Claims no execution.",
             {"text": {"type": "string", "minLength": 1, "maxLength": 500}}, ["text"]),
-    control("inspect", "Read one available provider's current state before choosing an action. The provider id is in context.",
+    control("inspect", "Discover a provider's tools and read its current state. Its tools become available on the next turn. The provider id is in context.",
             {"provider": {"type": "integer", "minimum": 0}}, ["provider"]),
 ]
 
@@ -249,8 +249,11 @@ def model_decision(packet, tools):
     msgs = s._messages("Choose the next action for this task.", encoded(packet))
     if len(msgs[-1]["content"]) > do.budget(cfg, len(msgs[0]["content"])):
         raise Invalid("the task exceeds the model context; offer fewer capabilities or a larger local context")
+    grammar = wire.tools_gbnf([(t.name, steps.grammar_args(t)) for t in tools], 1, task=True)
     started = time.monotonic()
-    reply = s._retry_fresh(lambda: agent.task(s, packet))
+    reply, s.timings = s._retry_fresh(lambda: wire.chat_grammar(
+        cfg, s.url, msgs, grammar, max_tokens=600, forge=s.forge, model=s.role, timeout=60))
+    s.note_sent(s.timings)
     s.record(kind="do-tools", tools=len(tools), ms=int((time.monotonic() - started) * 1000))
     return reply
 

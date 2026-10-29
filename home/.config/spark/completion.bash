@@ -52,10 +52,6 @@ _spark_complete() {
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi
-    if [ "$COMP_CWORD" -eq 3 ] && [ "${COMP_WORDS[1]}" = do ] && [ "${COMP_WORDS[2]}" = --agent ]; then
-        COMPREPLY=($(compgen -W "on off status" -- "$cur"))
-        return 0
-    fi
     [ "$COMP_CWORD" -eq 2 ] || return 0
     case ${COMP_WORDS[1]} in
         model)   words="list verify budget rm add auto none status --chat $(_spark_model_names)" ;;
@@ -71,7 +67,7 @@ _spark_complete() {
         serve)   words="on off boot share https own status --login --audit" ;;
         chat)    words="--thread" ;;
         read)    words="--part --name --ledger --warm" ;;
-        do)      words="--sandbox --detach --porcelain --tools --agent --review --accept --discard" ;;
+        do)      words="--sandbox --detach --porcelain --tools --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;
         ver)     words="--credits --sbom" ;;

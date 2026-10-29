@@ -255,8 +255,6 @@ def cmd_update(args):
             if rc == 0:
                 cfg = config.load()
                 _voice_pins(cfg)
-                from . import agent_runtime
-                rc = agent_runtime.converge()
                 # the look file follows the new tree (an awakened machine only)
                 try:
                     from . import look
@@ -380,8 +378,6 @@ def cmd_update(args):
         # version it runs, and a stale one is restarted like a move
         from . import config, engine
         _voice_pins(config.load())
-        from . import agent_runtime
-        rc = agent_runtime.converge()
         _notice()
         _door()
         if _page_is_stale():

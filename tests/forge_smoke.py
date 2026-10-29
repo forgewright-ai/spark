@@ -404,18 +404,11 @@ def reply_interruptions(ok):
     """Real SSE parsing, sessions and sealed history; no model or clock waits."""
     from contextlib import ExitStack
     from unittest.mock import patch
-    from spark import agent, cli, config, forge, session, wire
+    from spark import cli, config, forge, session, wire
 
     class Response:
         def __init__(self, pieces, failure=None):
             self.pieces, self.failure = pieces, failure
-            self.lines = iter(self)
-
-        def readline(self, limit=-1):
-            return next(self.lines, b'')
-
-        def close(self):
-            pass
 
         def __enter__(self):
             return self
@@ -428,7 +421,6 @@ def reply_interruptions(ok):
                 yield ('data: ' + json.dumps({'choices': [{'delta': {'content': piece}}]}) + '\n').encode()
             if self.failure:
                 raise self.failure
-            yield b'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n'
             yield b'data: [DONE]\n'
 
     with tempfile.TemporaryDirectory(prefix='spark-reply-') as tmp, ExitStack() as stack:
@@ -446,18 +438,10 @@ def reply_interruptions(ok):
                 for history in (0, 7):
                     os.environ["SPARK_HISTORY"] = str(history)
                     visible, said = [], []
-                    # User interruption occurs on the caller thread. The Pi
-                    # transport reader owns socket errors, not terminal input.
-                    def emit(piece):
-                        visible.append(piece)
-                        if kind == 'interrupt' and len(visible) == len(pieces):
-                            raise KeyboardInterrupt()
-                    response = Response(pieces, None if kind == 'interrupt' else failure)
-                    early = KeyboardInterrupt() if kind == 'interrupt' and not pieces else None
-                    with patch.object(wire, '_send', return_value=response, side_effect=early) as send:
+                    with patch.object(wire, '_send', return_value=Response(pieces, failure)) as send:
                         try:
                             forge.reply(cfg, None, 'question', store=store, brain=brain,
-                                        on_delta=emit, said=said)
+                                        on_delta=visible.append, said=said)
                         except (wire.BrainError, KeyboardInterrupt) as exc:
                             tid = getattr(exc, 'thread', None)
                             ok(not isinstance(exc, wire.BrainError) or exc.kind == kind,
@@ -525,7 +509,7 @@ def reply_interruptions(ok):
         def late_down(*args, **kwargs):
             args[3]('once')
             raise wire.BrainError('down', 'late failure')
-        with patch.object(agent, 'chat', side_effect=late_down) as stream:
+        with patch.object(wire, 'chat_stream', side_effect=late_down) as stream:
             try:
                 forge.reply(cfg, None, 'late', store=store, brain=brain)
             except wire.BrainError as exc:
