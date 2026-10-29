@@ -7987,9 +7987,12 @@ def main():
             par = subprocess.run(["git", "-C", bare, "rev-parse", "--verify", "-q", branch], env=genv,
                                  capture_output=True, text=True, timeout=10)
             parents = ["-p", par.stdout.strip()] if par.returncode == 0 and par.stdout.strip() else []
+            # the isolated HOME has no git identity, and a container's
+            # hostname gives git none to guess: name one, as the tag test does
             commit = subprocess.run(["git", "commit-tree", tree] + parents + ["-m", "smoke: the working tree"],
-                                     env=dict(genv, GIT_DIR=bare), capture_output=True, text=True,
-                                     check=True, timeout=10).stdout.strip()
+                                     env=dict(genv, GIT_DIR=bare, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                                              GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"),
+                                     capture_output=True, text=True, check=True, timeout=10).stdout.strip()
             subprocess.run(["git", "-C", bare, "update-ref", "refs/heads/smoke-test", commit],
                             env=genv, check=True, timeout=10)
             subprocess.run(["git", "-C", bare, "symbolic-ref", "HEAD", "refs/heads/smoke-test"],
