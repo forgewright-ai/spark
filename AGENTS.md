@@ -410,6 +410,15 @@ rule on them. Their score prints on a line of its own, and `selftest`
 fails when one is reworded, added or dropped. The selftest runs in
 smoke.
 
+## Skills
+
+Three project skills under `.claude/skills/` run the recurring
+procedures the way `docs/REFERENCE.md` says, so nobody retypes them.
+`/spark-land` lands HEAD on main through `tests/land.sh`, in a forked
+context. `/spark-release vX.Y` is the Releasing steps, and only a
+person runs it. `/spark-add-check-row NAME` is the four obligations for
+a row, the fixture and the selftest proof.
+
 ## Contracts
 
 The interfaces between parts live in `docs/REFERENCE.md`,

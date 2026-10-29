@@ -6,6 +6,11 @@
   its root. OpenSSL 3 added them by itself and OpenSSL 4 does not, and a
   python 3.13 client refused the chain without the authority key
   identifier. The test fixture's pair carries them too (#158).
+- Three project skills under `.claude/skills/`: `spark-land` runs
+  `tests/land.sh` in a forked context, so the gate's minutes of output
+  stay out of the session; `spark-release` is the Releasing steps, run
+  by a person alone; `spark-add-check-row` is the four obligations for
+  a row, with the fixture and the selftest proof (#148).
 - The full reference moves to `docs/REFERENCE.md`. `CLAUDE.md`, what a
   Claude session loads, is a short file now: it imports `AGENTS.md` and
   names the reference's sections by topic. A session starts with about

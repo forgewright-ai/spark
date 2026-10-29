@@ -885,6 +885,17 @@ def tests_brief():
             check("## The patch lane" in read("AGENTS.md"), "AGENTS.md has the section CLAUDE.md names, %s" % name)
             continue
         check(name in sections, "docs/REFERENCE.md has the section CLAUDE.md names, %s" % name)
+    # the project skills: a directory with a SKILL.md each, named after
+    # its directory, with a description, and named in the Layout
+    layout = re.search(r"## Layout\n\n```\n(.*?)\n```", ref, re.S)
+    layout = layout.group(1) if layout else ""
+    skills = sorted(os.listdir(os.path.join(ROOT, ".claude", "skills")))
+    check(skills == ["spark-add-check-row", "spark-land", "spark-release"], ".claude/skills/ holds the three skills (%s)" % ", ".join(skills))
+    for name in skills:
+        text = read(os.path.join(".claude", "skills", name, "SKILL.md"))
+        check(re.search(r"^name: %s$" % re.escape(name), text, re.M) is not None, "skill %s: name is its directory" % name)
+        check(re.search(r"^description: \S", text, re.M) is not None, "skill %s: has a description" % name)
+        check(name in layout and name in read("AGENTS.md"), "skill %s: the Layout and AGENTS.md name it" % name)
 
 
 def main():

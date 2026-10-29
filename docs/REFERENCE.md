@@ -549,8 +549,14 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 tools installed (shellcheck, zsh, bwrap, ssh-keygen,
                 mandoc) and a user, gate, for the full gate to run as: the
                 session is root, and the knowledge index never builds as
-                root. One line names that command, or what is missing; the
-                rest of .claude/ is local state, ignored
+                root. One line names that command, or what is missing.
+                skills/ holds the project skills, a directory with a
+                SKILL.md each: spark-land (tests/land.sh in a forked
+                context, the gate's output out of the session), spark-release
+                (the Releasing steps, run by a person alone) and
+                spark-add-check-row (the four obligations for a row, the
+                fixture and the selftest proof). The rest of .claude/ is
+                local state, ignored
 .github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
                 request, by hand, never a tag; lint runs first, alone
                 (tests/gate.sh full lint and zizmor over the workflows), and
