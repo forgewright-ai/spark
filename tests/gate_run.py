@@ -9,12 +9,14 @@ tests/gate.sh full writes QUEUE: one suite a line, `label<TAB>command`,
 the command one argv in shell quotes (its `run` lines, collected). The
 suites run SPARK_GATE_JOBS at a time, the CPU count by default: their
 ports come from bind(0), and most of their time is waiting, so they
-overlap. The longest go first, by the seconds each took
-last time (~/.cache/spark/gate-times, a label and its seconds a line,
-outside the tree); a suite never timed goes before them all. Each suite's
-output is printed whole under its `== label` line when it ends, so no two
-logs interleave. With SPARK_GATE_FAIL_FAST set, no suite starts after one
-has failed. Python 3.9, the standard library alone.
+overlap. The longest go first, by the seconds each took last time
+(~/.cache/spark/gate-times, a label and its seconds a line, outside the
+tree), else by tests/gate.weights, the seconds measured once and shipped,
+so a CI runner with no ledger starts them in a good order too; a suite
+in neither goes before them all. Each suite's output is printed whole
+under its `== label` line when it ends, so no two logs interleave. With
+SPARK_GATE_FAIL_FAST set, no suite starts after one has failed. Python
+3.9, the standard library alone.
 """
 import concurrent.futures
 import os
@@ -27,6 +29,7 @@ import time
 
 TIMES = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
                      "spark", "gate-times")
+WEIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gate.weights")
 
 
 def jobs():
@@ -42,6 +45,8 @@ def load_times(path):
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
+                if line.startswith("#"):
+                    continue
                 label, _, secs = line.rstrip("\n").rpartition("\t")
                 try:
                     times[label] = float(secs)
@@ -133,6 +138,8 @@ def selftest():
         save_times({"smoke.py": 345.04, "widget_pty shell": 151.0}, p)
         check(load_times(p) == {"smoke.py": 345.0, "widget_pty shell": 151.0}, "the ledger keeps a label with spaces")
     check(load_times("/nonexistent/gate-times") == {}, "no ledger yet is an empty one")
+    shipped = load_times(WEIGHTS)
+    check(len(shipped) > 20 and shipped.get("smoke line", 0) > 30, "the shipped weights read, comments skipped (%d rows)" % len(shipped))
     print("gate_run selftest: %s" % ("all ok" if not bad else "%d failed" % len(bad)))
     return 1 if bad else 0
 
@@ -148,10 +155,13 @@ def main(argv):
         for line in f:
             label, _, cmd = line.rstrip("\n").partition("\t")
             suites.append((label, shlex.split(cmd)))
-    times, n = load_times(TIMES), jobs()
+    ledger, n = load_times(TIMES), jobs()
+    times = load_times(WEIGHTS)
+    times.update(ledger)
     print("gate: %d suites, %d at a time" % (len(suites), n), flush=True)
     failed, wall = run_all(suites, n, times, fail_fast=bool(os.environ.get("SPARK_GATE_FAIL_FAST")))
-    save_times(times, TIMES)
+    ledger.update((label, times[label]) for label, _ in suites if label in times)
+    save_times(ledger, TIMES)
     with open(argv[2], "w", encoding="utf-8") as f:
         f.writelines(label + "\n" for label in failed)
     print("gate: %d suites in %.0f s, %d at a time" % (len(suites), wall, n))

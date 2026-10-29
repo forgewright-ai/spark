@@ -91,9 +91,9 @@ python3 tests/widget_pty.py pager
 suites side by side. `tests/gate_run.py` runs them the CPU count at a
 time, the longest first by the last run's times. It takes about 7
 minutes on 4 cores, and nothing asks for it.
-`SPARK_GATE_JOBS=1` runs them one at a time, as CI does, about 18
-minutes. `SPARK_GATE_PYTHON` names the python, and CI on macOS sets it
-to Apple's.
+`SPARK_GATE_JOBS=1` runs them one at a time, about 18 minutes. CI runs
+them side by side too, in its three groups. `SPARK_GATE_PYTHON` names
+the python, and CI on macOS sets it to Apple's.
 
 `sh tests/land.sh` lands a commit. It pushes the commit to a `try/`
 branch and waits for CI. On green it moves `main` forward to the same

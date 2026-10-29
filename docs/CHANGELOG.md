@@ -14,9 +14,9 @@
   log printed whole when its suite ends. `smoke.py` runs in four parts
   (`--part line|read|machine|tree`) and `widget_pty.py` in three
   (`session`, `living`, `rows`), suites of their own. 18 minutes in a
-  row on 4 cores, about 4 on a 10-core Mac. CI keeps one suite at a
-  time, runs the selftest and chaos first, and stops at the first
-  suite that fails (#135, #136, #137, #138, #139).
+  row on 4 cores, about 4 on a 10-core Mac. CI runs them side by side
+  too, the selftest and chaos first, and stops at the first suite that
+  fails (#135, #136, #137, #138, #139, #140).
 - The streamed line's test waits on a latch, not a clock: the stub
   held its hint for 1.5 s, and a driver that stalled longer reordered
   them (#137). A chat step that waits for a prompt that never comes

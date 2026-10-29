@@ -485,12 +485,16 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 the hooks and ci.yml name no test themselves; the selftest
                 and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
                 stops full at the first suite that fails; full runs the
-                suites side by side through gate_run.py unless
-                SPARK_GATE_JOBS=1, ci.yml's too)
+                suites side by side through gate_run.py, in CI too, and
+                SPARK_GATE_JOBS=1 one at a time)
                 gate_run.py (full's runner: the suites SPARK_GATE_JOBS at
                 a time, the CPU count by default, the longest first by
-                ~/.cache/spark/gate-times, each log printed whole when its
-                suite ends; --selftest on stand-ins)
+                ~/.cache/spark/gate-times, else by gate.weights, the
+                seconds measured once and shipped for a machine with no
+                ledger; each log printed whole when its suite ends;
+                --selftest on stand-ins)
+                gate.weights (one row a suite of gate.sh, label and seconds;
+                docs_test holds the two lists equal)
                 land.sh (lands a commit: a try/ branch, CI, then main moved
                 forward to the same commit; `--passed SHA` is the one check
                 "ci.yml passed", asked by the pre-push hook and release.yml)

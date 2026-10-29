@@ -166,6 +166,12 @@ def tests_gated():
         named = sorted(set(re.findall(r"tests/(\w+\.(?:py|sh))\b", read(f))) - {"gate.sh", "land.sh"})
         check(not named, "%s names no test file but tests/gate.sh and tests/land.sh%s"
               % (f, "" if not named else " (found %s)" % ", ".join(named)))
+    # gate.weights names every suite gate.sh runs, by its label, and no other
+    code = "\n".join(ln for ln in read("tests/gate.sh").splitlines() if not ln.lstrip().startswith("#"))
+    labels = set(m.group(1) or m.group(2) for m in re.finditer(r'(?:^|[\s)])run\s+(?:"([^"]+)"|(\S+))\s', code, re.M))
+    weighed = set(ln.split("\t")[0] for ln in read("tests/gate.weights").splitlines() if ln and not ln.startswith("#"))
+    check(labels == weighed, "tests/gate.weights has one row per suite of tests/gate.sh%s"
+          % ("" if labels == weighed else " (gate only: %s; weights only: %s)" % (sorted(labels - weighed), sorted(weighed - labels))))
     check("tests/gate.sh\" fast" in read(".githooks/pre-commit"), ".githooks/pre-commit runs tests/gate.sh fast")
     check("tests/gate.sh" not in read(".githooks/pre-push") and "tests/land.sh\" --passed" in read(".githooks/pre-push"),
           ".githooks/pre-push runs no test: it asks tests/land.sh --passed")

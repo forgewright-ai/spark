@@ -26,9 +26,9 @@ bad() { printf 'gate: %s\n' "$*"; fail=1; failed="$failed
 
 # run LABEL COMMAND...: one suite. fast keeps it quiet, full shows it under
 # a `== LABEL` line. Every tests/ file the gate runs is on a `run` line.
-# full runs them side by side through tests/gate_run.py, unless
-# SPARK_GATE_JOBS=1 (ci.yml: a job is one group), which runs them here, one
-# at a time. SPARK_GATE_FAIL_FAST=1 (ci.yml) stops full at the first suite
+# full runs them side by side through tests/gate_run.py, in CI too;
+# SPARK_GATE_JOBS=1 runs them here, one at a time, in order.
+# SPARK_GATE_FAIL_FAST=1 (ci.yml) stops full at the first suite
 # that fails, so a red run says so in minutes; at a desk every suite runs
 queue=
 run() {

@@ -66,7 +66,6 @@ jobs:
           GROUP: ${{ matrix.group }}
           SPARK_PRIVACY_TERMS_SECRET: ${{ matrix.group == 'rest' && secrets.SPARK_PRIVACY_TERMS || '' }}
           SPARK_GATE_FAIL_FAST: 1
-          SPARK_GATE_JOBS: 1
         run: sh tests/gate.sh full "$GROUP"
       - name: real bootstrap on the runner
         if: matrix.group == 'rest'
@@ -336,7 +335,6 @@ jobs:
           GROUP: ${{ matrix.group }}
           SPARK_GATE_PYTHON: /usr/bin/python3
           SPARK_GATE_FAIL_FAST: 1
-          SPARK_GATE_JOBS: 1
         run: sh tests/gate.sh full "$GROUP"
       - name: real core bootstrap on the runner
         # the AI layer as a Mac user gets it without a model: the token,
