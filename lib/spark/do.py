@@ -193,7 +193,7 @@ REFUSED_OPAQUE = ("`%s` -- %s: what it does is not on the line -- refused over -
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
 CAPPED = "stopped at %d steps -- spark do again to go on" % DO_MAX_STEPS
 UNCHECKED = "unchecked: no step printed %s -- trust the outputs above"
-OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--tools", "--review", "--accept", "--discard")
+OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--review", "--accept", "--discard")
 # a checksum tool's line -- `DIGEST  NAME`, or `DIGEST *NAME` in binary
 # mode -- keeps its digest: a hash a step was asked to print is not a
 # secret, and 64 hex digits read as "a long base64 run". do's one
@@ -276,8 +276,6 @@ DO_USAGE = """%s do -- a task, step by step
   spark do --discard ID        drop a waiting run
   spark do --porcelain [--sandbox] <words>
                                JSON lines, for a program
-  spark do --tools             one task decision from JSON on stdin;
-                               the caller confirms and executes tools
   spark do -- <words>          a goal that starts with - or is help
 
   At each step: Enter runs it, e edits it, s skips it, q quits, and r
@@ -1822,9 +1820,6 @@ def _usage(rc):
 
 
 def cmd_do(args):
-    if args == ["--tools"]:
-        from . import tool_run
-        return tool_run.main()
     if not args or args[0] in ("-h", "--help", "help"):
         return _usage(0 if args else 2)
     flags, words = _options(args)
@@ -1837,8 +1832,6 @@ def cmd_do(args):
         return face.refuse("no word %s; spark do -h lists them" % bad)
     if "-h" in flags or "--help" in flags:
         return _usage(0)
-    if "--tools" in flags:
-        return face.refuse("--tools takes one JSON request on stdin and no other options or words")
     verbs = [f for f in flags if f in ("--review", "--accept", "--discard")]
     if verbs and porcelain:
         return face.refuse("%s is not a run -- use it without --porcelain" % verbs[0])

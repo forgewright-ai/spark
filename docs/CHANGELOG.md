@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.107
+
+- `spark steps` serves a desktop's whole tree: 128 tools and 32 kB of
+  tool lines a request (64 and 16 kB before). The tool list stands
+  first in the request and the words last, so the served prompt's
+  cached prefix holds the tools and a request pays its own words: on
+  the box a repeat with other words reused 194 tokens before, the
+  system message alone, and the tool list of about 1,300 tokens was
+  read again every time.
+- `spark do --tools`, the desktop task adapter of v1.102, retires. Its
+  one client, the desktop's Home, asks `spark steps` one bounded
+  question instead: these words, this tool list, which steps. The
+  twelve-turn continuation, the inspect step and the finish rule go
+  with it, and so do its help row, its completion word, its test and
+  its pages. `spark mcp`, `spark steps` and the MCP client's gates stay
+  as they are.
+
 ## v1.106
 
 - Pi leaves spark. v1.104 moved Home tasks, `spark do` and `spark chat`

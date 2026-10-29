@@ -24,9 +24,9 @@ from . import MARK, config, mcp, persona, say, session, wire
 from . import text as textmod
 
 STEPS_MAX = 8               # steps one reply may hold
-STEPS_TOOLS_MAX = 64        # tools one request may offer
+STEPS_TOOLS_MAX = 128       # tools one request may offer: a desktop's whole tree
 STEPS_IN_MAX = 262144       # bytes of stdin read, at most
-STEPS_BRIEF_MAX = 16384     # characters of tool lines a request carries, or it refuses
+STEPS_BRIEF_MAX = 32768     # characters of tool lines a request carries, or it refuses
 STEPS_WORDS_MAX = 2000      # characters of words and --about together
 STEPS_TOKENS = 400          # the reply's cap
 STEPS_TIMEOUT = 60
@@ -192,7 +192,10 @@ def cmd_steps(args):
     t0 = time.time()
     try:
         s = session.Session(cfg, "steps", shell, "", role="spark")
-        msgs = s._messages("Do this: " + text, context)
+        # the tools first and byte for byte the same from one call to the
+        # next, the words last: the served prompt's cached prefix then
+        # holds the tool list, and a request pays its own words alone
+        msgs = s._messages("", context + "\n\nDo this: " + text)
         reply, s.timings = s._retry_fresh(lambda: wire.chat_grammar(
             cfg, s.url, msgs, grammar, max_tokens=STEPS_TOKENS, forge=s.forge, model=s.role,
             timeout=STEPS_TIMEOUT))

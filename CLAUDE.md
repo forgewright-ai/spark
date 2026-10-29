@@ -2369,94 +2369,7 @@ and may change freely.
     The exit code is the `end` event's rc. Its first app is spark-acp
     (README.md, Apps), an Agent Client Protocol agent: a step is a
     Run or a Skip, a review one Accept or Discard.
-16. `spark do --tools` is the desktop task adapter, protocol version 1
-    (`lib/spark/tool_run.py`). It reads one JSON object on stdin, at
-    most 256 kB, and returns one JSON decision on stdout. It never
-    starts a tool provider or executes a tool. The caller owns
-    execution, consent, current capability discovery and resource reads.
-    `do._drive` continues to serve shell tasks; this adapter reuses do's
-    context budget and secret holding, and MCP/steps argument validation
-    and constrained generation. There is no second desktop executor in
-    spark.
-
-    Model output is exactly one typed decision in steps, with the boolean
-    complete_after. There is no separate free-text answer slot; answers
-    and questions use their typed controls. Inspect offers only current
-    provider ids, and finish is offered only after successful evidence.
-    Stable capability descriptions precede changing goal and context data
-    so the configured server can reuse its prompt prefix.
-
-    Start: `{version:1, goal, tools, context}`. Tools are an MCP
-    tools/list array with host-qualified unique names. Context includes
-    the caller's view, selection, local clock, visible state and
-    available provider ids. Offer only relevant schemas.
-    `spark_task_inspect` requests another provider by id; its
-    observation supplies freshly read state. The host may then offer
-    that provider's tools. File reads remain separately authorized;
-    discovery never grants access to arbitrary files.
-
-    Continue: the same envelope, `state` from the preceding response,
-    and either `observation:{id,status,result}` or `answer` for a
-    question. Status is `ok`, `error`, `unknown`, `cancelled` or
-    `needs_input`. Result
-    retains the MCP result object, including structuredContent. The id
-    must match the pending action. An unknown outcome or cancellation
-    stops before another inference request. An exact action already
-    attempted is never proposed again in that task. Observed failure can
-    lead to inspection or a changed action; it cannot be silently
-    converted into success.
-
-    `needs_input` is a host observation from read-only preparation, before
-    execution. Its result holds question (1..500 characters). Spark
-    returns an ask continuation without inference; this is no execution
-    evidence or attempted write. A host may replace pending arguments
-    with a provider's prepared arguments only after schema validation and
-    before showing them for approval. It must execute those reviewed
-    arguments, not resolve relative values again after approval.
-
-    A proposed step may set `complete_after:true` in its continuation.
-    When its matching observation succeeds, spark ends with that
-    evidence and no summary or inference: the native receipt is already
-    the answer. Failure still returns to the decision backend; unknown
-    stops. Simple language requests can therefore use one model call;
-    explicit controls use none. A task requiring verification leaves
-    this flag false.
-
-    Responses have version, status and state. A `step` has id and
-    `step:{name,arguments}`; an `inspect` has id and provider; an `ask`
-    has id and question. Terminal statuses are `done`, `answer`,
-    `blocked` and `stopped`, with summary. A done response cites
-    successful observation ids in evidence, and cannot follow a failed
-    observation. This proves evidence exists, not that a model
-    interpreted the goal correctly. Hosts must distinguish provider
-    receipts, verified state and model prose.
-
-    The continuation is host-owned in-memory state, not an authorization
-    token. Never accept it from an untrusted document. Drop it on
-    completion, cancellation or window close. It holds at most 12
-    decisions and 64 kB; context holds at most 24 kB. Oversized input or
-    unsupported capability schemas are refused explicitly. No context is
-    silently truncated by spark. No desktop thread is persisted;
-    telemetry holds counts and timing. Secrets and credential fields are
-    held before inference and continuation.
-
-    The configured model connection is the first decision backend. A
-    client can use spark on another machine; it needs no local model.
-    The client runs the adapter and retains its continuation, while the
-    configured server supplies inference. The pure
-    `advance(request, decide)` boundary also accepts a decision backend
-    that supplies the same typed choice. No classifier is installed or
-    invoked ahead of every request. A new backend must earn its place
-    with outcome and latency measurements on held-out tasks. Explicit
-    native actions bypass inference in the host.
-
-    Tool descriptions and parameter semantics are included as untrusted
-    data in this adapter, bounded by the model context. They never set
-    authority or override the goal. This is an explicit exception to the
-    older compact prompt/steps brief below, whose compatibility contract
-    is unchanged.
-
-    `spark mcp` and `spark steps` are spark as an MCP host, stdio only
+16. `spark mcp` and `spark steps` are spark as an MCP host, stdio only
     (`lib/spark/mcp.py`, `lib/spark/steps.py`). A server is a named line
     in `~/.config/spark/mcp.env`, read by contract 3's reader:
     `MCP_SERVER_<NAME>="<absolute path> [words]"`. A server not on the
@@ -2574,9 +2487,13 @@ and may change freely.
     The request carries each tool as one line (`steps.tool_brief`). That
     is its name, then its arguments as `KEY=KIND`, the optional ones in
     brackets with a range where the schema has one, then its title. The
-    lines are `STEPS_BRIEF_MAX` (16 kB) at most, else exit 2, and
-    `STEPS_TOOLS_MAX` (64) tools. The words and `--about` are 2000
-    characters at most. The reply is held by `wire.tools_gbnf`:
+    lines are `STEPS_BRIEF_MAX` (32 kB) at most, else exit 2, and
+    `STEPS_TOOLS_MAX` (128) tools, a desktop's whole tree. The tool
+    lines stand first in the request and the words last. A list that
+    is the same bytes from one call to the next stays in the served
+    prompt's cached prefix, so a request pays its own words. The words
+    and `--about` are 2000 characters at most. The reply is held by
+    `wire.tools_gbnf`:
     `{"answer": string, "steps": [...]}`, 8 steps at most, each one of
     the tools, its name a literal and its arguments typed by its schema.
     An optional argument may be left out, and a credential is never in

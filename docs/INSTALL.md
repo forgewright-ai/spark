@@ -1,11 +1,5 @@
 # Installing spark
 
-Desktop clients using `spark do --tools` need a spark build that
-includes the tool task adapter. It adds no dependency or background
-service. The adapter uses the existing model connection, including
-`spark client URL`; a client needs no local model. Use `spark do -h` to
-check support; `spark check` checks the adapter with MCP.
-
 Start with the signed installer on a computer you already use. It does
 not reinstall the OS or erase a disk. Section 2 has the steps. Section
 1 is optional OS provisioning for a bare machine; its disk choices can

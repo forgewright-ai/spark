@@ -571,45 +571,6 @@ try:
 except ValueError:
     check("grammar: a required argument of a shape a grammar cannot hold refuses the tool", True)
 
-# The tool adapter uses the real CLI, Session and grammar wire. The engine
-# is scripted; these checks establish integration, not language accuracy.
-task_request = {"version": 1, "goal": "set volume to 30", "tools": json.loads(TOOLS)["tools"][:1],
-                "context": {"view": "Sound", "providers": [{"id": 0}]}}
-REPLY.clear()
-REPLY.update({"answer": "", "steps": [{"name": "out_level", "arguments": {"level": 30}}]})
-rc, out, err = spark("do", "--tools", stdin=json.dumps(task_request), env=ENV)
-try:
-    decision = json.loads(out)
-except ValueError:
-    decision = {}
-check("tool task: real CLI proposes a typed operation", rc == 0 and decision.get("status") == "step", (rc, out, err))
-check("tool task: capability descriptions reach the decision model as data",
-      "SECRET DESCRIPTION" in json.dumps(SEEN.get("body", {}).get("messages", [])))
-if decision.get("status") == "step":
-    task_request["state"] = decision["state"]
-    task_request["observation"] = {"id": decision["id"], "status": "ok",
-                                   "result": {"isError": False, "structuredContent": {"actual_level": 27}}}
-    REPLY.clear()
-    REPLY.update({"answer": "", "steps": [{"name": "spark_task_finish", "arguments": {"summary": "volume is 27", "evidence": [decision["id"]]}}]})
-    rc, out, err = spark("do", "--tools", stdin=json.dumps(task_request), env=ENV)
-    got = json.loads(out)
-    check("tool task: the result returns to the same goal before completion", rc == 0 and got.get("status") == "done"
-          and "actual_level" in json.dumps(SEEN.get("body", {}).get("messages", [])), (out, err))
-    check("tool task: completion policy is constrained by the grammar", "complete_after" in SEEN.get("body", {}).get("grammar", ""))
-    task_grammar = SEEN.get("body", {}).get("grammar", "")
-    check("tool task: grammar requires one decision without an unused prose field",
-          'steps ::= "[" ws step ws "]"' in task_grammar
-          and '\\"answer\\"' not in task_grammar.splitlines()[0])
-    previous = dict(SEEN.get("body", {}))
-    task_request["observation"]["status"] = "unknown"
-    rc, out, err = spark("do", "--tools", stdin=json.dumps(task_request), env=ENV)
-    check("tool task: unknown outcome stops without another model call", rc == 0 and json.loads(out).get("status") == "stopped"
-          and SEEN.get("body") == previous, (out, err))
-    task_request["observation"].update(status="needs_input", result={"question": "Which future time should I use?"})
-    rc, out, err = spark("do", "--tools", stdin=json.dumps(task_request), env=ENV)
-    check("tool task: native preparation asks without calling the model", rc == 0 and json.loads(out).get("status") == "ask"
-          and SEEN.get("body") == previous, (out, err))
-
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILED:
     print("%d failed" % FAILED)

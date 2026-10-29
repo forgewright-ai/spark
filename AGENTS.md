@@ -69,7 +69,6 @@ python3 tests/sandbox_test.py
 python3 tests/knowledge_test.py
 python3 tests/qr_test.py
 python3 tests/mcp_test.py
-python3 tests/tool_run_test.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
@@ -393,11 +392,6 @@ fails when one is reworded, added or dropped. The selftest runs in
 smoke.
 
 ## Contracts
-
-The desktop adapter of `spark do --tools` is part of contract 16. It
-owns task continuation; a host owns tool authorization and execution.
-Tests with scripted decisions prove control flow, never live model
-quality.
 
 The interfaces between parts live in `CLAUDE.md`, "Contracts": `spark
 line`, `spark check`, the config file shape, the `FORGE` HTTP API and

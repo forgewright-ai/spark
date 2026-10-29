@@ -65,7 +65,6 @@ TASKS
   spark do --accept ID            apply a waiting run without showing it
   spark do --discard ID           drop a waiting run
   spark do --porcelain <words>    JSON lines, for a program
-  spark do --tools                JSON task decision; the host runs tools
   spark do -- <words>             a goal that starts with -
 
 READING AND WRITING

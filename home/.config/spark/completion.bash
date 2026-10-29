@@ -67,7 +67,7 @@ _spark_complete() {
         serve)   words="on off boot share https own status --login --audit" ;;
         chat)    words="--thread" ;;
         read)    words="--part --name --ledger --warm" ;;
-        do)      words="--sandbox --detach --porcelain --tools --review --accept --discard" ;;
+        do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;
         ver)     words="--credits --sbom" ;;
