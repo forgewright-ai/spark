@@ -4,12 +4,13 @@
 #
 #   sh tests/gate.sh fast           what a commit runs: seconds
 #   sh tests/gate.sh full           every group below, in order
-#   sh tests/gate.sh full GROUP     smoke | serve | rest (one CI job each)
+#   sh tests/gate.sh full GROUP     lint | smoke | serve | rest (one CI job each)
 #
 # fast: the privacy gate over the staged change, syntax, the cheatsheet's
 # 80 columns, ASCII docs, shellcheck, docs_test, patch_test.
-# full: fast's checks over the tree, the whole-tree privacy gate, and every
-# suite for this OS. A tool that is missing on this machine prints a NOTICE
+# full: lint is fast's checks over the tree, the whole-tree privacy gate
+# and the tree's own tests, in seconds, the job every other CI job waits
+# for; smoke, serve and rest are the suites for this OS. A tool that is missing on this machine prints a NOTICE
 # and is skipped; it never silently passes. The privacy gate has no skip
 # path. SPARK_GATE_PYTHON names the python (ci.yml: Apple's on macOS).
 set -eu
@@ -238,10 +239,22 @@ group_serve() {
     run serve_smoke.py "$PY" tests/serve_smoke.py
 }
 
-group_rest() {
+group_lint() {
     printf '== static\n'
     static
     tree_privacy
+    run docs_test.py "$PY" tests/docs_test.py
+    run patch_test.py "$PY" tests/patch_test.py
+    # the patch lane's fence proven on a scratch repository; the runner on stand-ins
+    run "patch_test selftest" "$PY" tests/patch_test.py --selftest
+    run "gate_run selftest" "$PY" tests/gate_run.py --selftest
+}
+
+group_rest() {
+    # the compile under this OS's python again (lint ran it under Linux's):
+    # macOS runs the gate under Apple's 3.9, the oldest spark supports
+    printf '== syntax\n'
+    syntax
     # the two that fail late go first: a selftest regression once showed
     # only after 10 minutes of the suites below
     run selftest "$PY" bin/spark check --selftest
@@ -268,12 +281,7 @@ group_rest() {
     # spark's own code judged on real replies to real inputs, no model
     run use_cases.py "$PY" tests/use_cases.py replay
     run voice_test.py "$PY" tests/voice_test.py
-    run docs_test.py "$PY" tests/docs_test.py
     run policy_test.py "$PY" tests/policy_test.py
-    # the patch lane's fence: the tree, then the fence proven on a scratch repository
-    run patch_test.py "$PY" tests/patch_test.py
-    run "patch_test selftest" "$PY" tests/patch_test.py --selftest
-    run "gate_run selftest" "$PY" tests/gate_run.py --selftest
     # the widgets at a pty: zsh on a Mac, bash on Linux; the pager on both
     case $os in
         Darwin) run "widget_pty session" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh --part session
@@ -290,7 +298,7 @@ group_rest() {
 
 case $mode in
     fast)
-        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2; }
+        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2; }
         static
         run docs_test.py "$PY" tests/docs_test.py
         run patch_test.py "$PY" tests/patch_test.py
@@ -303,11 +311,12 @@ case $mode in
         "$PY" --version
         [ "${SPARK_GATE_JOBS:-}" = 1 ] || queue=$(mktemp)
         case $group in
-            '')    group_smoke; group_serve; group_rest ;;
+            '')    group_lint; group_smoke; group_serve; group_rest ;;
+            lint)  group_lint ;;
             smoke) group_smoke ;;
             serve) group_serve ;;
             rest)  group_rest ;;
-            *)     echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2 ;;
+            *)     echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2 ;;
         esac
         if [ -n "$queue" ]; then
             failed_to=$(mktemp)
@@ -318,7 +327,7 @@ case $mode in
         printf '== end\n'
         ;;
     *)
-        echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2 ;;
+        echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2 ;;
 esac
 
 if [ "$fail" -ne 0 ]; then

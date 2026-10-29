@@ -481,7 +481,8 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)
                 gate.sh (the one test list: `fast` is what a commit runs,
-                `full [smoke|serve|rest]` what CI runs, one job per group;
+                `full [lint|smoke|serve|rest]` what CI runs, one job per
+                group, lint first and alone;
                 the hooks and ci.yml name no test themselves; the selftest
                 and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
                 stops full at the first suite that fails; full runs the
@@ -550,13 +551,14 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 root. One line names that command, or what is missing; the
                 rest of .claude/ is local state, ignored
 .github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
-                request, by hand, never a tag; linux and macos run
-                tests/gate.sh full, one job per group (smoke, serve, rest),
-                then a real bootstrap in the rest job; debian, arch, void,
-                fedora and opensuse containers run the one-liner as a new
-                user (void under a runsvdir started for the job: the
-                supervised spark-check is proven there); workflows runs
-                zizmor over the workflows
+                request, by hand, never a tag; lint runs first, alone
+                (tests/gate.sh full lint and zizmor over the workflows), and
+                every other job needs it; linux and macos run tests/gate.sh
+                full, one job per group of suites (smoke, serve, rest), then
+                a real bootstrap in the rest job; debian, arch, void, fedora
+                and opensuse containers run the one-liner as a new user
+                (void under a runsvdir started for the job: the supervised
+                spark-check is proven there)
                 workflows/release.yml: the GitHub Release from the CHANGELOG
                 section, on a signed v* tag whose commit ci.yml passed
                 workflows/codeql.yml: GitHub's static analysis over the python

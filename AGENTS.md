@@ -44,9 +44,17 @@ python3 tests/docs_test.py
 python3 tests/patch_test.py
 ```
 
-CI runs the full gate once per commit, in 3 groups side by side:
+CI runs the full gate once per commit: the lint group first, on one
+runner, then the 3 groups of suites side by side on each OS:
 
 ```sh
+sh tests/gate.sh full lint
+# every fast check over the tree, and the privacy gate over the whole tree
+python3 tests/docs_test.py
+python3 tests/patch_test.py
+python3 tests/patch_test.py --selftest
+python3 tests/gate_run.py --selftest
+
 sh tests/gate.sh full smoke
 python3 tests/smoke.py --part line      # bare, the four parts in a row
 python3 tests/smoke.py --part read
@@ -57,7 +65,7 @@ sh tests/gate.sh full serve
 python3 tests/serve_smoke.py
 
 sh tests/gate.sh full rest
-# every fast check, and the privacy gate over the whole tree
+# the compile under this OS's python, then the suites
 python3 bin/spark check --selftest
 python3 bin/spark check --chaos
 sh tests/install_test.sh
@@ -77,9 +85,6 @@ python3 tests/mcp_test.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
-python3 tests/patch_test.py
-python3 tests/patch_test.py --selftest
-python3 tests/gate_run.py --selftest
 python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part session   # bash on Linux
 python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part living
 python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh --part rows
@@ -87,7 +92,7 @@ python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 python3 tests/widget_pty.py pager
 ```
 
-`sh tests/gate.sh full` runs the 3 groups on your own machine, their
+`sh tests/gate.sh full` runs the 4 groups on your own machine, their
 suites side by side. `tests/gate_run.py` runs them the CPU count at a
 time, the longest first by the last run's times. It takes about 7
 minutes on 4 cores, and nothing asks for it.
@@ -133,15 +138,16 @@ with a notice when absent.
 CI is where the full gate runs, `.github/workflows/`. `ci.yml` runs on
 a push to `main` or to a `try/` branch, on a pull request and by hand.
 A tag push runs `release.yml` alone. A newer push cancels an older run
-on a `try/` branch or a pull request, never on `main`. The `linux` and
-`macos` jobs run `tests/gate.sh full`, one job per group. The `rest`
-job then runs a real bootstrap on the runner. The `debian`, `arch`,
-`void`, `fedora` and `opensuse` jobs run the one-liner as a new user
-in a container. The `void` job starts a runsvdir first, so it
-proves `spark-check` running supervised. The `workflows` job runs
-zizmor over the workflows, medium and above failing. The `green`
-job needs every other job: the one name a ruleset on `main` can
-require. `codeql.yml` is
+on a `try/` branch or a pull request, never on `main`. The `lint` job
+runs first: `tests/gate.sh full lint` and zizmor over the workflows,
+medium and above failing, in about a minute, and every other job
+needs it. The `linux` and `macos` jobs run `tests/gate.sh full`, one
+job per group of suites. The `rest` job then runs a real bootstrap on
+the runner. The `debian`, `arch`, `void`, `fedora` and `opensuse` jobs
+run the one-liner as a new user in a container. The `void` job starts
+a runsvdir first, so it proves `spark-check` running supervised. The
+`green` job needs every other job: the one name a ruleset on `main`
+can require. `codeql.yml` is
 GitHub's static analysis over the python and the javascript.
 `advisories.yml` opens one issue when llama.cpp publishes a security
 advisory after the engine pin's date, and one when sherpa-onnx does

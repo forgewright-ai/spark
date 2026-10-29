@@ -20,7 +20,8 @@
 # packages through dnf, "is it installed" asked of rpm by provider.
 # opensuse: the fifth family, the same new user in a Tumbleweed container
 # -- packages through zypper, the same rpm underneath.
-# workflows: zizmor, a pinned version in a venv, over these workflows
+# lint, first: the cheap checks and zizmor over these workflows; every
+# other job needs it
 # themselves -- an unpinned action, a template expanded into a shell, a
 # permission nobody uses; medium and above fails.
 # No job downloads a model or the engine: SITE_AI_MODEL=none everywhere,
@@ -41,7 +42,47 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  lint:
+    # the cheap checks first, on one runner: the privacy gate over the
+    # whole tree, syntax, ASCII, shellcheck, docs_test, patch_test and
+    # zizmor over these workflows. Every other job needs it, so a lint
+    # failure costs this job's minute, not a run on every slot. The
+    # personal word list is a repository secret (one word per line); a
+    # hit names the file, never the line -- this log is public. A fork
+    # without it gets a NOTICE and the generic patterns only.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0   # patch_test reads the tags
+          persist-credentials: false
+      - name: shellcheck
+        run: sudo apt-get install -y -qq shellcheck >/dev/null
+      - name: the gate, lint
+        env:
+          SPARK_PRIVACY_TERMS_SECRET: ${{ secrets.SPARK_PRIVACY_TERMS }}
+          SPARK_GATE_FAIL_FAST: 1
+        run: sh tests/gate.sh full lint
+      - name: zizmor over .github/workflows
+        # the workflows are code too, and the gate does not read YAML:
+        # zizmor (pinned, in a venv of its own) reads every file under
+        # .github/workflows for an action pinned to a tag instead of a
+        # sha, a `${{ }}` expanded inside a run script, a job holding more
+        # permission than it uses, a checkout that leaves the token on
+        # disk. A finding this tree means is ignored inline, with its
+        # reason on the line.
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          # the wheel and the sdist by their sha256: a replaced upload of the
+          # same version would not install
+          printf '%s\n' "zizmor==1.30.1 --hash=sha256:eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e --hash=sha256:cbb7e5cb2fec471066d5c326bcaa69ed3eefdcf6a76d7ad38335b924acf86c07" > "$RUNNER_TEMP/zizmor.txt"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --require-hashes -r "$RUNNER_TEMP/zizmor.txt"
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --version
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --min-severity medium .github/workflows
+
   linux:
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -53,18 +94,9 @@ jobs:
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
-      - name: shellcheck
-        if: matrix.group == 'rest'
-        run: sudo apt-get install -y -qq shellcheck >/dev/null
       - name: the gate
-        # the personal word list is a repository secret (one word per
-        # line), read by the whole-tree privacy gate in the rest group; a
-        # hit names the file, never the line -- this log is public. A fork
-        # without it gets a NOTICE and the generic patterns only. The
-        # group goes through env, never into the script's text.
         env:
           GROUP: ${{ matrix.group }}
-          SPARK_PRIVACY_TERMS_SECRET: ${{ matrix.group == 'rest' && secrets.SPARK_PRIVACY_TERMS || '' }}
           SPARK_GATE_FAIL_FAST: 1
         run: sh tests/gate.sh full "$GROUP"
       - name: real bootstrap on the runner
@@ -88,6 +120,7 @@ jobs:
     # systemd in a container: the services rows skip, and `spark check`
     # reads `na` for services, as docs/INSTALL.md, section 6 (the container
     # note) promises.
+    needs: lint
     runs-on: ubuntu-latest
     # debian:13 pinned by its multi-arch index digest: a tag can move, a digest
     # is the image. Moved by hand (Docker Hub: the manifest of debian:13)
@@ -139,6 +172,7 @@ jobs:
     # container -- packages through pacman (kbd proves the install path;
     # Arch's base already holds gcc-libs, llama.cpp's OpenMP), the console
     # row unset here and the GRUB row an honest skip without a UKI.
+    needs: lint
     runs-on: ubuntu-latest
     container: archlinux:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Arch there is, and -Syu moves it to today anyway
     timeout-minutes: 20
@@ -178,6 +212,7 @@ jobs:
     # A runsvdir started by root in the container stands in for the booted
     # machine's, so this job proves what debian and arch cannot: bootstrap
     # writes the user's runsvdir service, and spark-check runs supervised.
+    needs: lint
     runs-on: ubuntu-latest
     container: ghcr.io/void-linux/void-glibc-full:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Void there is, and -Su moves it to today anyway
     timeout-minutes: 20
@@ -230,6 +265,7 @@ jobs:
     # the fourth family: the same new user, the same one-liner, in a Fedora
     # container -- packages through dnf, and "is it installed" asked of rpm
     # by provider (libgomp proves the install path when the image lacks it).
+    needs: lint
     runs-on: ubuntu-latest
     # fedora:44 pinned by its multi-arch index digest, as debian:13 is: a
     # versioned release, so a tag can move and a digest is the image. Moved
@@ -276,6 +312,7 @@ jobs:
     # Tumbleweed container -- packages through zypper, and "is it
     # installed" asked of rpm by provider (python3 is python313's
     # capability there, no package of its own).
+    needs: lint
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Tumbleweed there is, and dup moves it to today anyway
     timeout-minutes: 20
@@ -319,6 +356,7 @@ jobs:
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
   macos:
+    needs: lint
     runs-on: macos-latest
     timeout-minutes: 40
     strategy:
@@ -364,35 +402,12 @@ jobs:
           ~/.local/bin/spark check --fresh || true
           # a runner may have no gui launchd domain: the launchd rows skip and services may fail; nothing else may
           ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'
-  workflows:
-    # the workflows are code too, and the gate does not read YAML: zizmor
-    # (pinned, in a venv of its own) reads every file under
-    # .github/workflows for an action pinned to a tag instead of a sha, a
-    # `${{ }}` expanded inside a run script, a job holding more permission
-    # than it uses, a checkout that leaves the token on disk. A finding
-    # this tree means is ignored inline, with its reason on the line.
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
-        with:
-          persist-credentials: false
-      - name: zizmor over .github/workflows
-        run: |
-          python3 -m venv "$RUNNER_TEMP/zizmor"
-          # the wheel and the sdist by their sha256: a replaced upload of the
-          # same version would not install
-          printf '%s\n' "zizmor==1.30.1 --hash=sha256:eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e --hash=sha256:cbb7e5cb2fec471066d5c326bcaa69ed3eefdcf6a76d7ad38335b924acf86c07" > "$RUNNER_TEMP/zizmor.txt"
-          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --require-hashes -r "$RUNNER_TEMP/zizmor.txt"
-          "$RUNNER_TEMP/zizmor/bin/zizmor" --version
-          "$RUNNER_TEMP/zizmor/bin/zizmor" --min-severity medium .github/workflows
-
   green:
     # the one name a ruleset on main can require: it needs every job above
     # and fails when any of them failed, was cancelled or was skipped.
     # tests/land.sh still asks the run as a whole; this job is for GitHub's
     # own gate on main.
-    needs: [linux, debian, arch, void, fedora, opensuse, macos, workflows]
+    needs: [lint, linux, debian, arch, void, fedora, opensuse, macos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
