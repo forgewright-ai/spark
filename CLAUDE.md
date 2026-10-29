@@ -477,7 +477,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)
                 gate.sh (the one test list: `fast` is what a commit runs,
                 `full [smoke|serve|rest]` what CI runs, one job per group;
-                the hooks and ci.yml name no test themselves)
+                the hooks and ci.yml name no test themselves; the selftest
+                and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
+                stops full at the first suite that fails)
                 land.sh (lands a commit: a try/ branch, CI, then main moved
                 forward to the same commit; `--passed SHA` is the one check
                 "ci.yml passed", asked by the pre-push hook and release.yml)

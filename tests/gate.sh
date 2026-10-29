@@ -26,13 +26,15 @@ bad() { printf 'gate: %s\n' "$*"; fail=1; failed="$failed
 
 # run LABEL COMMAND...: one suite. fast keeps it quiet, full shows it under
 # a `== LABEL` line. Every tests/ file the gate runs is on a `run` line.
+# SPARK_GATE_FAIL_FAST=1 (ci.yml) stops full at the first suite that fails,
+# so a red run says so in minutes; at a desk every suite runs
 run() {
     label=$1; shift
     if [ "$mode" = fast ]; then
         "$@" >/dev/null || bad "$label"
     else
         printf '== %s\n' "$label"
-        "$@" || bad "$label"
+        "$@" || { bad "$label"; [ -z "${SPARK_GATE_FAIL_FAST:-}" ] || { printf 'gate: refused, stopped at the first%s\n' "$failed"; exit 1; }; }
     fi
 }
 
@@ -224,6 +226,10 @@ group_rest() {
     printf '== static\n'
     static
     tree_privacy
+    # the two that fail late go first: a selftest regression once showed
+    # only after 10 minutes of the suites below
+    run selftest "$PY" bin/spark check --selftest
+    run chaos "$PY" bin/spark check --chaos
     run install_test.sh sh tests/install_test.sh
     run get_test.sh sh tests/get_test.sh
     run update_test.sh sh tests/update_test.sh
@@ -259,8 +265,6 @@ group_rest() {
                 run "widget_pty completion" "$PY" tests/widget_pty.py completion bash home/.config/spark/completion.bash ;;
     esac
     run "widget_pty pager" "$PY" tests/widget_pty.py pager
-    run selftest "$PY" bin/spark check --selftest
-    run chaos "$PY" bin/spark check --chaos
 }
 
 case $mode in
