@@ -1361,11 +1361,6 @@ def row_mcp(ctx):
     server). A list others may write, or a program spark would refuse
     to start, is a warn; no list is na."""
     from . import mcp
-    try:
-        from . import tool_run
-        tool_run.capabilities([])
-    except (ImportError, ValueError):
-        return warn("the tool task adapter is incomplete", "spark update")
     if not os.path.isfile(mcp.MCP_ENV):
         return na("no MCP server on the list")
     st = os.stat(mcp.MCP_ENV)
