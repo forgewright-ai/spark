@@ -1227,7 +1227,20 @@ and may change freely.
    against the project as they read the clone. The probe proves the
    mode it will use, and a refusal under Ubuntu's AppArmor userns
    switch names the switch and the way round it
-   (`sandbox.APPARMOR_REMEDY`). An
+   (`sandbox.APPARMOR_REMEDY`). A Linux step runs under a seccomp filter
+   too. `sandbox.SECCOMP` is the deny list, a named line each with its
+   reason, 37 syscalls. They are ptrace, bpf, the keyring, perf,
+   userfaultfd, the modules, mount, the clock, raw ports, file handles,
+   setns and unshare, and device nodes. `sandbox.seccomp_filter`
+   builds it as bytes from `sandbox.SYSCALLS`, the numbers per
+   architecture (x86_64, aarch64). Another architecture's call kills
+   the process, a named one is `EPERM`, and the rest is allowed, so a
+   new syscall costs nothing until it is named. `new_run` writes it
+   into the run. The step opens it and names the fd after `--seccomp`
+   (`sandbox.popen_fds`, the caller's `pass_fds`), and the probe runs
+   under it, its detail ending `, seccomp`. A step that sandboxes
+   itself (bubblewrap inside, Playwright's Chromium) fails with a
+   readable `EPERM`: a named choice. An
    empty tmpfs covers each of `sandbox.HIDDEN`: the homes, /root, /run,
    /tmp, /var/tmp, /media, /mnt and /etc/spark. `sandbox.BWRAP_FLAGS`
    gives fresh user, ipc, pid, net, uts and cgroup namespaces,

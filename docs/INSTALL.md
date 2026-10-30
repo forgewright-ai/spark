@@ -696,7 +696,9 @@ Linux:
   over itself. On Ubuntu, AppArmor may keep a plain user from a new
   namespace, and `spark check sandbox` names the switch. A step has no
   network, and the homes and `/tmp` are hidden. The rest of the system
-  stays readable.
+  stays readable. A seccomp filter refuses the syscalls no build needs,
+  ptrace, mount and a new namespace among them. So a step that
+  sandboxes itself, such as a browser's own sandbox, fails inside.
 - Services: `systemctl --user status spark-serve spark-forge
   spark-check.timer` and `journalctl --user -u spark-serve -n 50`.
 - `spark serve boot on` runs the services without a login, turns off

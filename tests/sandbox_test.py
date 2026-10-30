@@ -1140,6 +1140,45 @@ def test_waiting_cap():
     clear_runs()
 
 
+# ------------------------------------------------------------------ the seccomp filter (#156)
+def test_seccomp():
+    """The filter as bytes, per architecture, and how a step carries it:
+    a classic BPF program, the arch checked first, every named syscall
+    EPERM, the rest allowed; the run's file, the fd the step's Popen
+    passes on, --seccomp FD in the argv."""
+    import struct
+    x86, arm = sandbox.seccomp_filter("x86_64"), sandbox.seccomp_filter("aarch64")
+    check("seccomp: a program for x86_64 and one for aarch64, none for an architecture with no table",
+          len(x86) == 8 * (4 + 2 * len(sandbox.SYSCALLS["x86_64"]) + 1) and len(arm) == 8 * (4 + 2 * len(sandbox.SYSCALLS["aarch64"]) + 1)
+          and sandbox.seccomp_filter("riscv64") == b"", (len(x86), len(arm)))
+    insns = [struct.unpack("HBBI", x86[i:i + 8]) for i in range(0, len(x86), 8)]
+    check("seccomp: the arch first (another arch kills the process), then the number, EPERM for each named, allow last",
+          insns[0] == (0x20, 0, 0, 4) and insns[1][0] == 0x15 and insns[1][3] == sandbox.AUDIT_ARCH["x86_64"]
+          and insns[2] == (0x06, 0, 0, 0x80000000) and insns[3] == (0x20, 0, 0, 0)
+          and all(insns[4 + 2 * k][3] == sandbox.SYSCALLS["x86_64"][n] and insns[5 + 2 * k] == (0x06, 0, 0, 0x00050001)
+                  for k, (n, _w) in enumerate(x for x in sandbox.SECCOMP if x[0] in sandbox.SYSCALLS["x86_64"]))
+          and insns[-1] == (0x06, 0, 0, 0x7FFF0000), insns[:5])
+    check("seccomp: every named syscall has its reason, x86_64 numbers every name and aarch64 all but ioperm, iopl and mknod",
+          all(why for _n, why in sandbox.SECCOMP) and set(sandbox.SYSCALLS["x86_64"]) == {n for n, _w in sandbox.SECCOMP}
+          and {n for n, _w in sandbox.SECCOMP} - set(sandbox.SYSCALLS["aarch64"]) == {"ioperm", "iopl", "mknod"})
+    root = project({"a.txt": "a\n"})
+    run = sandbox.new_run(root, "t", platform="linux")
+    sandbox._write_private(os.path.join(run["dir"], sandbox.SECCOMP_FILE), x86)    # as new_run writes it on Linux
+    argv, cwd, env = sandbox.step(run, "sh", "echo hi", platform="linux")
+    fds = run.get("fds") or ()
+    check("seccomp: the step opens the run's filter and names its fd after --seccomp; the fd is read-only and passed on",
+          len(fds) == 1 and argv[argv.index("--seccomp") + 1] == str(fds[0]) and os.read(fds[0], 4) == x86[:4], argv[-8:])
+    sandbox.close_spawn_fds(run)
+    check("seccomp: close_spawn_fds closes it and forgets it", "fds" not in run)
+    try:
+        os.fstat(fds[0])
+        closed = False
+    except OSError:
+        closed = True
+    check("seccomp: the fd is closed", closed)
+    sandbox.discard(run)
+
+
 # ------------------------------------------------------------------ the copy mode (#155)
 def test_copy_mode():
     """bwrap before 0.11 has no overlay: the project is copied into the
@@ -1394,9 +1433,12 @@ def test_check_row():
 # ------------------------------------------------------------------ REAL
 def step(run, cmd, timeout=60, shell="/bin/sh"):
     argv, cwd, env = sandbox.step(run, shell, cmd)
-    p = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                       stderr=subprocess.STDOUT, preexec_fn=sandbox.preexec, start_new_session=True,
-                       timeout=timeout)
+    try:
+        p = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, preexec_fn=sandbox.preexec, start_new_session=True,
+                           timeout=timeout, pass_fds=run.get("fds") or ())
+    finally:
+        sandbox.close_spawn_fds(run)
     return p.returncode, p.stdout.decode("utf-8", "replace")
 
 
@@ -1527,6 +1569,14 @@ def test_real():
     rc, out = step(run, "echo \"[$SPARK_TEST_EXPORTED]\"")
     check("escape: an exported variable does not cross", rc == 0 and "[]" in out, out)
     check("escape: nothing the escapes tried is a change", sandbox.changes(run) == [], sandbox.changes(run))
+    if sandbox.seccomp_path(run) and shutil.which("python3"):
+        rc, out = step(run, "python3 -c 'import ctypes, os; l = ctypes.CDLL(None, use_errno=True); r = l.ptrace(0, 0, 0, 0); "
+                            "print(\"ptrace\", r, os.strerror(ctypes.get_errno()))'")
+        check("seccomp (real): ptrace inside a step is Operation not permitted (the filter rides)", "Operation not permitted" in out, out)
+        rc, out = step(run, "unshare -U true 2>&1; echo rc=$?") if shutil.which("unshare") else (0, "skip")
+        check("seccomp (real): a new namespace inside a step is refused", "Operation not permitted" in out or out == "skip", out)
+    elif not IS_MAC:
+        skip("seccomp (real)", "no filter for this architecture, or no python3")
     if IS_MAC:
         mac_denies(run)
         mac_tools(run)
@@ -1667,7 +1717,7 @@ def main():
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,
               test_detach_lock, test_records, test_ids, test_home_and_root, test_waiting_cap,
-              test_step_linux_shape, test_copy_mode, test_lost_keep, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
+              test_step_linux_shape, test_seccomp, test_copy_mode, test_lost_keep, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
     for t in ((test_real,) if args.real_only else tests):
         PHASE = "fixtures"
         try:

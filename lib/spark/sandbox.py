@@ -82,6 +82,126 @@ APPARMOR_REMEDY = ("Ubuntu's AppArmor keeps a plain user from a new namespace: "
                    "echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns for this boot, "
                    "or kernel.apparmor_restrict_unprivileged_userns=0 in /etc/sysctl.d/60-apparmor-namespace.conf")
 APPARMOR_SIGNS = ("namespace", "uid map", "Permission denied", "Operation not permitted")
+
+# The seccomp filter a Linux step runs under (#156): what a step inside
+# its namespaces could still call, and what no build, test or git step
+# needs. A named line each, with its reason. A classic BPF program built
+# as bytes (seccomp_filter) and handed to bwrap --seccomp FD: another
+# architecture's syscall kills the process, a denied number is EPERM,
+# the rest is allowed, so a new syscall costs nothing until it is named.
+# The numbers come from the kernel's own tables, one per architecture
+# spark's engine runs on; aarch64 has no ioperm, iopl or mknod. The spike
+# (#156) measured git, gcc, make, pip, npm and cargo unchanged under it
+# on Debian 12, Ubuntu 24.04 and arm64, ptrace and unshare refused.
+SECCOMP = (
+    ("ptrace", "trace or alter another process of the step"),
+    ("process_vm_readv", "read another process's memory"),
+    ("process_vm_writev", "write another process's memory"),
+    ("keyctl", "the kernel keyring"),
+    ("add_key", "the kernel keyring"),
+    ("request_key", "the kernel keyring"),
+    ("bpf", "load a BPF program"),
+    ("perf_event_open", "profile the kernel and other processes"),
+    ("userfaultfd", "page faults handled in user space, an exploit's primitive"),
+    ("kexec_load", "load a kernel"),
+    ("kexec_file_load", "load a kernel"),
+    ("init_module", "load a kernel module"),
+    ("finit_module", "load a kernel module"),
+    ("delete_module", "unload a kernel module"),
+    ("mount", "mount a filesystem"),
+    ("umount2", "unmount a filesystem"),
+    ("pivot_root", "change the root"),
+    ("swapon", "swap"),
+    ("swapoff", "swap"),
+    ("reboot", "reboot"),
+    ("settimeofday", "set the clock"),
+    ("clock_settime", "set the clock"),
+    ("clock_adjtime", "set the clock"),
+    ("adjtimex", "set the clock"),
+    ("acct", "process accounting"),
+    ("ioperm", "raw port I/O"),
+    ("iopl", "raw port I/O"),
+    ("open_by_handle_at", "open a file by its handle, past a bind mount"),
+    ("name_to_handle_at", "a file handle for the above"),
+    ("setns", "join another namespace"),
+    ("unshare", "a new namespace inside the step (a step that sandboxes itself fails with EPERM)"),
+    ("mknod", "a device node"),
+    ("mknodat", "a device node"),
+    ("fanotify_init", "watch the whole filesystem"),
+    ("quotactl", "disk quotas"),
+    ("vhangup", "hang up the terminal"),
+    ("personality", "change the execution domain"),
+)
+# the numbers, from arch/x86/entry/syscalls/syscall_64.tbl and
+# include/uapi/asm-generic/unistd.h of the kernel (2026-10-30)
+SYSCALLS = {
+    "x86_64": {"ptrace": 101, "process_vm_readv": 310, "process_vm_writev": 311, "keyctl": 250, "add_key": 248,
+               "request_key": 249, "bpf": 321, "perf_event_open": 298, "userfaultfd": 323, "kexec_load": 246,
+               "kexec_file_load": 320, "init_module": 175, "finit_module": 313, "delete_module": 176, "mount": 165,
+               "umount2": 166, "pivot_root": 155, "swapon": 167, "swapoff": 168, "reboot": 169, "settimeofday": 164,
+               "clock_settime": 227, "clock_adjtime": 305, "adjtimex": 159, "acct": 163, "ioperm": 173, "iopl": 172,
+               "open_by_handle_at": 304, "name_to_handle_at": 303, "setns": 308, "unshare": 272, "mknod": 133,
+               "mknodat": 259, "fanotify_init": 300, "quotactl": 179, "vhangup": 153, "personality": 135},
+    "aarch64": {"ptrace": 117, "process_vm_readv": 270, "process_vm_writev": 271, "keyctl": 219, "add_key": 217,
+                "request_key": 218, "bpf": 280, "perf_event_open": 241, "userfaultfd": 282, "kexec_load": 104,
+                "kexec_file_load": 294, "init_module": 105, "finit_module": 273, "delete_module": 106, "mount": 40,
+                "umount2": 39, "pivot_root": 41, "swapon": 224, "swapoff": 225, "reboot": 142, "settimeofday": 170,
+                "clock_settime": 112, "clock_adjtime": 266, "adjtimex": 171, "acct": 89, "open_by_handle_at": 265,
+                "name_to_handle_at": 264, "setns": 268, "unshare": 97, "mknodat": 33, "fanotify_init": 262,
+                "quotactl": 60, "vhangup": 58, "personality": 92},
+}
+AUDIT_ARCH = {"x86_64": 0xC000003E, "aarch64": 0xC00000B7}   # linux/audit.h
+_BPF_LD_W_ABS, _BPF_JEQ_K, _BPF_RET_K = 0x20, 0x15, 0x06
+_SECCOMP_RET_ALLOW, _SECCOMP_RET_KILL_PROCESS, _SECCOMP_RET_ERRNO = 0x7FFF0000, 0x80000000, 0x00050000
+SECCOMP_FILE = "seccomp.bpf"       # in a run's dir, written by new_run on Linux
+
+
+def seccomp_filter(machine=None):
+    """The BPF program for this machine's architecture, as bytes; b'' for
+    one SYSCALLS does not know (then no filter rides, and the probe's
+    detail says so)."""
+    import platform
+    import struct
+    machine = machine or platform.machine()
+    table = SYSCALLS.get(machine)
+    if not table:
+        return b""
+    def insn(code, jt, jf, k):
+        return struct.pack("HBBI", code, jt, jf, k)
+    prog = [insn(_BPF_LD_W_ABS, 0, 0, 4),                                      # the arch
+            insn(_BPF_JEQ_K, 1, 0, AUDIT_ARCH[machine]), insn(_BPF_RET_K, 0, 0, _SECCOMP_RET_KILL_PROCESS),
+            insn(_BPF_LD_W_ABS, 0, 0, 0)]                                      # the syscall number
+    for name, _why in SECCOMP:
+        if name in table:
+            prog.append(insn(_BPF_JEQ_K, 0, 1, table[name]))
+            prog.append(insn(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | 1))         # EPERM
+    prog.append(insn(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW))
+    return b"".join(prog)
+
+
+def seccomp_path(run):
+    """The run's filter file, or '' when the run carries none."""
+    p = os.path.join(run["dir"], SECCOMP_FILE)
+    return p if os.path.isfile(p) else ""
+
+
+def popen_fds(run):
+    """The fds a step's Popen passes on (pass_fds): the filter, opened
+    here, read by bwrap --seccomp. close_spawn_fds closes them after."""
+    p = seccomp_path(run)
+    if not p:
+        run["fds"] = ()
+        return ()
+    run["fds"] = (os.open(p, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)),)
+    return run["fds"]
+
+
+def close_spawn_fds(run):
+    for fd in run.pop("fds", ()):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 DIFF_MAX = 256 * 1024           # a text larger than this is one line in the review, not a diff
 REVIEW_MAX = 2 * 1024 * 1024    # old + new text one review shows; past it, headings only
 STATE_MAX = 2000                # raw changes a step's own changes are read from (state); past it, untold
@@ -716,6 +836,10 @@ def new_run(cwd, thread, platform=None, keep=False):
         else:
             for sub in ("up", "wk"):
                 os.mkdir(os.path.join(d, sub), 0o700)
+        if plat != "macos":
+            prog = seccomp_filter()
+            if prog:
+                _write_private(os.path.join(d, SECCOMP_FILE), prog)
     except BaseException:
         _remove(run)
         raise
@@ -842,6 +966,9 @@ def step(run, shell, cmd, platform=None):
         argv += ["--overlay-src", cwd, "--overlay", os.path.join(d, "up"), os.path.join(d, "wk"), cwd]
     argv += ["--chdir", cwd]
     argv += list(BWRAP_FLAGS)
+    fds = run.get("fds") or (popen_fds(run) if seccomp_path(run) else ())
+    if fds:
+        argv += ["--seccomp", str(fds[0])]      # the filter: the caller's Popen passes the fd on (popen_fds)
     argv.append("--clearenv")
     for k, v in sorted(_step_env(home, "/tmp").items()):
         argv += ["--setenv", k, v]
@@ -1137,12 +1264,14 @@ def _probe_run(run, script, plat):
     argv, cwd, env = step(run, "/bin/sh", script, platform=plat)
     try:
         p = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True,
-                           text=True, timeout=PROBE_TIMEOUT, start_new_session=True)
+                           text=True, timeout=PROBE_TIMEOUT, start_new_session=True, pass_fds=run.get("fds") or ())
         return p.returncode, p.stderr
     except subprocess.TimeoutExpired:
         return 124, "the probe step did not finish in %d s" % PROBE_TIMEOUT
     except OSError as e:
         return 127, str(e)
+    finally:
+        close_spawn_fds(run)
 
 
 def _probe_linux(key):
@@ -1179,6 +1308,9 @@ def _probe_linux(key):
         ))
         plat = "copy" if copy else "linux"
         run = {"id": "probe", "cwd": lower, "dir": d, "os": plat}
+        prog = seccomp_filter()
+        if prog:
+            _write_private(os.path.join(d, SECCOMP_FILE), prog)
         rc, err = _probe_run(run, script, plat)
         if rc != 0:
             why = _first_line(err, "the probe step exited %d" % rc)
@@ -1190,13 +1322,19 @@ def _probe_linux(key):
             kept = _lstat(os.path.join(lower, "gone"))
             if not (new and stat.S_ISREG(new.st_mode) and gone is None and kept):
                 return False, "the copy did not record the probe's changes"
-            return True, "bwrap %s copy (no overlay before %d.%d)" % ((v,) + BWRAP_MIN)
+            return True, "bwrap %s copy (no overlay before %d.%d)%s" % ((v,) + BWRAP_MIN + (_seccomp_word(prog),))
         new, gone = _lstat(os.path.join(d, "up", "new")), _lstat(os.path.join(d, "up", "gone"))
         if not (new and stat.S_ISREG(new.st_mode) and gone and stat.S_ISCHR(gone.st_mode) and gone.st_rdev == 0):
             return False, "the overlay did not record the probe's changes"
-        return True, "bwrap %s overlay" % v
+        return True, "bwrap %s overlay%s" % (v, _seccomp_word(prog))
     finally:
         _rmtree(d)
+
+
+def _seccomp_word(prog):
+    """What the probe's detail says of the filter: ', seccomp' when one
+    rides, ', no seccomp table for this architecture' when none can."""
+    return ", seccomp" if prog else ", no seccomp table for this architecture"
 
 
 def _probe_mac(key):

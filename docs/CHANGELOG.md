@@ -2,6 +2,14 @@
 
 ## v1.110
 
+- A Linux step of `spark do --sandbox` runs under a seccomp filter:
+  `sandbox.SECCOMP`, 37 named syscalls with their reasons (ptrace, bpf,
+  the keyring, perf, userfaultfd, the modules, mount, the clock, raw
+  ports, file handles, setns and unshare, device nodes), built as bytes
+  per architecture and handed to `bwrap --seccomp`. The spike measured
+  git, gcc, make, pip, npm and cargo unchanged under it on Debian 12,
+  Ubuntu 24.04 and arm64; a step that sandboxes itself now fails with a
+  readable `EPERM` (#156).
 - CI on main no longer runs the gate twice. lint's first step asks
   whether the commit already passed on its `try/` branch
   (`tests/land.sh --passed`, the one question); when it did, lint

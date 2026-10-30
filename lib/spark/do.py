@@ -658,9 +658,12 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     try:
         p = subprocess.Popen(argv, cwd=cwd or None, env=env, preexec_fn=pre,
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             start_new_session=leashed)
+                             start_new_session=leashed, pass_fds=(box.get("fds") or ()) if box is not None else ())
     except OSError as e:
         return 127, "%s: %s" % (argv[0], e.strerror or e)
+    finally:
+        if box is not None:
+            sandbox.close_spawn_fds(box)      # the seccomp filter's fd: bwrap holds its own now
     fired, done = threading.Event(), threading.Event()     # the leash or the cap killed it; the step is over
 
     def _fire():
