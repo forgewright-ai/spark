@@ -399,7 +399,13 @@ jobs:
         with:
           persist-credentials: false
       - name: the sandbox suite as a plain user, the copy mode for real
+        # the runner is Ubuntu, and its AppArmor strips a plain user's new
+        # user namespace of its capabilities (bwrap: loopback: Failed
+        # RTM_NEWADDR), inside a container too: the remedy INSTALL.md names,
+        # on a runner thrown away with the job
         run: |
+          echo 0 > /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo "no apparmor userns switch here"
           useradd -m -s /bin/bash ada
           chmod -R a+rX "$GITHUB_WORKSPACE"
           git config --system safe.directory '*'

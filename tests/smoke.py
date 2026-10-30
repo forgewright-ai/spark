@@ -12821,8 +12821,16 @@ def main():
             # 120 s for setup on a loaded runner; the pty stays open until
             # setup has exited, or its last flush fails and python exits 120
             got, end, sent, went, cut = b"", time.time() + 120, False, False, False
+            sent_at = None
             while time.time() < end:
                 r, _, _ = _select.select([m], [], [], 0.2)
+                # the interrupt a stop_at asks for goes 10 s after the keys
+                # answer at the latest: on a loaded runner the model prompt
+                # came late twice (the files are written after every question,
+                # so a Ctrl-C anywhere past the keys proves the same)
+                if stop_at and not cut and sent_at is not None and time.time() - sent_at > 10:
+                    q.send_signal(signal.SIGINT)
+                    cut = True
                 if r:
                     try:
                         chunk = os.read(m, 4096)
@@ -12836,7 +12844,7 @@ def main():
                         went = True
                     if not sent and b"add the keys? [Y/n]: " in got:
                         os.write(m, answer.encode())
-                        sent = True
+                        sent, sent_at = True, time.time()
                     if stop_at and not cut and stop_at in got:
                         q.send_signal(signal.SIGINT)
                         cut = True
