@@ -24,6 +24,10 @@
   A commit that reached main any other way still gets the full run
   (#145).
 
+- The workflows move github/codeql-action to 4.39.1 and actions/cache
+  to 6.1.0, Dependabot's #114 and #115. Each sha is the commit the
+  upstream tag points at (#117, #118).
+
 ## v1.109
 
 - `spark do --sandbox` runs on bubblewrap 0.8 to 0.10, Debian 12's and
