@@ -3465,6 +3465,86 @@ def own_engine_cases(t):
         shutil.rmtree(tmp, True)
 
 
+def engine_env_cases(t):
+    """#151: the engine starts with a named environment and --offline. A
+    LLAMA_ARG_* in the shell never reaches it (llama-server reads each
+    as a flag, --rpc and --connect among them), the GPU variables and
+    the locale do, the library path leads with the tarball's, and a fake
+    engine spark itself starts sees exactly that. outbound() reads a
+    process's connections: loopback left out, a stub's seen when asked."""
+    import socket
+    from spark import engine as _en
+    tmp = tempfile.mkdtemp(prefix="spark-engine-env-")
+    home, edir, mdir = (os.path.join(tmp, d) for d in ("home", "engine", "models"))
+    os.makedirs(home + "/.config/spark")
+    os.makedirs(edir)
+    os.makedirs(mdir)
+    open(os.path.join(mdir, "fixture.gguf"), "w").close()
+    dump = os.path.join(tmp, "dump.json")
+    fake = os.path.join(edir, "llama-server")
+    with open(fake, "w") as f:
+        f.write("#!%s\nimport json, os, sys\njson.dump({'env': dict(os.environ), 'argv': sys.argv[1:]}, open(%r, 'w'))\n"
+                % (sys.executable, dump))
+    os.chmod(fake, 0o755)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_", "LLAMA_"))}
+    env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                "XDG_DATA_HOME": home + "/.local/share", "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1",
+                "SPARK_NO_APPLY": "1", "SPARK_PORT": "9", "SPARK_ENGINE_DIR": edir, "SPARK_MODELS_DIR": mdir,
+                "SPARK_MODEL": "fixture.gguf", "SITE_EMBER_MODEL": "none", "SHELL": "/bin/bash", "LANG": "C.UTF-8",
+                "LC_ALL": "C.UTF-8", "TERM": "xterm-256color", "SPARK_SHARE_TOKEN": tmp + "/no-share-token"})
+    env.update(init_env(home))
+    stray = {"LLAMA_ARG_RPC": "evil.example:50052", "LLAMA_ARG_CONNECT": "evil.example", "LLAMA_ARG_HOST": "0.0.0.0",
+             "HTTP_PROXY": "http://evil.example:3128", "HSA_OVERRIDE_GFX_VERSION": "11.0.0",
+             "VK_ICD_FILENAMES": "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json", "SSH_AUTH_SOCK": "/tmp/agent"}
+    snip = os.path.join(tmp, "env.py")
+    with open(snip, "w") as f:
+        f.write("import json, sys\nsys.path.insert(0, %r)\nfrom spark import config, engine\nc = config.load()\n"
+                "print(json.dumps({'env': engine.server_env(c), 'argv': engine.server_cmd(c, '127.0.0.1')}))\n"
+                % os.path.join(REPO, "lib"))
+    p = subprocess.run([sys.executable, snip], capture_output=True, text=True, env=dict(env, **stray), timeout=60)
+    got = json.loads(p.stdout) if p.returncode == 0 else {"env": {}, "argv": []}
+    e = got["env"]
+    key = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+    t.ok(p.returncode == 0 and not [k for k in e if k.startswith(("LLAMA_", "HTTP_", "SSH_"))]
+         and e.get("PATH") == env["PATH"] and e.get("HOME") == home and e.get("LANG") == "C.UTF-8"
+         and e.get("HSA_OVERRIDE_GFX_VERSION") == "11.0.0" and e.get("VK_ICD_FILENAMES") == stray["VK_ICD_FILENAMES"]
+         and e.get(key, "").split(":")[0] == edir and not [k for k in e if k.startswith(("SPARK_", "XDG_"))],
+         "engine env: a named allowlist -- LLAMA_ARG_*, a proxy and the agent dropped; PATH, HOME, the locale, the GPU "
+         "variables and the tarball's library path kept", repr((p.returncode, sorted(e), p.stderr[-300:])))
+    t.ok("--offline" in got["argv"] and "--host" in got["argv"],
+         "engine argv: --offline rides every server command", repr(got["argv"][:12]))
+    # the fake engine, started by spark's own start(): what it sees
+    start = os.path.join(tmp, "start.py")
+    with open(start, "w") as f:
+        f.write("import sys\nsys.path.insert(0, %r)\nfrom spark import config, engine\nprint(engine.spawn(config.load(), '127.0.0.1'))\n"
+                % os.path.join(REPO, "lib"))
+    p = subprocess.run([sys.executable, start], capture_output=True, text=True, env=dict(env, **stray), timeout=60)
+    end = time.time() + 10
+    while time.time() < end and not os.path.exists(dump):
+        time.sleep(0.1)
+    seen = json.load(open(dump)) if os.path.exists(dump) else {"env": {"missing": p.stderr[-300:]}, "argv": []}
+    t.ok(p.returncode == 0 and not [k for k in seen["env"] if k.startswith(("LLAMA_", "HTTP_", "SSH_"))]
+         and seen["env"].get("HSA_OVERRIDE_GFX_VERSION") == "11.0.0" and "--offline" in seen["argv"],
+         "engine start: the fake engine spark started saw no LLAMA_ARG_* and no proxy, the GPU variable and --offline",
+         repr((p.returncode, sorted(seen["env"])[:20], seen["argv"][:8], p.stdout[-200:], p.stderr[-300:])))
+    # outbound: this process's own connection to a listener of its own
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    c = socket.create_connection(srv.getsockname())
+    a, _ = srv.accept()
+    try:
+        port = srv.getsockname()[1]
+        asked = _en.outbound([os.getpid()], loopback=True)
+        t.ok("127.0.0.1:%d" % port in asked and _en.outbound([os.getpid()]) == [] and _en.outbound([]) == [],
+             "engine.outbound: a loopback connection is seen when asked and left out by default; no pid, no list", repr(asked))
+    finally:
+        a.close()
+        c.close()
+        srv.close()
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 def server_pids_cases(t):
     """v1.64: a process counts as the engine only when its program IS
     llama-server -- a shell whose command line mentions it is not."""
@@ -13853,6 +13933,7 @@ site.cmd_headless([])
         server_pids_cases(t)
         client_units_cases(t)
         own_engine_cases(t)
+        engine_env_cases(t)
         living_core_cases(t)
         chat_awake_cases(t)
         living_awaken_cases(t)

@@ -2,6 +2,12 @@
 
 ## v1.109
 
+- The engine starts with a clean environment: `engine.ENV_KEEP` and
+  `engine.ENV_PREFIXES` name what it gets (its path, its locale, the
+  GPU variables), and every `LLAMA_ARG_*` of a shell is dropped, so
+  none can point it at another host. Its command carries `--offline`.
+  The `serve` row warns on a connection the engine holds to another
+  host (`engine.outbound`) (#151).
 - `voice.env` says why the runtime is held at sherpa-onnx 1.13.8: 2.0.0
   builds espeak-ng out and ignores the data_dir Kokoro reads
   espeak-ng-data through, so the pt-BR voice would go silent. It moves

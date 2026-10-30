@@ -908,6 +908,9 @@ network is the trust boundary.
   off this machine, such as `scp FILE host:`.
 - `spark do --sandbox` runs steps in a copy with no network. A step can
   still read most of the system: see section 6.
+- The engine starts with a named environment and `--offline`: a
+  `LLAMA_ARG_*` variable in a shell cannot point it at another host,
+  and `spark check` warns when it holds a connection out.
 - `spark read`, `spark do`, `recall` (`Esc r`) and `spark edit ?
   --source` replace secrets with `[held]`. `explain`, `@FILE` and
   `spark chat` send text as it is.

@@ -42,7 +42,12 @@ for it, and no verb carries the word.
   is core, beside `spark serve boot`: the behaviour of an AI appliance.
 - **Privacy by design.** Nothing leaves the machine except the package
   managers, pinned sha256-verified downloads, and `spark` talking to a
-  `FORGE` or a llama-server you run. Identity lives in
+  `FORGE` or a llama-server you run. The engine spark starts gets an
+  environment of named lines, `engine.ENV_KEEP` and
+  `engine.ENV_PREFIXES`: its path, its locale and the GPU variables.
+  Its command carries `--offline`. So no `LLAMA_ARG_*` of a shell can
+  point it at another host, and the `serve` row warns on a connection
+  it holds out (`engine.outbound`). Identity lives in
   `~/.config/spark/site.env`, never in the repository. The soul is
   yours, under `~/.config/spark/`. The memory is yours, sealed in your
   store. Secrets are 0600 files, never config values. The words in

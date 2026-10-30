@@ -331,7 +331,9 @@ def server_cmd(cfg, host):
     # small box has (a 12B on a 16 GB APU reached 90 % RAM in a day); the
     # slots already hold the recent prompts on the GPU. SPARK_EXTRA_ARGS
     # comes last and may set a budget (--cache-ram N, MiB).
-    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0"]
+    # --offline: no fetch of anything, whatever a flag or a variable
+    # says (the pinned build knows it; nothing spark serves is remote)
+    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0", "--offline"]
     if files["ember"]:
         d, ini = write_router(cfg)
         return ([engine_bin(cfg), "--models-dir", d, "--models-preset", ini, "--models-max", "2"] + common
@@ -549,13 +551,93 @@ def gpu_info():
     return {}
 
 
+# the engine's environment, a named line each. llama-server reads every
+# LLAMA_ARG_* variable as a flag, and the newer builds know --rpc, a
+# p2p --connect and remote backends: a stray variable in a shell could
+# open a path off this machine. So the engine gets what it needs and
+# nothing it reads as a flag (the principle "Privacy by design")
+ENV_KEEP = (
+    "PATH", "HOME", "USER", "LOGNAME",       # the process's own
+    "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",  # its files and its locale
+)
+ENV_PREFIXES = (
+    "CUDA_",                   # NVIDIA: the devices and their order
+    "HIP_", "ROCR_", "HSA_",   # AMD: the devices, a gfx override for an APU
+    "GGML_",                   # ggml's own switches (GGML_VK_VISIBLE_DEVICES ...)
+    "VK_",                     # the Vulkan loader: VK_ICD_FILENAMES, VK_DRIVER_FILES
+    "MESA_",                   # Mesa's drivers (radv, lavapipe)
+)
+
+
 def server_env(cfg):
-    """The tarball ships its libraries beside the binary."""
-    env = dict(os.environ)
+    """The engine's environment: ENV_KEEP and the ENV_PREFIXES names from
+    this process's, nothing else, and the tarball's libraries beside
+    the binary first on the library path (the shell's own after)."""
+    env = {k: v for k, v in os.environ.items() if k in ENV_KEEP or k.startswith(ENV_PREFIXES)}
     d = engine_dir(cfg)
     key = "DYLD_LIBRARY_PATH" if IS_MAC else "LD_LIBRARY_PATH"
-    env[key] = d + (":" + env[key] if env.get(key) else "")
+    env[key] = d + (":" + os.environ[key] if os.environ.get(key) else "")
     return env
+
+
+def _hex_addr(field):
+    """A /proc/net/tcp remote end, "HEX:PORT", as "ip:port"."""
+    import socket
+    import struct
+    raw, port = field.split(":")
+    if len(raw) == 8:
+        ip = socket.inet_ntop(socket.AF_INET, struct.pack("<I", int(raw, 16)))
+    else:
+        ip = "[%s]" % socket.inet_ntop(socket.AF_INET6, b"".join(struct.pack("<I", int(raw[i:i + 8], 16)) for i in range(0, 32, 8)))
+    return "%s:%d" % (ip, int(port, 16))
+
+
+def _loopback(addr):
+    return addr.startswith(("127.", "[::1]", "[::ffff:127."))
+
+
+def outbound(pids, loopback=False):
+    """The established TCP connections those processes hold, the other
+    end as "ip:port" each, loopback left out unless asked (a test's own
+    stub lives there). Linux reads /proc, macOS asks lsof. A read that
+    fails is an empty list, never a crash: the row says what it saw."""
+    pids = [int(p) for p in pids]
+    if not pids:
+        return []
+    found = set()
+    if IS_MAC:
+        rc, out = run(["lsof", "-nP", "-a", "-p", ",".join(str(p) for p in pids), "-iTCP", "-sTCP:ESTABLISHED", "-Fn"])
+        for line in out.splitlines():
+            if line.startswith("n") and "->" in line:
+                found.add(line[1:].split("->", 1)[1])
+    else:
+        inodes = set()
+        for pid in pids:
+            try:
+                fds = os.listdir("/proc/%d/fd" % pid)
+            except OSError:
+                continue
+            for fd in fds:
+                try:
+                    link = os.readlink("/proc/%d/fd/%s" % (pid, fd))
+                except OSError:
+                    continue
+                if link.startswith("socket:[") and link.endswith("]"):
+                    inodes.add(link[8:-1])
+        for name in ("tcp", "tcp6"):
+            try:
+                with open("/proc/net/" + name, encoding="ascii", errors="replace") as f:
+                    lines = f.read().splitlines()[1:]
+            except OSError:
+                continue
+            for line in lines:
+                p = line.split()
+                if len(p) > 9 and p[3] == "01" and p[9] in inodes:
+                    try:
+                        found.add(_hex_addr(p[2]))
+                    except (ValueError, OSError):
+                        continue
+    return sorted(a for a in found if loopback or not _loopback(a))
 
 
 # ------------------------------------------------------------------ memory

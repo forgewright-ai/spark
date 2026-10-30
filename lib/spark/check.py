@@ -651,6 +651,11 @@ def row_serve(ctx):
             if n not in names:
                 names.append(n)
         where = "at %s, %s" % (url.split("//")[-1], " and ".join(names) or "no model listed")
+        # a connection the engine holds to another host is a path off
+        # this machine, which nothing spark serves needs (engine.outbound)
+        out = engine.outbound(engine.own_pids(ctx.cfg))
+        if out:
+            return warn(where + ", with a connection out to " + ", ".join(out[:3]), "spark serve off")
         argv = engine.live_args(ctx.cfg)
         if argv is None:
             return ok(where)
