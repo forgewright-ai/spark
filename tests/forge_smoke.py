@@ -785,7 +785,20 @@ def tls_cases(ok, spark, env, home, state, exe):
             ok(st == 200, "the page answers over TLS with the own pair")
             if st != 200:
                 print(p.communicate()[0][-1500:])
-            st, hd, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/ca")
+            # the root's listener is a server of its own beside the page's: on a
+            # loaded runner it answered a moment after the page did (a refused
+            # connection, or another test's server still on the port), so it
+            # is waited for, up to 10 s, and the wait's last answer is the one
+            # judged
+            st, hd, body = 0, {}, b""
+            for _ in range(50):
+                try:
+                    st, hd, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/ca")
+                except OSError:
+                    st = 0
+                if st == 200 and hd.get("Content-Type") == "application/x-x509-ca-cert":
+                    break
+                time.sleep(0.2)
             ok(st == 200 and hd.get("Content-Type") == "application/x-x509-ca-cert" and body == tls.read_pem(os.path.join(own, "root.crt")),
                "GET /ca on the root's listener: the root in DER, the type phones install from", (st, hd.get("Content-Type"), len(body)))
             st, _, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/")
