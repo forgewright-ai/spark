@@ -7668,7 +7668,7 @@ def main():
         _turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
         t.ok(rc == 0 and _gh not in sent and "GITHUB_TOKEN=[held]" in sent
-             and err.strip().splitlines() == ["! held back 1 span that looks like a secret (a GitHub token)"]
+             and err.strip().splitlines() == ["! held back 1 span that looks like a secret (a GitHub token, a credential line)"]
              and out.splitlines() == ["export GITHUB_TOKEN=" + _gh, "git push"]
              and lt.get("kind") == "recall" and lt.get("held") == 1,
              "recall: a token in the history is held in the request, named on stderr, held=1 in the turn, "
@@ -9596,6 +9596,21 @@ def main():
             t.ok(_names and not any(v in _h for v in _left.split(" ") if len(v) > 3) and _left not in _h
                  and _text.hold_secrets(_h)[1] == [],
                  "hold: %r holds its secret" % _src[:44], _h)
+        # a credential line in the shapes an env file, a shell export, a
+        # config or JSON give it: the word ends a longer name or closes a
+        # quoted key. A word inside another word, a name that goes on past
+        # the word, a short value and a path stay as they are
+        _v = "abcd1234abcd1234"
+        for _src in ("DB_PASSWORD=" + _v, "export AUTH_TOKEN=" + _v, "CLIENT_SECRET=" + _v,  # spark:allow-secret
+                     "STRIPE_API_KEY=" + _v, "GITHUB_TOKEN: " + _v, "db.password: " + _v,  # spark:allow-secret
+                     "x-api-key: " + _v, '"password": "%s"' % _v, "'api_key': '%s'" % _v,  # spark:allow-secret
+                     "PASSWORD=" + _v, "password: " + _v):  # spark:allow-secret
+            _h, _names = _text.hold_secrets(_src)
+            t.ok(_names == ["a credential line"] and _v not in _h, "hold: %r is a credential line" % _src[:24], _h)
+        for _src in ("passwordless=" + _v, "tokenizer: " + _v, "PASSWORD_FILE=/etc/app/db.pass",
+                     "my_tokens=" + _v, "DB_PASSWORD=short", "max_tokens: 1234567890"):
+            _h, _names = _text.hold_secrets(_src)
+            t.ok(_h == _src and _names == [], "hold: %r is no credential line" % _src[:24], _h)
         # a code the way a message gives one, and nothing that only stands
         # near the word (#97): an option spelled with dashes (--pin, -code)
         # is no PIN, a port after a host's colon and a number in a URL's

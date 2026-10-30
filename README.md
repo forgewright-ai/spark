@@ -244,9 +244,9 @@ settings.
 `read`, `do`, `recall` and `edit ? --source` replace secrets with
 `[held]`. They
 catch a private key, an AWS access key, a GitHub token, a Slack token
-and an API key. They also catch a credential line, a long base64 run, a
-one-time code and a link token. The other commands send the text as it
-is.
+and an API key. They also catch a credential line (in a config, an env
+file or JSON), a long base64 run, a one-time code and a link token. The
+other commands send the text as it is.
 
 Setup starts the model engine, the page server and a health check. The
 page listens on one LAN address with a token. Between machines, traffic

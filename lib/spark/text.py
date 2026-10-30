@@ -1290,7 +1290,11 @@ SECRET_SHAPES = (
     ("a GitHub token", r"\bghp_[A-Za-z0-9]{30,}"),
     ("a Slack token", r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
     ("an API key", r"\bsk-[A-Za-z0-9]{20,}"),
-    ("a credential line", r"(?i)\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\b\s*[=:]\s*(?P<s>\S{8,})"),
+    # the word may end a longer name (DB_PASSWORD=, export AUTH_TOKEN=,
+    # db.password:, x-api-key:) or close a quoted key ("password": in
+    # JSON), never sit inside a word (passwordless, tokenizer)
+    ("a credential line", r"(?i)(?:\b|(?<=[_.-]))(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\b"
+                          r"[\"']?\s*[=:]\s*(?P<s>\S{8,})"),
     # encoded data mixes letters and digits; a rule of "=" under a test
     # run's header, or one long word, holds neither and is no secret.
     # Read from the run's start alone, so a long blob costs one scan
