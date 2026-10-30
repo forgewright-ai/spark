@@ -13,8 +13,9 @@ erase existing data. The rest is for later.
   are not supported. Use x86-64 or ARM64 for the supplied engine.
 - Use zsh or bash 4 or newer for the prompt line. macOS's system bash
   is 3.2, so use zsh there. Have `git`, `curl`, Python 3.9 or newer
-  and `ssh-keygen`, and `sudo` for a machine that runs a model. Setup
-  asks for `sudo` only when a step needs root, and names the step.
+  and `ssh-keygen`, and `sudo` unless the machine is a client of
+  another machine's model. Setup asks for `sudo` only when a step
+  needs root, and names the step.
   Section 2 checks these before installation.
 - A CPU can run a model without a GPU. Listed model files range from
   1.3 to 17.4 GB and need a 3 to 21 GB model memory budget. The
@@ -154,7 +155,8 @@ when asked. Open Ubuntu and run Debian's step 3.
 ## 2. Install spark
 
 1. Check what spark needs: `git`, `curl`, `python3` 3.9 or newer,
-   `ssh-keygen`, and `sudo` for a machine that runs a model.
+   `ssh-keygen`, and `sudo` unless the machine is a client of another
+   machine's model.
 
    ```sh
    for c in sudo git curl python3 ssh-keygen; do

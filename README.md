@@ -23,8 +23,8 @@ OS or erase a disk. It supports Debian/Ubuntu, Arch, Void (glibc),
 Fedora and openSUSE Tumbleweed Linux, macOS, and Windows through WSL 2
 with Ubuntu. Use zsh or bash 4 or newer (zsh on macOS), on an x86-64
 or ARM64 machine with a supported engine. You need `git`, `curl`,
-Python 3.9 or newer and `ssh-keygen`, and `sudo` for a machine that
-runs a model.
+Python 3.9 or newer and `ssh-keygen`, and `sudo` unless the machine is
+a client of another machine's model.
 
 Before starting, allow room for a model download: the listed files
 range from 1.3 to 17.4 GB and need a separate 3 to 21 GB model memory
