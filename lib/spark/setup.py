@@ -354,20 +354,19 @@ def door(once=False):
     return True
 
 
-# the notice: the licence, no warranty, and whose risk a command is. One
-# text, said before anything changes: `get` prints the same three lines
+# the notice: the license, no warranty, and that a model can be wrong. One
+# text, said before anything changes: `get` prints the same two lines
 # (tests/smoke.py holds the two equal, byte for byte), `spark setup`
 # shows them and asks once at a terminal, `spark update` shows them once
 # on a machine installed before them, `spark ver --credits` any time
 NOTICE = ("* spark is MIT licensed and comes with no warranty -- see LICENSE",
-          "* a model can be wrong -- read a command before you run it",
-          "* what you run or accept is at your own risk")
+          "* a model can be wrong -- read a command before you run it")
 NOTICE_QUESTION = "go on"
 NOTICED = os.path.join(STATE_DIR, "notice-shown")
 
 
 def notice(ask=False, shown=False):
-    """The notice, once ever on this machine: the three lines, then with
+    """The notice, once ever on this machine: the two lines, then with
     ask (setup at a terminal, no --yes) the one question -- a no prints
     `* nothing changed` and returns False, nothing written. Shown
     without a question, or answered yes, it is marked in the state dir

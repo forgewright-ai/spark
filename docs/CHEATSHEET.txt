@@ -36,8 +36,8 @@ SPARK
   spark history                   past threads (conversations), and fixes
   spark clear --history           forget past threads (kept ones stay)
                                   and what spark check --history shows
-  spark ver                       the version
-  spark ver --credits             who made spark, what it uses, the notice
+  spark ver                       the version, the license, the repo
+  spark ver --credits             what spark uses and the notice
   spark ver --sbom                what spark depends on, as CycloneDX JSON
 
 CHAT

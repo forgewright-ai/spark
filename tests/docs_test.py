@@ -645,16 +645,18 @@ def shell_keys():
 
 def quiet():
     """v1.72, less noise, as the docs state it: `spark ver` prints the
-    logo and the version and no credits line, `spark ver --credits`
-    adds them; `spark check`'s usage names --all, and the cheatsheet and
-    INSTALL name `spark check --all` and `spark ver --credits`."""
+    logo, the version and (v1.112) its license and repo, and no credits
+    line; `spark ver --credits` adds them; `spark check`'s usage names
+    --all, and the cheatsheet and INSTALL name `spark check --all` and
+    `spark ver --credits`."""
     import subprocess
     spark = [sys.executable, os.path.join(ROOT, "bin", "spark")]
     ver = subprocess.run(spark + ["ver"], capture_output=True, text=True).stdout
     cred = subprocess.run(spark + ["ver", "--credits"], capture_output=True, text=True).stdout
-    last = [l for l in ver.split("\n") if l.strip()][-1:] or [""]
-    check(re.match(r"^spark \S+$", last[0]) is not None and "CREDITS.md" not in ver,
-          "spark ver ends with spark X.Y and prints no credits line")
+    last = [l for l in ver.split("\n") if l.strip()][-2:]
+    check(len(last) == 2 and re.match(r"^spark \S+ [·|] MIT$", last[0]) is not None
+          and last[1].startswith("github.com/") and "CREDITS.md" not in ver,
+          "spark ver ends with spark X.Y · MIT and the repo, and prints no credits line")
     check("CREDITS.md" in cred, "spark ver --credits names CREDITS.md")
     from spark import check as checkmod
     check(re.search(r"(?m)^  spark check --all\b", checkmod.USAGE) is not None,

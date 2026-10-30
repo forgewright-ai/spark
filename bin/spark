@@ -108,19 +108,17 @@ USAGE_TAIL = """less often used (each has -h)
 docs/
  docs/INSTALL.md              every step and every setting
  docs/CHEATSHEET.txt          every command on one page
-
-version %s
 """
 
 
 def usage():
     """The help: the bar line, the voice and the keys are the interface;
     the MCP servers on the list are the tools; awaken, look and height the
-    living prompt.
-    The version is formatted here, not at import: nothing on the `spark
-    line` path may call git, and version() does, on a cache miss."""
-    from spark import version
-    tail = USAGE_TAIL % version.version()
+    living prompt; it ends with spark ver --credits' lines.
+    The details are formatted here, not at import: nothing on the `spark
+    line` path may call git, and version() and the repo do."""
+    from spark.cli import details
+    tail = USAGE_TAIL + "\n" + "\n".join(details(more=True)) + "\n"
     return (USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + USAGE_INTERFACE + "\n"
             + USAGE_TOOLS + "\n" + USAGE_LIVING + "\n" + tail)
 
@@ -129,7 +127,8 @@ def main(argv):
     sub = argv[0] if argv else ""
     rest = argv[1:]
     if sub in ("-h", "--help", "help"):
-        page(usage().rstrip())
+        # one blank line before the prompt, as spark ver
+        page(usage().rstrip() + "\n")
         return 0
     spec = VERBS.get(sub)
     if spec:

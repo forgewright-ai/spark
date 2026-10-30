@@ -71,8 +71,8 @@ CLEAR_USAGE = """spark clear -- remove the history this machine keeps
 """
 VER_USAGE = """spark ver -- the version
 
-  spark ver                   the logo and the version
-  spark ver --credits         who made spark, what it uses, the notice
+  spark ver                   the logo, the version, the license, the repo
+  spark ver --credits         what spark uses and the notice
   spark ver --sbom            what spark depends on, as CycloneDX JSON
 """
 
@@ -2091,14 +2091,27 @@ _ORIGIN_RE = re.compile(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$")
 
 
 def credits():
-    """`by <org> <sep> github.com/<org>/<repo>`, derived from this clone's
-    `origin` remote so a fork shows its own name; the literal fallback
-    (2 s timeout, never blocks) when there is no remote to read."""
+    """`github.com/<org>/<repo>`, derived from this clone's `origin` remote
+    so a fork shows its own; the literal fallback (2 s timeout, never
+    blocks) when there is no remote to read."""
     from . import run
     rc, out = run(["git", "-C", REPO, "remote", "get-url", "origin"], timeout=2)
     m = _ORIGIN_RE.search(out.strip()) if rc == 0 else None
     org, repo = m.groups() if m else ("forgewright-ai", "spark")
-    return "by %s%sgithub.com/%s/%s" % (org, glyph("sep"), org, repo)
+    return "github.com/%s/%s" % (org, repo)
+
+
+def details(more=False):
+    """The lines under the logo: `spark X.Y · MIT` and the repo. With more
+    (`spark ver --credits` and the end of `spark help`), the engine and its
+    repo, then the notice with CREDITS.md before its last line."""
+    lines = ["%s %s%sMIT" % (MARK, version.version(), glyph("sep")), credits()]
+    if more:
+        from . import setup
+        lines += ["", "llama.cpp %s%sMIT" % (engine.pinned_version(), glyph("sep")),
+                  "github.com/ggml-org/llama.cpp", ""]
+        lines += list(setup.NOTICE[:-1]) + ["* additional information -- see CREDITS.md", setup.NOTICE[-1]]
+    return lines
 
 
 LOGO_COLOURS = {"black": 0, "red": 1, "green": 2, "yellow": 3, "blue": 4, "magenta": 5, "cyan": 6, "white": 7}
@@ -2132,7 +2145,8 @@ def logo_names():
 
 
 def cmd_ver(args):
-    """the logo and the version; --credits adds who made it and the notice"""
+    """the logo, the version, the license and the repo; --credits adds the
+    engine and the notice"""
     if _help(args, VER_USAGE):
         return 0
     if args[:1] == ["--sbom"]:
@@ -2141,18 +2155,15 @@ def cmd_ver(args):
         sys.stdout.write(sbom.dumps())
         sys.stdout.flush()
         return 0
-    banner()
-    if args[:1] == ["--credits"]:
-        say(credits())
-        say("engine llama.cpp %s (MIT) -- CREDITS.md names the rest" % engine.pinned_version())
-        from . import setup
-        for line in setup.NOTICE:
-            say(line)
+    banner(details(more=args[:1] == ["--credits"]))
+    # one blank line before the prompt gives spark its room
+    say()
     return 0
 
 
-def banner():
-    """The logo and `spark X.Y`: the login's lines, and the setup offer's."""
+def banner(lines=None):
+    """The logo, then `spark X.Y` (the setup offer's) or the lines given
+    (spark ver's details)."""
     for path in (os.path.join(CONFIG_DIR, "banner"), os.path.join(REPO, "home", ".config", "spark", "banner")):
         try:
             with open(path, encoding="utf-8") as f:
@@ -2168,9 +2179,10 @@ def banner():
         logo = logo.replace("\\033", "\033") if sys.stdout.isatty() else re.sub(r"\\033\[[0-9;]*m", "", logo)
         say(logo.rstrip("\n"))
         say()
-    # this line is the login greeting, so the version is the cached one
-    # (lib/spark/version.py): no blocking git call on the common path.
-    say("%s %s" % (MARK, version.version()))
+    # the version is the cached one (lib/spark/version.py): no blocking
+    # git call on the common path
+    for line in lines or ["%s %s" % (MARK, version.version())]:
+        say(line)
 
 
 # ---------------------------------------------------- soul and memory

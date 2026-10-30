@@ -220,7 +220,7 @@ when asked. Open Ubuntu and run Debian's step 3.
 newest signed release and runs `spark setup`. It never runs `sudo`.
 
 `get` prints a short notice first: the license, no warranty, and that
-a model can be wrong, so what you run or accept is at your own risk.
+a model can be wrong, so read a command before you run it.
 At a terminal `spark setup` then asks `go on? yes/NO:` before it
 changes anything. Run by itself, `spark setup` shows the notice once,
 then asks. `spark ver --credits` shows the notice again.
@@ -937,9 +937,8 @@ network is the trust boundary.
 - The microphone opens only on `Esc v` or `spark voice listen`.
 
 `spark ver --sbom` lists what spark depends on. `spark ver --credits`
-names who made spark and what it uses, with the notice. `spark stats
---sends` shows what spark sent over the network, by destination and
-day.
+names what spark uses, with the notice. `spark stats --sends` shows
+what spark sent over the network, by destination and day.
 
 ## How it fits together
 

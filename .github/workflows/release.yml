@@ -88,9 +88,12 @@ jobs:
       - name: the tag agrees with spark ver
         run: |
           v=${GITHUB_REF_NAME#v}
+          # `spark X.Y · MIT`, or `spark X.Y | MIT` where the terminal is ASCII
           line=$(python3 bin/spark ver | grep '^spark ')
-          [ "$line" = "spark $v" ] \
-            || { echo "release: tag $GITHUB_REF_NAME but spark ver says: $line"; exit 1; }
+          case $line in
+            "spark $v · MIT"|"spark $v | MIT") ;;
+            *) echo "release: tag $GITHUB_REF_NAME but spark ver says: $line"; exit 1 ;;
+          esac
       - name: the SBOM
         # what the release pins, as CycloneDX: spark ver --sbom reads the
         # tree itself (engine.env, models.env), nothing is typed twice

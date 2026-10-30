@@ -117,15 +117,15 @@ def scratch_env(home):
     return env
 
 
-VERSION_LINE = re.compile(r"^version \S+$", re.M)
+VERSION_LINE = re.compile(r"^spark \S+(?= [·|] MIT$)", re.M)
 
 
 def help_at(tree, env):
-    """`spark help` at `tree`, its `version X` line normalised: the tag's
-    tree is an archive without git, so its version reads `dev`."""
+    """`spark help` at `tree`, its `spark X · MIT` line normalised: the
+    tag's tree is an archive without git, so its version reads `dev`."""
     p = subprocess.run([sys.executable, os.path.join(tree, "bin", "spark"), "help"],
                        capture_output=True, text=True, env=env, timeout=120)
-    return p.returncode, VERSION_LINE.sub("version VERSION", p.stdout, count=1)
+    return p.returncode, VERSION_LINE.sub("spark VERSION", p.stdout, count=1)
 
 
 def judge(root):

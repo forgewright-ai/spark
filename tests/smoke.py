@@ -5979,11 +5979,12 @@ def living_waits_cases(t):
         with open(os.path.join(REPO, "get"), encoding="utf-8") as f:
             got = re.findall(r"(?m)^ +'(\* [^']*)'(?: \\)?$", f.read())
         mine = "".join(l + "\n" for l in _su.NOTICE)
-        t.ok(tuple(got) == _su.NOTICE and len(_su.NOTICE) == 3,
-             "notice: get's three lines are setup.NOTICE, byte for byte", repr(got))
+        t.ok(tuple(got) == _su.NOTICE and len(_su.NOTICE) == 2,
+             "notice: get's two lines are setup.NOTICE, byte for byte", repr(got))
         t.ok(all(l.startswith("* ") and len(l) <= 80 and l == l.strip() for l in _su.NOTICE)
-             and "licence" not in mine and "license " not in mine and "no warranty" in mine,
-             "notice: three marked lines under 80 columns, no warranty in lower case", mine)
+             and "licence" not in mine and "license " not in mine and "no warranty" in mine
+             and "own risk" not in mine and _su.NOTICE[-1].startswith("* a model can be wrong"),
+             "notice: two marked lines under 80 columns, no warranty in lower case, the model's line last", mine)
 
         def notice_once(stream):
             sys.stdout = stream
@@ -8109,18 +8110,32 @@ def main():
         rc, out, _ = spark("line", stdin="x?", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
         t.ok(rc == 1 and "no answer from SPARK_BASE_URL" in out, "down -> hint names the URL", out)
 
+        # spark ver (v1.112): the logo, `spark X.Y · MIT` and the repo, then
+        # one blank line; --credits adds the engine, its repo and the
+        # notice with CREDITS.md before its last line, and spark help ends
+        # with the same lines
+        _ver = r"(\d+\.\d+(\.\d+)?(\+\d+)?|0\+[0-9a-f]+|dev)"
         rc, out, _ = spark("ver", "--credits")
-        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\.\d+)?(\+\d+)?|0\+[0-9a-f]+|dev)$", out, re.M)
-             and re.search(r"by \S+ [·|] github\.com/\S+/\S+", out),
-             "spark ver --credits: the version, credited", out)
-        rc, out2, _ = spark("ver")
-        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\.\d+)?(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
-             and "github.com" not in out2 and "CREDITS.md" not in out2 and out.startswith(out2),
-             "spark ver (a login's lines): the logo and the version, no credits", out2)
-        from spark import setup as _nsu
-        t.ok(out.endswith("".join(l + "\n" for l in _nsu.NOTICE)) and "no warranty" not in out2
-             and not os.path.exists(home + "/.local/state/spark/notice-shown"),
-             "spark ver --credits ends with the notice; bare spark ver has none, and neither marks it shown", out)
+        rc2, out2, _ = spark("ver")
+        from spark import engine as _veng, setup as _nsu
+        _tail = out2.split("\n")[-4:]
+        t.ok(rc2 == 0 and re.match(r"^spark %s [·|] MIT$" % _ver, _tail[0]) is not None
+             and re.match(r"^github\.com/\S+/\S+$", _tail[1]) is not None and _tail[2:] == ["", ""]
+             and "CREDITS.md" not in out2 and "llama.cpp" not in out2 and "no warranty" not in out2,
+             "spark ver: the logo, spark X.Y with MIT, the repo, one blank line; no credits", out2)
+        # out ends "...NOTICE[-1]\n\n": the details are its last 9 lines
+        _det = out.split("\n")[-11:-2]
+        t.ok(rc == 0 and out.endswith("\n\n") and not out.endswith("\n\n\n")
+             and out.startswith(out2.rstrip("\n") + "\n\n") and _det[:2] == out2.split("\n")[-4:-2]
+             and _det[2] == "" and _det[4:6] == ["github.com/ggml-org/llama.cpp", ""]
+             and re.match(r"^llama\.cpp %s [·|] MIT$" % re.escape(_veng.pinned_version()), _det[3]) is not None
+             and _det[6:] == list(_nsu.NOTICE[:-1]) + ["* additional information -- see CREDITS.md", _nsu.NOTICE[-1]]
+             and "by forgewright" not in out and not os.path.exists(home + "/.local/state/spark/notice-shown"),
+             "spark ver --credits: the engine, its repo and the notice, CREDITS.md before the model's line; nothing marked shown", out)
+        rc3, out3, _ = spark("help")
+        t.ok(rc3 == 0 and out3.endswith("\n".join(_det) + "\n\n") and not out3.endswith("\n\n\n")
+             and "\nversion " not in out3,
+             "spark help ends with spark ver --credits' lines and one blank line", out3[-700:])
 
         # spark ver --sbom (v1.36, lib/spark/sbom.py): the JSON and one
         # newline, nothing else -- CycloneDX 1.5 with its four top-level
@@ -8210,8 +8225,8 @@ def main():
         subprocess.run(["git", "-C", fork, "remote", "set-url", "origin", "https://github.com/someone/sparkfork.git"],
                         env=genv, check=True, timeout=10)
         rc, out, _ = spark("ver", "--credits", exe=os.path.join(fork, "bin", "spark"))
-        t.ok(rc == 0 and "by someone" in out and "github.com/someone/sparkfork" in out,
-             "a fork's origin remote names itself in spark ver's credits line", out)
+        t.ok(rc == 0 and "github.com/someone/sparkfork" in out and "forgewright-ai/spark\n" not in out,
+             "a fork's origin remote names itself in spark ver's repo line", out)
 
         # a lone word is a slip, not a question
         rc, out, _ = spark("theme")
@@ -10253,7 +10268,7 @@ def main():
         rc, out, _ = spark("bar")       # a status bar runs it without a tty
         t.ok(rc == 0 and "load " in out and "spark bar" not in out,
              "bare spark bar without a tty draws the line (a status-right cannot toggle itself off)", out)
-        # ver: the login greeting. The version line comes from git describe
+        # ver: the logo and `spark X.Y · MIT`. The version comes from git describe
         # (lib/spark/version.py); recomputed here as its own subprocess
         # against REPO, never by importing spark.version into this process
         # -- the real cache file (state/version), if any, must stay
@@ -10269,7 +10284,7 @@ def main():
             sha = rp.stdout.strip()
             version = ("0+" + sha) if rp.returncode == 0 and sha else "dev"   # dev: a branch with no commit yet
         rc, out, err = spark("ver")
-        t.ok(rc == 0 and err == "" and re.search(r"^spark %s$" % re.escape(version), out, re.M),
+        t.ok(rc == 0 and err == "" and re.search(r"^spark %s [·|] MIT$" % re.escape(version), out, re.M),
              "ver: the version line matches git describe", out + err)
         t.ok("\u2588" in out and "\033" not in out and "\\033" not in out, "ver: the logo is drawn, without escapes, when piped", out)
         t.ok("CREDITS.md" in spark("ver", "--credits")[1], "ver --credits: names CREDITS.md for the rest of the licenses", out)
@@ -10288,14 +10303,14 @@ def main():
                 subprocess.run(["git", "-C", tree] + args, check=True, capture_output=True, env=genv)
             p = subprocess.run([sys.executable, os.path.join(tree, "bin", "spark"), "ver"],
                                capture_output=True, text=True, env=env, timeout=30)
-            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1$", p.stdout, re.M) is not None,
+            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1 [·|] MIT$", p.stdout, re.M) is not None,
                  "ver: a patch tag v9.9.1 reads as spark 9.9.1", p.stdout + p.stderr)
             open(os.path.join(tree, "two"), "w").write("two\n")
             for args in (["add", "-A"], ["commit", "-q", "-m", "two"]):
                 subprocess.run(["git", "-C", tree] + args, check=True, capture_output=True, env=genv)
             p = subprocess.run([sys.executable, os.path.join(tree, "bin", "spark"), "ver"],
                                capture_output=True, text=True, env=env, timeout=30)
-            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1\+1$", p.stdout, re.M) is not None,
+            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1\+1 [·|] MIT$", p.stdout, re.M) is not None,
                  "ver: one commit past a patch tag reads as spark 9.9.1+1", p.stdout + p.stderr)
         rc, out, _ = spark("memory", "add", "-h")
         t.ok(rc == 0 and out.startswith("spark memory -- "), "remember -h is help, not a fact", out)
@@ -12558,7 +12573,7 @@ def main():
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and out.startswith(("* ", "! ")) and len(out.splitlines()) == 1,
              "bare spark with no site.env, not a tty: the one-line status (the offer is tty-only)", out)
-        # the notice (setup.NOTICE): at a terminal without --yes, the three
+        # the notice (setup.NOTICE): at a terminal without --yes, the two
         # lines and one question before anything is asked or written -- a
         # no ends setup, exit 0, nothing written; a yes goes on and is
         # never asked again; with no terminal the lines print once, no
@@ -12617,7 +12632,7 @@ def main():
         rc, out = _setup_tty(b"n\n")
         t.ok(rc == 0 and "yes/NO" not in out and _nsu.NOTICE[0] not in out and "open a new shell" in out,
              "setup again: the notice is not printed and nothing is asked", out)
-        # get showed the three lines a moment ago (SPARK_NOTICE_SHOWN=1,
+        # get showed the two lines a moment ago (SPARK_NOTICE_SHOWN=1,
         # set on the setup it starts): the question alone; a no names how
         # to come back to the clone; a yes goes on; with no terminal the
         # notice prints nothing at all, and it is marked shown
