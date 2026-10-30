@@ -101,12 +101,17 @@ class Peek(smoke.Stub):
         self.close_connection = True
 
 
+RESERVED = set()     # ports a free_pair promised to a root listener: free_port never hands one out
+
+
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    p = s.getsockname()[1]
-    s.close()
-    return p
+    while True:
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        p = s.getsockname()[1]
+        s.close()
+        if p not in RESERVED:
+            return p
 
 
 def req(url, method, path, body=None, headers=None, timeout=10):
@@ -623,12 +628,16 @@ def verb_runner(ok):
         ok(rc == 127 and lines[-1].startswith("! cannot run"), "/api/run's runner: a verb that cannot start is rc 127",
            (rc, lines))
 def free_pair():
-    """Two free ports side by side: the page's and the root listener's."""
+    """Two free ports side by side: the page's and the root listener's.
+    The second is reserved: on macOS the kernel hands the port just
+    released out again to the next bind, so a stub started later sat on
+    the root listener's port twice in one night (#144)."""
     while True:
         p = free_port()
         s = socket.socket()
         try:
             s.bind(("127.0.0.1", p + 1))
+            RESERVED.add(p + 1)
             return p
         except OSError:
             continue
