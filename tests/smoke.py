@@ -12815,14 +12815,17 @@ def main():
                      XDG_DATA_HOME=home_ + "/.local/share", SHELL="/bin/zsh", SPARK_VOICE="off", SPARK_PORT="9")
             e.update(more or {})
             m, s = _pty.openpty()
+            # a session of its own, as a terminal gives a program: a SIGINT at
+            # input() under Apple's libedit python stalled with the test's
+            # session shared, and ends at once in its own
             q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--name", "box", "--user", "ana"] + list(model),
-                                 stdin=s, stdout=s, stderr=s, env=e)
+                                 stdin=s, stdout=s, stderr=s, env=e, start_new_session=True)
             os.close(s)
             os.set_blocking(m, False)      # drained whole each time: a full pty buffer blocks setup's writes
             # 120 s for setup on a loaded runner; the pty stays open until
             # setup has exited, or its last flush fails and python exits 120
             got, end, sent, went, cut = b"", time.time() + 120, False, False, False
-            sent_at = None
+            sent_at, cut_at, woke = None, 0.0, False
             while time.time() < end:
                 r, _, _ = _select.select([m], [], [], 0.2)
                 # the interrupt a stop_at asks for goes 10 s after the keys
@@ -12832,6 +12835,13 @@ def main():
                 if stop_at and not cut and sent_at is not None and time.time() - sent_at > 10:
                     q.send_signal(signal.SIGINT)
                     cut = True
+                    cut_at = time.time()
+                if cut and q.poll() is None and time.time() - cut_at > 3 and not woke:
+                    # a read libedit holds past the signal: one newline wakes it, and the
+                    # interrupt already pending ends setup before the answer is used
+                    os.write(m, b"\n")
+                    woke = True
+                    got += b"[woke]"
                 if r:
                     chunk, gone_ = b"", False
                     while True:
@@ -12858,6 +12868,7 @@ def main():
                     if stop_at and not cut and stop_at in got:
                         q.send_signal(signal.SIGINT)
                         cut = True
+                        cut_at = time.time()
                 elif q.poll() is not None:
                     break
             try:
