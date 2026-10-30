@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.110
+
+- CI on main no longer runs the gate twice. A `gate` job asks whether
+  the commit already passed on its `try/` branch (`tests/land.sh
+  --passed`, the one question); when it did, every other job skips and
+  `green` accepts it, so main keeps a run of its own for the landing's
+  time and spends one minute, not six. A commit that reached main any
+  other way still gets the full run (#145).
+
 ## v1.109
 
 - `spark do --sandbox` runs on bubblewrap 0.8 to 0.10, Debian 12's and

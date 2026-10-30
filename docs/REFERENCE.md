@@ -562,8 +562,12 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 spark-add-check-row (the four obligations for a row, the
                 fixture and the selftest proof). The rest of .claude/ is
                 local state, ignored
-.github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
-                request, by hand, never a tag; lint runs first, alone
+.github/        workflows/ci.yml: on a push to a try/ branch, a pull
+                request, by hand, never a tag; on main the gate job asks
+                whether the commit passed on its try/ branch already
+                (tests/land.sh --passed) and, when it did, every other job
+                skips and green accepts it, so the landing keeps a run of
+                its own for its time (--landed-at); lint runs first, alone
                 (tests/gate.sh full lint and zizmor over the workflows), and
                 every other job needs it; linux and macos run tests/gate.sh
                 full, one job per group of suites (smoke, serve, rest), each

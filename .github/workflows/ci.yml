@@ -29,7 +29,12 @@
 # are the only download.
 # A tag push runs nothing here: the tag's commit already passed. A newer
 # push cancels an older run on a try/ branch or a pull request, never on
-# main -- every commit main receives keeps its own finished run.
+# main. On main the gate job asks first whether this very commit already
+# passed here, on its try/ branch (tests/land.sh --passed, the one
+# question); when it did, every other job skips and green accepts it, so
+# main keeps a run of its own for the landing's time (tests/land.sh
+# --landed-at reads it) without running the gate twice (#145). A commit
+# that reached main any other way gets the full run.
 name: ci
 on:
   push:
@@ -42,6 +47,32 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  gate:
+    # main alone: did this commit pass here already? The answer is one
+    # output, done, that lint reads; a try/ branch and a pull request skip
+    # this job and run everything
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read   # the workflow runs of this commit
+    outputs:
+      done: ${{ steps.ask.outputs.done }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          if sh tests/land.sh --passed "$SHA"; then
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "done=false" >> "$GITHUB_OUTPUT"
+          fi
   lint:
     # the cheap checks first, on one runner: the privacy gate over the
     # whole tree, syntax, ASCII, shellcheck, docs_test, patch_test and
@@ -49,7 +80,11 @@ jobs:
     # failure costs this job's minute, not a run on every slot. The
     # personal word list is a repository secret (one word per line); a
     # hit names the file, never the line -- this log is public. A fork
-    # without it gets a NOTICE and the generic patterns only.
+    # without it gets a NOTICE and the generic patterns only. On main it
+    # runs only when the gate found no earlier green run of this commit;
+    # every other job needs lint, so they follow it
+    needs: gate
+    if: ${{ !cancelled() && (github.ref != 'refs/heads/main' || needs.gate.outputs.done != 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -475,15 +510,24 @@ jobs:
     # and fails when any of them failed, was cancelled or was skipped.
     # tests/land.sh still asks the run as a whole; this job is for GitHub's
     # own gate on main.
-    needs: [lint, linux, debian, arch, void, fedora, opensuse, sandbox, macos]
+    needs: [gate, lint, linux, debian, arch, void, fedora, opensuse, sandbox, macos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: every job passed
+        # the gate's own result is not counted: it is skipped off main by
+        # design. When it said done, the skipped jobs are the point
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          GATE: ${{ needs.gate.result }}
+          DONE: ${{ needs.gate.outputs.done }}
         run: |
+          RESULTS=$(printf '%s' " $RESULTS " | sed "s/ $GATE / /")
+          if [ "$DONE" = true ]; then
+            echo "ci: main, already passed on its try/ branch -- the gate alone ran ($RESULTS)"
+            exit 0
+          fi
           case " $RESULTS " in
               *" failure "*|*" cancelled "*|*" skipped "*) echo "ci: a job did not pass: $RESULTS"; exit 1 ;;
           esac
