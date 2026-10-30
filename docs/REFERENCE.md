@@ -487,7 +487,7 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)
                 gate.sh (the one test list: `fast` is what a commit runs,
-                `full [lint|smoke|serve|rest]` what CI runs, one job per
+                `full [lint|smoke|serve|rest|sandbox]` what CI runs, one job per
                 group, lint first and alone;
                 the hooks and ci.yml name no test themselves; the selftest
                 and chaos lead rest, and SPARK_GATE_FAIL_FAST=1, ci.yml's,
@@ -568,7 +568,10 @@ tests/          smoke.py (the spine end to end against a stub engine; its
                 every other job needs it; linux and macos run tests/gate.sh
                 full, one job per group of suites (smoke, serve, rest), each
                 job's gate-times ledger kept as an artifact, then a real
-                bootstrap in the rest job; debian, arch, void, fedora
+                bootstrap in the rest job; sandbox runs `tests/gate.sh full
+                sandbox` and the `sandbox` row in debian:12 and ubuntu:24.04
+                containers, bwrap 0.8 and 0.9, the copy mode for real;
+                debian, arch, void, fedora
                 and opensuse containers run the one-liner as a new user
                 (void under a runsvdir started for the job: the supervised
                 spark-check is proven there)
@@ -1209,7 +1212,17 @@ and may change freely.
    running or waiting (`SANDBOX_MAX_WAITING` 5, the count and the mkdir
    hold `runs/.lock`). Linux is one bwrap a step: `--ro-bind / /`, the
    git config files read-only one by one, the project an overlay whose
-   upper dir keeps every write, `--clearenv` and `sandbox.STEP_ENV`. An
+   upper dir keeps every write, `--clearenv` and `sandbox.STEP_ENV`. A
+   bwrap older than `sandbox.BWRAP_MIN` (0.11, where `--overlay`
+   arrived) has no overlay: Debian 12 ships 0.8 and Ubuntu 24.04 0.9.
+   There the run is the copy mode (`sandbox.linux_mode`, the run's `os`
+   `copy`). The project is copied into the run with its manifest, as
+   macOS's clone is, and bound over itself with `--bind`, so a step's
+   paths are the project's. The review and the apply read the copy
+   against the project as they read the clone. The probe proves the
+   mode it will use, and a refusal under Ubuntu's AppArmor userns
+   switch names the switch and the way round it
+   (`sandbox.APPARMOR_REMEDY`). An
    empty tmpfs covers each of `sandbox.HIDDEN`: the homes, /root, /run,
    /tmp, /var/tmp, /media, /mnt and /etc/spark. `sandbox.BWRAP_FLAGS`
    gives fresh user, ipc, pid, net, uts and cgroup namespaces,

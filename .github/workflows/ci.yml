@@ -373,6 +373,41 @@ jobs:
           awk -F'\t' '$3=="packages" { print; found=1; if ($2!="ok") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  sandbox:
+    # the copy mode for real: bwrap with no overlay (Debian 12's 0.8,
+    # Ubuntu 24.04's 0.9), a plain user, the real escapes included, and the
+    # sandbox row ok. --privileged: a container's default seccomp and
+    # AppArmor refuse the user namespace bwrap needs; the runner is thrown
+    # away with the job
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian12
+            image: debian:12@sha256:d74df7598108a173a621eda4d58a2adbf850b2d9a9d81bc2cca1a6c21174a880
+          - name: ubuntu2404
+            image: ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+    container:
+      image: ${{ matrix.image }}   # zizmor: ignore[unpinned-images] pinned by digest above
+      options: --privileged
+    steps:
+      - run: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git python3 bubblewrap curl zsh procps sudo >/dev/null && bwrap --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the sandbox suite as a plain user, the copy mode for real
+        run: |
+          useradd -m -s /bin/bash ada
+          chmod -R a+rX "$GITHUB_WORKSPACE"
+          git config --system safe.directory '*'
+          sudo -u ada -H sh -c "cd '$GITHUB_WORKSPACE' && SPARK_GATE_JOBS=1 sh tests/gate.sh full sandbox"
+      - name: the sandbox row is ok (the copy mode named)
+        run: |
+          sudo -u ada -H sh -c "cd '$GITHUB_WORKSPACE' && python3 bin/spark check sandbox --porcelain" | tee /tmp/row.txt
+          awk -F'\t' '$3=="sandbox" { print; found=1; if ($2!="ok" || $4 !~ /copy/) bad=1 } END { exit bad || !found }' /tmp/row.txt
   macos:
     needs: lint
     runs-on: macos-latest
@@ -434,7 +469,7 @@ jobs:
     # and fails when any of them failed, was cancelled or was skipped.
     # tests/land.sh still asks the run as a whole; this job is for GitHub's
     # own gate on main.
-    needs: [lint, linux, debian, arch, void, fedora, opensuse, macos]
+    needs: [lint, linux, debian, arch, void, fedora, opensuse, sandbox, macos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

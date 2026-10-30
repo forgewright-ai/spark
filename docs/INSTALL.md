@@ -690,10 +690,13 @@ Linux:
   model.
 - On a Vulkan build you join the `render` group. Log out of every
   session and in again.
-- `spark do --sandbox` needs bubblewrap 0.11 or newer, as in Debian 13
-  and Arch. Ubuntu 24.04 has 0.9, so the sandbox does not work there. A
-  step has no network, and the homes and `/tmp` are hidden. The rest of
-  the system stays readable.
+- `spark do --sandbox` needs bubblewrap. With 0.11 or newer, as in
+  Debian 13 and Arch, the project is an overlay. With 0.8 to 0.10, as
+  in Debian 12 and Ubuntu 24.04, it is copied into the run and bound
+  over itself. On Ubuntu, AppArmor may keep a plain user from a new
+  namespace, and `spark check sandbox` names the switch. A step has no
+  network, and the homes and `/tmp` are hidden. The rest of the system
+  stays readable.
 - Services: `systemctl --user status spark-serve spark-forge
   spark-check.timer` and `journalctl --user -u spark-serve -n 50`.
 - `spark serve boot on` runs the services without a login, turns off

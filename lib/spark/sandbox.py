@@ -74,7 +74,14 @@ SANDBOX_MAX_ENTRIES = 50000     # a macOS clone copies at most this many entries
 SANDBOX_LIST_SECONDS = 10.0     # ...listed within this long (the persona.blast pattern)
 SANDBOX_MAX_BYTES = 1 << 30     # what one run may write: RLIMIT_FSIZE a file, the upper dir in all
 SANDBOX_MAX_WAITING = 5         # runs running or waiting for review; a sixth is refused
-BWRAP_MIN = (0, 11)             # --overlay arrived in bubblewrap 0.11
+BWRAP_MIN = (0, 11)             # --overlay arrived in bubblewrap 0.11; an older bwrap runs the copy mode
+# Ubuntu 24.04 keeps a plain user from a new user namespace through
+# AppArmor (kernel.apparmor_restrict_unprivileged_userns=1): bwrap cannot
+# start. The probe's refusal names the switch and the two ways round it
+APPARMOR_REMEDY = ("Ubuntu's AppArmor keeps a plain user from a new namespace: "
+                   "echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns for this boot, "
+                   "or kernel.apparmor_restrict_unprivileged_userns=0 in /etc/sysctl.d/60-apparmor-namespace.conf")
+APPARMOR_SIGNS = ("namespace", "uid map", "Permission denied", "Operation not permitted")
 DIFF_MAX = 256 * 1024           # a text larger than this is one line in the review, not a diff
 REVIEW_MAX = 2 * 1024 * 1024    # old + new text one review shows; past it, headings only
 STATE_MAX = 2000                # raw changes a step's own changes are read from (state); past it, untold
@@ -630,6 +637,31 @@ def mark(run, state):
     _save(run)
 
 
+def linux_mode(v):
+    """The Linux mode for a bwrap version string: "linux", the project an
+    overlay (bwrap BWRAP_MIN or newer), else "copy", the project copied
+    into the run and bound over itself (Debian 12's 0.8, Ubuntu 24.04's
+    0.9)."""
+    try:
+        have = tuple(int(x) for x in (v or "0").split(".")[:2])
+    except ValueError:
+        have = (0, 0)
+    return "linux" if have >= BWRAP_MIN else "copy"
+
+
+def mode(platform=None):
+    """The os a new run on this machine takes: macos, linux or copy."""
+    plat = platform or OS
+    return plat if plat == "macos" else linux_mode(_bwrap_version())
+
+
+def _copy_dir(run):
+    """The run's own copy of the project (macOS's clone, the copy mode's
+    copy), or None on the overlay."""
+    sub = {"macos": "clone", "copy": "copy"}.get(run["os"])
+    return os.path.join(run["dir"], sub) if sub else None
+
+
 def new_run(cwd, thread, platform=None, keep=False):
     """A new run of the project at cwd, for the sealed thread `thread`,
     state running, its lock held by this process (run["lock"]; release()
@@ -637,7 +669,7 @@ def new_run(cwd, thread, platform=None, keep=False):
     cwd -- that covers ~ and / -- and when SANDBOX_MAX_WAITING runs are
     already running or waiting: the count and the mkdir hold runs/.lock,
     so two processes cannot both take the last place."""
-    plat = platform or OS
+    plat = platform or mode()
     cwd = os.path.realpath(cwd)
     runs_real = os.path.realpath(mkdirs(RUNS_DIR))
     if _inside(runs_real, cwd):
@@ -679,6 +711,8 @@ def new_run(cwd, thread, platform=None, keep=False):
     try:
         if plat == "macos":
             _clone(run)
+        elif plat == "copy":
+            _copy(run)
         else:
             for sub in ("up", "wk"):
                 os.mkdir(os.path.join(d, sub), 0o700)
@@ -686,6 +720,24 @@ def new_run(cwd, thread, platform=None, keep=False):
         _remove(run)
         raise
     return run
+
+
+def _copy(run):
+    """The copy mode: cp -a of the project into the run, bounded as the
+    clone is; then the manifest of the copy as it began. The step binds
+    it over the project, so every path a step names is the project's."""
+    d, cwd = run["dir"], run["cwd"]
+    _walk(cwd, SANDBOX_MAX_ENTRIES, SANDBOX_LIST_SECONDS)
+    copy = os.path.join(d, "copy")
+    try:
+        p = subprocess.run(["cp", "-a", cwd, copy], capture_output=True, text=True, timeout=120)
+        rc, err = p.returncode, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        rc, err = 1, str(e)
+    if rc != 0:
+        raise SandboxError("the copy failed: %s" % ((err or "").strip().splitlines() or ["cp -a"])[0])
+    manifest = {r: _meta(st) for r, st in _walk(copy, SANDBOX_MAX_ENTRIES, SANDBOX_LIST_SECONDS).items()}
+    _write_private(os.path.join(d, "manifest.json"), json.dumps(manifest).encode())
 
 
 def _clone(run):
@@ -759,7 +811,8 @@ def _step_env(home, tmp):
 
 def step_cwd(run, platform=None):
     """The directory a step runs in: the clone on macOS (the `[cwd]` a
-    sandboxed goal names), the project itself on Linux (the overlay)."""
+    sandboxed goal names), the project itself on Linux (the overlay, or
+    the copy bound over it)."""
     if (platform or run.get("os") or OS) == "macos":
         return os.path.realpath(os.path.join(run["dir"], "clone"))
     return run["cwd"]
@@ -780,9 +833,14 @@ def step(run, shell, cmd, platform=None):
     for g in GIT_FILES:
         p = os.path.join(home, g)
         argv += ["--ro-bind-try", p, p]
-    argv += ["--dev", "/dev", "--proc", "/proc",
-             "--overlay-src", cwd, "--overlay", os.path.join(d, "up"), os.path.join(d, "wk"), cwd,
-             "--chdir", cwd]
+    argv += ["--dev", "/dev", "--proc", "/proc"]
+    if plat == "copy":
+        # the copy bound over the project: a step writes the copy, at the
+        # project's own paths; the review reads the copy against the project
+        argv += ["--bind", os.path.join(d, "copy"), cwd]
+    else:
+        argv += ["--overlay-src", cwd, "--overlay", os.path.join(d, "up"), os.path.join(d, "wk"), cwd]
+    argv += ["--chdir", cwd]
     argv += list(BWRAP_FLAGS)
     argv.append("--clearenv")
     for k, v in sorted(_step_env(home, "/tmp").items()):
@@ -860,10 +918,10 @@ def used_bytes(run, seconds=SANDBOX_LIST_SECONDS):
     new and changed files (macOS)."""
     d = run["dir"]
     try:
-        if run["os"] == "macos":
+        copy = _copy_dir(run)
+        if copy:
             man = _manifest(run)
-            return sum(st.st_size for r, st in _walk(os.path.join(d, "clone"), None, seconds).items()
-                       if man.get(r) != _meta(st))
+            return sum(st.st_size for r, st in _walk(copy, None, seconds).items() if man.get(r) != _meta(st))
         return sum(st.st_size for st in _walk(os.path.join(d, "up"), None, seconds).values())
     except SandboxError:
         return SANDBOX_MAX_BYTES + 1     # too big to list in time is too big
@@ -903,11 +961,10 @@ def _probe_key(plat):
 
 def install_hint():
     """The line that installs bubblewrap here, when that is what the probe
-    lacks (Linux, bwrap absent or too old); else ''."""
+    lacks (Linux, no bwrap at all: an old one runs the copy mode); else ''."""
     if OS == "macos":
         return ""
-    v = _bwrap_version()
-    if v and v != "?" and tuple(int(x) for x in v.split(".")[:2]) >= BWRAP_MIN:
+    if _bwrap_version():
         return ""
     from . import packages
     return packages.install_line(["bubblewrap"])
@@ -1096,8 +1153,7 @@ def _probe_linux(key):
         have = tuple(int(x) for x in v.split(".")[:2])
     except ValueError:
         have = (0, 0)
-    if have < BWRAP_MIN:
-        return False, "bwrap %s is older than %d.%d (no overlay)" % ((v,) + BWRAP_MIN)
+    copy = have < BWRAP_MIN          # the copy mode: no overlay before 0.11
     d = tempfile.mkdtemp(prefix="probe.", dir=PROBE_DIR)
     try:
         lower = os.path.join(d, "lower")
@@ -1106,6 +1162,8 @@ def _probe_linux(key):
         for name, body in (("keep", "a\n"), ("gone", "b\n")):
             with open(os.path.join(lower, name), "w") as f:
                 f.write(body)
+        if copy:
+            shutil.copytree(lower, os.path.join(d, "copy"), symlinks=True)
         marker = os.path.join(d, "marker")
         with open(marker, "w") as f:
             f.write("m\n")
@@ -1119,10 +1177,20 @@ def _probe_linux(key):
             "if [ \"$(grep -c : /proc/net/dev)\" != 1 ]; then fail 'the network is up inside'; fi",
             "if [ -n \"$(ls -A /etc/spark 2>/dev/null)\" ]; then fail '/etc/spark is visible inside'; fi",
         ))
-        run = {"id": "probe", "cwd": lower, "dir": d, "os": "linux"}
-        rc, err = _probe_run(run, script, "linux")
+        plat = "copy" if copy else "linux"
+        run = {"id": "probe", "cwd": lower, "dir": d, "os": plat}
+        rc, err = _probe_run(run, script, plat)
         if rc != 0:
-            return False, _first_line(err, "the probe step exited %d" % rc)
+            why = _first_line(err, "the probe step exited %d" % rc)
+            if key.get("userns") == "1" and any(s in (err or "") for s in APPARMOR_SIGNS):
+                why += " -- " + APPARMOR_REMEDY
+            return False, why
+        if copy:
+            new, gone = _lstat(os.path.join(d, "copy", "new")), _lstat(os.path.join(d, "copy", "gone"))
+            kept = _lstat(os.path.join(lower, "gone"))
+            if not (new and stat.S_ISREG(new.st_mode) and gone is None and kept):
+                return False, "the copy did not record the probe's changes"
+            return True, "bwrap %s copy (no overlay before %d.%d)" % ((v,) + BWRAP_MIN)
         new, gone = _lstat(os.path.join(d, "up", "new")), _lstat(os.path.join(d, "up", "gone"))
         if not (new and stat.S_ISREG(new.st_mode) and gone and stat.S_ISCHR(gone.st_mode) and gone.st_rdev == 0):
             return False, "the overlay did not record the probe's changes"
@@ -1180,7 +1248,7 @@ def _manifest(run):
 
 
 def _src_root(run):
-    return os.path.join(run["dir"], "clone" if run["os"] == "macos" else "up")
+    return _copy_dir(run) or os.path.join(run["dir"], "up")
 
 
 def _is_whiteout(path, st):
@@ -1228,9 +1296,10 @@ def _upper_raw(up, low):
 
 
 def _clone_raw(run):
-    """macOS: the clone against its manifest; the lower as it is now."""
+    """macOS's clone, or the copy mode's copy, against its manifest; the
+    lower as it is now."""
     man = _manifest(run)
-    clone, low = os.path.join(run["dir"], "clone"), run["cwd"]
+    clone, low = _copy_dir(run), run["cwd"]
     now = _walk(clone, SANDBOX_MAX_ENTRIES * 2, SANDBOX_LIST_SECONDS * 3)
     raw = []
     for r, st in now.items():
@@ -1296,7 +1365,7 @@ def _escapes(cwd, rel, target):
 
 def _overlay_mark(run, src):
     """The reason an upper entry is refused for an overlay mark, or ''."""
-    if run["os"] == "macos":
+    if run["os"] != "linux":
         return ""
     for name, why in OVERLAY_REFUSED:
         if _xattr(src, name) is not None:
@@ -1480,7 +1549,7 @@ def changes(run):
     None for a delete or a directory); control says the name or the text
     holds a VISIBLE character; git names the git directory an item is in.
     Every git item is its own entry."""
-    raw = _clone_raw(run) if run["os"] == "macos" else _upper_raw(os.path.join(run["dir"], "up"), run["cwd"])
+    raw = _clone_raw(run) if _copy_dir(run) else _upper_raw(os.path.join(run["dir"], "up"), run["cwd"])
     raw.sort(key=lambda t: t[0].split("/"))
     entries = []
     for r, st, old in raw:
@@ -1553,7 +1622,7 @@ def state(run):
     with no text read. None past STATE_MAX raw changes, or when the copy
     does not read: then a step's changes go untold."""
     try:
-        raw = _clone_raw(run) if run["os"] == "macos" else _upper_raw(os.path.join(run["dir"], "up"), run["cwd"])
+        raw = _clone_raw(run) if _copy_dir(run) else _upper_raw(os.path.join(run["dir"], "up"), run["cwd"])
         if len(raw) > STATE_MAX:
             return None
         out = {}

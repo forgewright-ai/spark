@@ -179,8 +179,9 @@ def tests_gated():
     check(ci.count('run: sh tests/gate.sh full "$GROUP"') == 2 and ci.count("group: [smoke, serve, rest]") == 2,
           "ci.yml: linux and macos run tests/gate.sh full, one job per group (smoke, serve, rest)")
     groups = set(re.findall(r"(?m)^\s+(\w+)\)\s+group_\w+ ;;$", read("tests/gate.sh")))
-    check(groups == {"lint", "smoke", "serve", "rest"}, "tests/gate.sh full takes the groups ci.yml names (lint, smoke, serve, rest)")
-    check('run: sh tests/gate.sh full lint' in ci and ci.count("    needs: lint\n") == 7,
+    check(groups == {"lint", "smoke", "serve", "rest", "sandbox"},
+          "tests/gate.sh full takes the groups ci.yml names (lint, smoke, serve, rest, and sandbox for the containers)")
+    check('run: sh tests/gate.sh full lint' in ci and ci.count("    needs: lint\n") == 8,
           "ci.yml: the lint job runs tests/gate.sh full lint, and every other job but green needs it")
     check("tags:" not in ci.split("\njobs:")[0], "ci.yml runs on no tag push: the tag's commit already passed")
     jobs = set(re.findall(r"(?m)^  ([a-z]+):$", ci.split("\njobs:")[1]))

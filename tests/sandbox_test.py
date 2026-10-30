@@ -1140,6 +1140,57 @@ def test_waiting_cap():
     clear_runs()
 
 
+# ------------------------------------------------------------------ the copy mode (#155)
+def test_copy_mode():
+    """bwrap before 0.11 has no overlay: the project is copied into the
+    run and bound over itself. The review reads the copy against the
+    project as macOS reads its clone; the apply is the same."""
+    check("linux_mode: 0.11 and newer is the overlay, older the copy, nothing the copy",
+          [sandbox.linux_mode(v) for v in ("0.11.0", "0.13.1", "0.9.0", "0.8.0", "", "?")]
+          == ["linux", "linux", "copy", "copy", "copy", "copy"])
+    root = project({"keep.txt": "k\n", "gone.txt": "bye\n", "run.sh": "echo\n", "sub/x.txt": "x\n"})
+    run = sandbox.new_run(root, "t", platform="copy")
+    copy = os.path.join(run["dir"], "copy")
+    check("copy: new_run copies the project into the run, with a manifest, no upper dir",
+          run["os"] == "copy" and read(os.path.join(copy, "keep.txt")) == "k\n" and read(os.path.join(copy, "sub/x.txt")) == "x\n"
+          and os.path.isfile(os.path.join(run["dir"], "manifest.json")) and not os.path.exists(os.path.join(run["dir"], "up")),
+          sorted(os.listdir(run["dir"])))
+    check("copy: step_cwd is the project (the copy is bound over it)", sandbox.step_cwd(run, platform="copy") == root)
+    argv, cwd, env = sandbox.step(run, "sh", "echo hi", platform="copy")
+    b = argv.index("--bind")
+    check("copy: the step binds the copy over the project, then chdir, and names no overlay",
+          argv[b:b + 5] == ["--bind", copy, root, "--chdir", root] and "--overlay" not in argv and "--overlay-src" not in argv
+          and argv[1:4] == ["--ro-bind", "/", "/"], argv[b:b + 5])
+    check("copy: the review is empty while nothing moved", sandbox.changes(run) == [] and sandbox.used_bytes(run) == 0)
+    # what a step would have left in the copy
+    put(copy, "added.txt", "new\n")
+    os.remove(os.path.join(copy, "gone.txt"))
+    with open(os.path.join(copy, "keep.txt"), "a") as f:
+        f.write("more\n")
+    os.chmod(os.path.join(copy, "run.sh"), 0o755)
+    reviewed = sandbox.changes(run)
+    e = by_path(reviewed)
+    check("copy: the review reads the copy against the project: added, deleted, changed, mode",
+          [e.get(p, {}).get("status") for p in ("added.txt", "gone.txt", "keep.txt", "run.sh")]
+          == ["added", "deleted", "changed", "mode"] and "sub/x.txt" not in e, {p: x["status"] for p, x in e.items()})
+    check("copy: used_bytes weighs the copy's new and changed files", 0 < sandbox.used_bytes(run) < 100)
+    check("copy: the project is untouched until the apply",
+          read(os.path.join(root, "keep.txt")) == "k\n" and os.path.exists(os.path.join(root, "gone.txt")))
+    n, problems = sandbox.apply(run, reviewed)
+    check("copy: apply applies what was reviewed and the run goes",
+          read(os.path.join(root, "keep.txt")) == "k\nmore\n" and read(os.path.join(root, "added.txt")) == "new\n"
+          and not os.path.exists(os.path.join(root, "gone.txt")) and mode_of(os.path.join(root, "run.sh")) & 0o100
+          and gone(run), (n, problems))
+    # a file lost in the copy on a keep run is held, as on the overlay
+    run = sandbox.new_run(root, "t", platform="copy", keep=True)
+    os.remove(os.path.join(run["dir"], "copy", "keep.txt"))
+    e = by_path(sandbox.changes(run))
+    check("copy: on a keep run a file gone from the copy is refused, never applied",
+          e.get("keep.txt", {}).get("status") == "refused", e.get("keep.txt"))
+    sandbox.discard(run)
+    check("copy: a run of the copy mode is discarded whole", gone(run))
+
+
 # ------------------------------------------------------------------ the argv
 def test_step_linux_shape():
     root = project({"a.txt": "a\n"})
@@ -1616,7 +1667,7 @@ def main():
               test_reviewed, test_lock_refused, test_conflict_refused, test_git, test_gitfile_bypass,
               test_git_shapes, test_symlink_redirect, test_discard_mode000, test_run_lock, test_cap_lock,
               test_detach_lock, test_records, test_ids, test_home_and_root, test_waiting_cap,
-              test_step_linux_shape, test_lost_keep, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
+              test_step_linux_shape, test_copy_mode, test_lost_keep, test_step_mac_shape, test_mac_manifest, test_check_row, test_real)
     for t in ((test_real,) if args.real_only else tests):
         PHASE = "fixtures"
         try:

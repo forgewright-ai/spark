@@ -2,6 +2,14 @@
 
 ## v1.109
 
+- `spark do --sandbox` runs on bubblewrap 0.8 to 0.10, Debian 12's and
+  Ubuntu 24.04's, where `--overlay` does not exist yet. There the
+  project is copied into the run and bound over itself (the copy mode,
+  `sandbox.linux_mode`), and the review and the apply read the copy
+  against the project as macOS's clone is read. The probe's refusal
+  under Ubuntu's AppArmor userns switch names the switch and the way
+  round it. CI proves it in debian:12 and ubuntu:24.04 containers,
+  `tests/gate.sh full sandbox` and the `sandbox` row (#155).
 - A trust by hand is pinned. `spark mcp trust NAME on` writes
   `MCP_SERVER_<NAME>_PIN`, the program's sha256 and each tool's flag as
   listed then. A program that changed, or an older trust with no pin,

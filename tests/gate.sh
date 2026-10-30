@@ -299,9 +299,15 @@ group_rest() {
     run "widget_pty pager" "$PY" tests/widget_pty.py pager
 }
 
+# the sandbox alone: what a Debian 12 or Ubuntu 24.04 container runs in
+# CI, where bwrap has no overlay and the copy mode is proved for real
+group_sandbox() {
+    run sandbox_test.py "$PY" tests/sandbox_test.py
+}
+
 case $mode in
     fast)
-        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2; }
+        [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest|sandbox]" >&2; exit 2; }
         static
         run docs_test.py "$PY" tests/docs_test.py
         run patch_test.py "$PY" tests/patch_test.py
@@ -319,7 +325,8 @@ case $mode in
             smoke) group_smoke ;;
             serve) group_serve ;;
             rest)  group_rest ;;
-            *)     echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2 ;;
+            sandbox) group_sandbox ;;
+            *)     echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest|sandbox]" >&2; exit 2 ;;
         esac
         if [ -n "$queue" ]; then
             failed_to=$(mktemp)
@@ -330,7 +337,7 @@ case $mode in
         printf '== end\n'
         ;;
     *)
-        echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest]" >&2; exit 2 ;;
+        echo "usage: sh tests/gate.sh fast | full [lint|smoke|serve|rest|sandbox]" >&2; exit 2 ;;
 esac
 
 if [ "$fail" -ne 0 ]; then
