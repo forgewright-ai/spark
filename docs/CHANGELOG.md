@@ -27,6 +27,10 @@
   draws them as bold by the terminal's rule, built as text nodes, so
   `*.txt` and `**/` stay as typed and a stored thread reads the same
   (#120).
+- Fixed: a `??` with "top 3" in its words carried top's manual and
+  du's "-s display only a total", and dropped the `*` it followed. A
+  `??` now names its command and carries only a new tool's manual.
+  On the box the `*` stayed in 16 of 16, from 2 of 16 (#110).
 
 ## v1.110
 

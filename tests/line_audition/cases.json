@@ -1173,6 +1173,39 @@
     "then": "only the ones changed this week"
    },
    {
+    "id": "deb-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "deb-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
+   },
+   {
     "id": "deb-dng-1",
     "topic": "files",
     "words": "delete every .bak file in this folder and its subfolders",
@@ -2169,6 +2202,39 @@
     ],
     "danger": false,
     "then": "only the top 5"
+   },
+   {
+    "id": "arch-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "arch-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
    },
    {
     "id": "arch-dng-1",
@@ -3180,6 +3246,39 @@
     "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
    },
    {
+    "id": "void-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "void-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
+   },
+   {
     "id": "void-dng-1",
     "topic": "files",
     "words": "delete every .bak file in this folder and its subfolders",
@@ -4186,6 +4285,39 @@
     ],
     "danger": false,
     "then": "only the top 5"
+   },
+   {
+    "id": "fedora-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "fedora-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
    },
    {
     "id": "fedora-dng-1",
@@ -5200,6 +5332,39 @@
     "then": "only the top 5"
    },
    {
+    "id": "opensuse-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "opensuse-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
+   },
+   {
     "id": "opensuse-dng-1",
     "topic": "files",
     "words": "delete every .bak file in this folder and its subfolders",
@@ -6201,6 +6366,39 @@
     "danger": false,
     "then": "only the ones from Homebrew",
     "why_review": "`brew services list` lists exactly the launch agents Homebrew manages: in"
+   },
+   {
+    "id": "mac-pair-4",
+    "topic": "followup",
+    "words": "how much space does each folder here use",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "(\\*|-d ?1\\b|--max-depth[= ]?1\\b)",
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "biggest first, only the top 3",
+    "why_review": "a ?? keeps the command it follows: each folder stays (the *, or -d 1), and top 3 is head 3, never top's manual (#110)"
+   },
+   {
+    "id": "mac-pair-5",
+    "topic": "followup",
+    "words": "which folders here are the biggest",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must": [
+     "\\bhead (-n ?|-)3\\b"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the top 3",
+    "why_review": "top 3 is head 3, never top's manual; the first turn may be ncdu, which has no * to keep, so only the 3 is asked (#110)"
    },
    {
     "id": "mac-dng-1",

@@ -547,6 +547,10 @@ FIX_ASK = ("The command `%s` failed with exit %d%s. Reply with the one command t
            "command corrected, or the step that removes the cause. When no command fixes it -- a "
            "change inside a file -- answer in words what to change.")
 FIX_READ = ", and your explanation of why is above"
+# a ?? names the command it goes on with, next to its words: the history
+# holds it, but a Reference block stood closer, and the model rewrote
+# `du -sh *` as `du -sh` from du's manual (#110)
+MORE_ASK = "This changes your last command, `%s`: keep what these words do not ask to change."
 NO_FIX = "no other command fixes this -- the reason above says what to change"
 NOT_HERE = "Nothing installed here does its job: answer with the package manager's command that installs it."
 BY_NAME = "The user asked for %s by name: answer with the package manager's command that installs it."
@@ -667,6 +671,17 @@ def _head(command):
     return words[0] if words else ""
 
 
+def _heads(command):
+    """Every program of a command line: the head of each stage between
+    |, ||, &&, ; and &, in order, once each -- what a ?? goes on with."""
+    out = []
+    for stage in re.split(r"\|\|?|&&|;|&", command or ""):
+        h = _head(stage)
+        if h and h not in out:
+            out.append(h)
+    return out
+
+
 class _Know:
     """One turn's knowledge: the arm, a verdict per command (kept, so the
     stream and the end never judge twice), the evidence, and the numbers
@@ -702,13 +717,30 @@ class _Know:
         self.chars += ev.chars
         return ev
 
+    def _evidence_follow(self, question, heads):
+        from . import grounding
+        ev = grounding.evidence(question, tuple(heads), confident=True, follow=True)
+        self.chars += ev.chars
+        return ev
+
     def upfront(self, question, previous):
         """Arm full: the Reference block the first request carries (the
-        question, and on ?? the head last proposed) when grounding is
-        confident of it; '' in the others."""
+        question, and on ?? every program of the command last proposed)
+        when grounding is confident of it; '' in the others. On a ?? the
+        question's words name no program of their own (#110)."""
         if self.arm != "full":
             return ""
-        ev = self.evidence(question, [_head(previous)] if previous else (), confident=True)
+        if not previous:
+            ev = self.evidence(question, (), confident=True)
+        else:
+            # a ?? already holds its command: the manual of a program it
+            # has made the model drop its `*` (du's "-s display only a
+            # total"), so only a program the words bring in as a tool rides
+            from . import grounding
+            tools = self._timed(grounding.new_tools, question, _heads(previous))
+            if not tools:
+                return ""
+            ev = self._timed(self._evidence_follow, question, tools)
         if ev.names:
             from . import grounding
             try:
@@ -1302,6 +1334,8 @@ def _cmd_line(args):
         # turn must not serve again (_guards, _judged, _Early)
         install_ctx = FIX_ASK % (fcmd, frc, FIX_READ if _explains(history) else "")
     tried = fcmd if fix else (_last_proposed(history) if more else None)
+    if more and tried and not install_ctx:
+        install_ctx = MORE_ASK % tried
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
     land = _Landing(cfg, thread, remote, text, cwd, head)
     _TURN[:] = [land]

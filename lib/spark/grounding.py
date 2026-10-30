@@ -183,6 +183,7 @@ class _Index(object):
         self.post = {}
         self.parents = None
         self.services = None
+        self.programs = None
 
     def postings(self, term):
         got = self.post.get(term)
@@ -305,7 +306,9 @@ def search(words, k=3, store=None):
 def _safe(s):
     """One line of a manual as it may ride: no escape, no control
     character of any class, no secret shape, whitespace folded."""
-    s = CONTROL.sub("", text.scrub(str(s or ""), keep=""))
+    # a line break is a space first: a synopsis of two lines read
+    # `depth][-B` once scrub had dropped the break between them (#110)
+    s = CONTROL.sub("", text.scrub(" ".join(str(s or "").split()), keep=""))
     s = text.hold_secrets(s)[0]
     return " ".join(s.split())
 
@@ -370,26 +373,72 @@ def _commands_line(entry):
     return _cut("commands: " + " ".join(_safe(w) for w in cs.words), CARD_COMMANDS)
 
 
-def evidence(question, heads=(), store=None, budget=BUDGET, confident=False):
+def _programs(idx):
+    """The entries named by one word: the programs a word can name."""
+    if idx.programs is None:
+        idx.programs = frozenset(n.lower() for n in idx.names if " " not in n)
+    return idx.programs
+
+
+# the words before a program's name that make it the tool asked for:
+# "pipe it to wc", "do it with rsync", "use fd" -- not "the top 3"
+TOOL_WORDS = frozenset(("to", "with", "use", "using", "via", "through", "into", "in", "run", "pipe"))
+
+
+def new_tools(question, heads, store=None):
+    """The programs a ?? question brings in as a tool ("pipe it to wc",
+    "use fd instead"): a program's name after one of TOOL_WORDS that is
+    not among `heads`, the command it follows. [] when there is none."""
+    idx = _index(default_store(store))
+    if idx is None:
+        return []
+    mine = {h.lower() for h in heads or ()}
+    said = re.findall(r"[a-z0-9][\w.+-]*", (question or "").lower())
+    out = []
+    for i, w in enumerate(said):
+        if i and said[i - 1] in TOOL_WORDS and w in _programs(idx) and w not in mine and w not in out:
+            out.append(w)
+    return out
+
+
+def _stray(idx, question, mine):
+    """A ?? question's words that name a program only by chance: a
+    program's name not among `mine` (the command it follows) and not
+    after one of TOOL_WORDS (#110)."""
+    said = re.findall(r"[a-z0-9][\w.+-]*", (question or "").lower())
+    return {w for i, w in enumerate(said)
+            if w in _programs(idx) and w not in mine and not (i and said[i - 1] in TOOL_WORDS)}
+
+
+def evidence(question, heads=(), store=None, budget=BUDGET, confident=False, follow=False):
     """The Reference block for one question (and the heads last tried, on
     ?? or a re-ask), or an empty Evidence when nothing clears the floor --
     or, `confident` (the first request's rule), when the top hit does not
     clear it itself or lead the second by CONFIDENT. Up to 3 entries: the
     top one as a card (what, synopsis, its commands, the option lines
     closest to the question), the others as one `what` line each. Never
-    an example: an entry holds none."""
+    an example: an entry holds none. `follow` (a ??, the heads the
+    command it follows): a word of the question that is only a program's
+    name by chance (_stray) is no query word, so "the top 3" brings no
+    manual of top, while "pipe it to wc" still brings wc's (#110)."""
     empty = Evidence("", (), 0)
     store = default_store(store)
     idx = _index(store)
     heads = [h for h in (heads or ()) if h]
-    terms = _terms([question or ""] + heads)
+    if idx is None:
+        return empty
+    asked = _terms(question or "")
+    stray = _stray(idx, question, {h.lower() for h in heads}) if follow else set()
+    asked = [t for t in asked if t not in stray]
+    terms = asked + _terms(heads)
     terms += [h.lower() for h in heads if h.lower() not in terms]   # apt-get whole, too
-    if idx is None or not terms:
+    if not terms:
         return empty
     bridged = _bridged(idx, terms)
     terms += bridged
     ranked, shared = _ranked(idx, terms)
     said = set(re.findall(r"[a-z0-9][\w.+-]*", (question or "").lower())) | {h.lower() for h in heads}
+    said -= stray
     said |= set(bridged)
     if confident and not _sure(idx, ranked, shared, said):
         return empty

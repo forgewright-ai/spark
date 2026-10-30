@@ -1192,7 +1192,7 @@ def knowledge_cases(t):
     shell_map from the tree, BM25 and the evidence block on a fixture
     index, the judge's verdicts and read_only on fixtures -- no model,
     no store on disk, a PATH of stub programs."""
-    from spark import grounding, intake, judge, persona
+    from spark import cli, grounding, intake, judge, persona
 
     # the import rules, read from the import lines (function-level too):
     # a name that is not a module is the package's own (spark/__init__)
@@ -1449,6 +1449,39 @@ def knowledge_cases(t):
     t.ok(grounding.evidence("stop a service", (), Empty()).text == "" and grounding.search("stop", 3, Empty()) == []
          and judge.verdict("ls -la", Empty()).ok,
          "knowledge: no index is no evidence and no flag, never an error")
+    # a ?? goes on with its command (#110): every program of it is a head,
+    # its own manuals never ride (du's "-s display only a total" made the
+    # model drop the `*`), a program the words bring in as a tool does,
+    # and a word that only names a program by chance (top) is no query word
+    small = Fixture([e for e in fixtures if e.name in ("du", "sort")] + [
+        E("top", "program", "man", "display sorted information about processes", "top [-o key]",
+          OS_((), "o", ()), ["-o key  Order the process display by sorting on key"], "macos", (0, 0)),
+        E("wc", "program", "man", "word, line, character, and byte count", "wc [-clmw] [file ...]",
+          OS_((), "clmw", ()), ["-l  The number of lines in each input file is written"], "macos", (0, 0))])
+    t.ok(cli._heads("du -sh */ | sort -rh && echo ok") == ["du", "sort", "echo"]
+         and cli._heads("sudo du -sh * ; ls -la || ls") == ["du", "ls"] and cli._heads("") == [],
+         "knowledge: a ?? takes every program of the command it follows, once each", repr(cli._heads("du | sort")))
+    t.ok(grounding.new_tools("biggest first, only the top 3", ["du"], small) == []
+         and grounding.new_tools("pipe it to wc", ["ls"], small) == ["wc"]
+         and grounding.new_tools("use du instead", ["du"], small) == [],
+         "knowledge: a ?? brings in only a program its words name as a tool, never one by chance (the top 3)")
+    t.ok("top" not in grounding.evidence("the top 3 by size", ("du",), small, follow=True).names
+         and "top" in grounding.evidence("the top 3 by size", ("du",), small).names,
+         "knowledge: on a ??, a word that names a program by chance brings no manual of it")
+    saved_store = grounding.default_store
+    try:
+        grounding.default_store = lambda store=None: store or small
+        know = cli._Know("full")
+        none = know.upfront("biggest first, only the top 3", "du -sh * | sort -rh")
+        wc = know.upfront("pipe it to wc", "du -sh *")
+    finally:
+        grounding.default_store = saved_store
+    t.ok(none == "" and "| wc -- word, line" in wc and "| du --" not in wc,
+         "knowledge: a ?? carries no manual of its own command, and a new tool's when the words name one", wc)
+    t.ok("`du -sh *`" in cli.MORE_ASK % "du -sh *",
+         "knowledge: a ?? names the command it changes, next to its words")
+    t.ok(grounding._safe("du [-a | -d depth]\n[-B size] [file ...]") == "du [-a | -d depth] [-B size] [file ...]",
+         "knowledge: a synopsis of two lines reads as one, a space between them")
     old = dict(st.raw, v=1)
     t.ok(grounding.search("stop a service", 3, st)
          and grounding.search("stop a service", 3, type("Old", (Empty,), {"index": lambda self: old})()) == [],

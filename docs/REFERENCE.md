@@ -943,7 +943,11 @@ and may change freely.
    wrong is asked again once, with the tool's own manual lines as a
    Reference block in the user message. Line 1 is never repainted:
    still wrong, it lands and the hint names what to check.
-   `SPARK_KNOWLEDGE=off` is the line without it. A finding has a kind
+   `SPARK_KNOWLEDGE=off` is the line without it. A `??` names the
+   command it changes beside its words (`cli.MORE_ASK`). Its Reference
+   block holds only a program its words bring in as a tool
+   (`grounding.new_tools`), never its own command's manuals. A finding
+   has a kind
    (`judge.Finding`). `missing` is a program that is not on this
    machine, and `flag` an option its manual does not name. `command` is
    a word the manual's list of commands lacks. `verb` is a word or an
