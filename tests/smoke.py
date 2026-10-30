@@ -12818,6 +12818,7 @@ def main():
             q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--name", "box", "--user", "ana"] + list(model),
                                  stdin=s, stdout=s, stderr=s, env=e)
             os.close(s)
+            os.set_blocking(m, False)      # drained whole each time: a full pty buffer blocks setup's writes
             # 120 s for setup on a loaded runner; the pty stays open until
             # setup has exited, or its last flush fails and python exits 120
             got, end, sent, went, cut = b"", time.time() + 120, False, False, False
@@ -12832,11 +12833,20 @@ def main():
                     q.send_signal(signal.SIGINT)
                     cut = True
                 if r:
-                    try:
-                        chunk = os.read(m, 4096)
-                    except OSError:
-                        break
-                    if not chunk:
+                    chunk, gone_ = b"", False
+                    while True:
+                        try:
+                            part = os.read(m, 65536)
+                        except BlockingIOError:
+                            break
+                        except OSError:
+                            gone_ = True
+                            break
+                        if not part:
+                            gone_ = True
+                            break
+                        chunk += part
+                    if gone_ and not chunk:
                         break
                     got += chunk
                     if not went and b"go on? yes/NO: " in got:
@@ -12853,6 +12863,10 @@ def main():
             try:
                 rc_ = q.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                # what setup was doing when it would not end: for the FAIL's own text
+                ps_ = subprocess.run(["ps", "-o", "pid,stat,wchan:32,command", "-p", str(q.pid)], capture_output=True, text=True).stdout
+                kids = subprocess.run(["ps", "-o", "pid,ppid,stat,wchan:32,command", "-ax"], capture_output=True, text=True).stdout
+                got += ("\n[stuck] " + ps_ + "".join(l + "\n" for l in kids.splitlines() if " %d " % q.pid in l)).encode()
                 q.kill()
                 rc_ = None
             os.close(m)
