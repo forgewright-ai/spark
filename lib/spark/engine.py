@@ -272,7 +272,7 @@ def _preset(name, path, ctx, cfg, reasoning):
         lines.append("reasoning = %s" % reasoning)
     if reasoning == "off":
         lines.append("reasoning-budget = 0")
-    lines += ["webui = 0", "cache-ram = 0", "flash-attn = %s" % cfg.flash_attn,
+    lines += ["webui = 0", "cache-ram = 0", "parallel = 1", "flash-attn = %s" % cfg.flash_attn,
               "cache-type-k = %s" % cfg.kv, "cache-type-v = %s" % cfg.kv]
     if cfg.threads:
         lines.append("threads = %s" % cfg.threads)
@@ -332,8 +332,13 @@ def server_cmd(cfg, host):
     # slots already hold the recent prompts on the GPU. SPARK_EXTRA_ARGS
     # comes last and may set a budget (--cache-ram N, MiB).
     # --offline: no fetch of anything, whatever a flag or a variable
-    # says (the pinned build knows it; nothing spark serves is remote)
-    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0", "--offline"]
+    # says (the pinned build knows it; nothing spark serves is remote).
+    # -np 1: one slot, the whole context one request's. Left to itself
+    # llama-server opens four and shares one cache of SPARK_CTX among
+    # them, so two 4k prompts fill it and a third purges a slot's warm
+    # prefix (#157); the page runs one generation at a time anyway. The
+    # room itself is SPARK_CTX, set by hand
+    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0", "--offline", "-np", "1"]
     if files["ember"]:
         d, ini = write_router(cfg)
         return ([engine_bin(cfg), "--models-dir", d, "--models-preset", ini, "--models-max", "2"] + common

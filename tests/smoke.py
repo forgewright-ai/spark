@@ -3547,7 +3547,8 @@ def engine_env_cases(t):
     snip = os.path.join(tmp, "env.py")
     with open(snip, "w") as f:
         f.write("import json, sys\nsys.path.insert(0, %r)\nfrom spark import config, engine\nc = config.load()\n"
-                "print(json.dumps({'env': engine.server_env(c), 'argv': engine.server_cmd(c, '127.0.0.1')}))\n"
+                "print(json.dumps({'env': engine.server_env(c), 'argv': engine.server_cmd(c, '127.0.0.1'), "
+                "'preset': engine._preset('spark', 'x.gguf', 4096, c, 'off')}))\n"
                 % os.path.join(REPO, "lib"))
     p = subprocess.run([sys.executable, snip], capture_output=True, text=True, env=dict(env, **stray), timeout=60)
     got = json.loads(p.stdout) if p.returncode == 0 else {"env": {}, "argv": []}
@@ -3559,8 +3560,10 @@ def engine_env_cases(t):
          and e.get(key, "").split(":")[0] == edir and not [k for k in e if k.startswith(("SPARK_", "XDG_"))],
          "engine env: a named allowlist -- LLAMA_ARG_*, a proxy and the agent dropped; PATH, HOME, the locale, the GPU "
          "variables and the tarball's library path kept", repr((p.returncode, sorted(e), p.stderr[-300:])))
-    t.ok("--offline" in got["argv"] and "--host" in got["argv"],
-         "engine argv: --offline rides every server command", repr(got["argv"][:12]))
+    a = got["argv"]
+    t.ok("--offline" in a and "--host" in a and "-np" in a and a[a.index("-np") + 1] == "1",
+         "engine argv: --offline and -np 1 ride every server command", repr(a[:14]))
+    t.ok("parallel = 1\n" in got.get("preset", ""), "router presets: parallel = 1 a section (#157)", got.get("preset", "")[:200])
     # the fake engine, started by spark's own start(): what it sees
     start = os.path.join(tmp, "start.py")
     with open(start, "w") as f:

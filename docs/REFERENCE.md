@@ -837,6 +837,11 @@ and may change freely.
      SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT
      SPARK_FORGE_TOKEN_FILE SPARK_FORGE_CERT SPARK_FORGE_KEY
      SPARK_FORGE_NAME SPARK_CA_FILE`.
+     `SPARK_CTX` is one request's room, 8192 by default and set by hand.
+     The engine serves one slot (`-np 1`, `parallel = 1` in the router's
+     presets). Left to itself llama-server opens four and shares one
+     cache of that size among them, and a third 4k prompt purges a
+     slot's warm prefix. The `serve` row says the slots and the cells.
      `SPARK_FORGE_CERT` and `SPARK_FORGE_KEY` are the page's
      certificate pair, PEM files, the key 0600, both or neither: with
      them the page serves https (`spark serve https`, contract 9).

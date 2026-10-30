@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.112
+
+- The engine serves one slot: `-np 1` on every server command and
+  `parallel = 1` in the router's presets. Left to itself llama-server
+  opened four and shared one cache of `SPARK_CTX` among them, so two 4k
+  prompts filled it and a third purged a slot's warm prefix, eight times
+  in a night on the box. The whole context is one request's now, and
+  callers take their turn, as the page already made them. The room
+  stays `SPARK_CTX`, by hand (#157).
+
 ## v1.111
 
 - Fixed: `spark do` called a step that starts with a shell keyword
