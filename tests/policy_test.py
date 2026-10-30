@@ -59,6 +59,7 @@ def free_port():
 
 
 TLS_CTX = None            # set for the pass over TLS: the scratch root is the one anchor
+FORGE_LOG = ""            # the page's forge.log: a busy 503 prints its refused line
 
 
 def conn(u, timeout=30):
@@ -69,9 +70,51 @@ def conn(u, timeout=30):
     return http.client.HTTPConnection(u.hostname, u.port, timeout=timeout)
 
 
-def probe(url, method, path, bearer="", body=None):
+def busy_again(u, status, body):
+    """True when the answer is the page's busy 503 and the page answers
+    /api/health again: the caller sends its request once more. The page
+    refuses a connection past forgeserve.MAX_CONNECTIONS on its accept
+    loop, before it reads the request, so the request did nothing; on a
+    slow runner that is the runner, not the policy a check asks about.
+    The refused line from forge.log is printed, so a run that needed it
+    says so."""
+    if status != 503:
+        return False
+    try:
+        if json.loads(body)["error"]["kind"] != "busy":
+            return False
+    except (ValueError, KeyError, TypeError):
+        return False
+    end = time.time() + 20
+    while time.time() < end:
+        c = conn(u, timeout=5)
+        try:
+            c.request("GET", "/api/health")
+            if c.getresponse().status == 200:
+                break
+        except (OSError, http.client.HTTPException):
+            pass
+        finally:
+            c.close()
+        time.sleep(0.2)
+    refused, end = [], time.time() + 2     # the page writes its log lines from a thread of its own
+    while not refused and time.time() < end:
+        try:
+            with open(FORGE_LOG, encoding="utf-8", errors="replace") as f:
+                refused = [l.strip() for l in f if "connections at once" in l]
+        except OSError:
+            pass
+        if not refused:
+            time.sleep(0.1)
+    print("  note a busy 503 (%s): /api/health answered again, the request is sent once more"
+          % (refused[-1] if refused else "no refused line in forge.log yet"))
+    return True
+
+
+def probe(url, method, path, bearer="", body=None, again=True):
     """(status, parsed body or None). A stream (SSE) answers its headers
-    and goes on: only the status is read there, and the socket closed."""
+    and goes on: only the status is read there, and the socket closed.
+    A busy 503 is sent once more (busy_again)."""
     u = urllib.parse.urlsplit(url)
     c = conn(u)
     h = {}
@@ -89,16 +132,19 @@ def probe(url, method, path, bearer="", body=None):
         if (r.getheader("Content-Type") or "").startswith("text/event-stream"):
             return r.status, None
         raw = r.read()
-        try:
-            return r.status, json.loads(raw)
-        except ValueError:
-            return r.status, None
     finally:
         c.close()
+    if again and busy_again(u, r.status, raw):
+        return probe(url, method, path, bearer, body, again=False)
+    try:
+        return r.status, json.loads(raw)
+    except ValueError:
+        return r.status, None
 
 
-def raw(url, method, path, data=None, headers=None):
-    """(status, headers, bytes) for a body sent as given, never re-encoded."""
+def raw(url, method, path, data=None, headers=None, again=True):
+    """(status, headers, bytes) for a body sent as given, never re-encoded.
+    A busy 503 is sent once more (busy_again) unless `again` is False."""
     u = urllib.parse.urlsplit(url)
     c = conn(u)
     h = {"X-Spark": "1", "Content-Type": "application/json"} if method == "POST" else {}
@@ -106,9 +152,12 @@ def raw(url, method, path, data=None, headers=None):
     try:
         c.request(method, path, data, h)
         r = c.getresponse()
-        return r.status, dict(r.getheaders()), r.read()
+        got = r.status, dict(r.getheaders()), r.read()
     finally:
         c.close()
+    if again and busy_again(u, got[0], got[2]):
+        return raw(url, method, path, data, headers, again=False)
+    return got
 
 
 def main():
@@ -148,6 +197,8 @@ def main():
             f.write(stub_url + "\n")
         port = free_port()
         url = "http://127.0.0.1:%d" % port
+        global FORGE_LOG
+        FORGE_LOG = os.path.join(state, "forge.log")
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_"))}
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "PATH": bins + ":" + env.get("PATH", ""),
@@ -262,7 +313,7 @@ def main():
 
             # Send header pairs verbatim: a dict cannot exercise duplicate
             # Host/Origin fields, and http.client normally adds Host itself.
-            def header_request(method, path, pairs, data=None):
+            def header_request(method, path, pairs, data=None, again=True):
                 c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                 try:
                     c.putrequest(method, path, skip_host=True)
@@ -273,9 +324,12 @@ def main():
                         c.putheader("Content-Length", str(len(data)))
                     c.endheaders(data)
                     r = c.getresponse()
-                    return r.status, dict(r.getheaders()), r.read()
+                    got = r.status, dict(r.getheaders()), r.read()
                 finally:
                     c.close()
+                if again and busy_again(urllib.parse.urlsplit(url), got[0], got[2]):
+                    return header_request(method, path, pairs, data, again=False)
+                return got
 
             authority = "127.0.0.1:%d" % port
             for hosts in ([], ["evil.example"], [authority, authority],
@@ -329,7 +383,9 @@ def main():
             t0 = time.time()
             st, _, body = raw(url, "POST", "/api/login", b'{"token": "\\ud800"}')
             took = time.time() - t0
-            time.sleep(0.2)
+            end = time.time() + 5           # the page writes its log lines from a thread of its own
+            while failed_logins() == before and time.time() < end:
+                time.sleep(0.1)
             ok(st == 401 and took >= 1.0 and failed_logins() == before + 1,
                "a lone surrogate token -> 401 after >= 1 s, counted as a wrong login (not a 500)",
                (st, round(took, 2), body[:80]))
@@ -356,7 +412,7 @@ def main():
                 idle.append(s)
             time.sleep(0.5)
             try:
-                st, h, body = raw(url, "GET", "/api/health")
+                st, h, body = raw(url, "GET", "/api/health", again=False)
             except OSError as e:
                 st, h, body = 0, {}, repr(e).encode()
             ok(st == 503 and json.loads(body)["error"]["kind"] == "busy" and h.get("Retry-After") == "5",
@@ -367,7 +423,7 @@ def main():
             end = time.time() + 20
             while time.time() < end:
                 try:
-                    st = raw(url, "GET", "/api/health")[0]
+                    st = raw(url, "GET", "/api/health", again=False)[0]
                 except OSError:
                     st = 0
                 if st == 200:

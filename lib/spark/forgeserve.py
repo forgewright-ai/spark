@@ -23,6 +23,7 @@ import hmac
 import ipaddress
 import json
 import os
+import queue
 import re
 import secrets
 import select
@@ -63,6 +64,7 @@ DO_COMMAND_MAX = 4096           # /api/do/run: a longer line is 400 before any p
                                 # a block (several lines) has do.DO_BLOCK_MAX
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 LOG_LINE_MAX = 512          # one log line at most: the request path is a peer's bytes
+LOG_QUEUE_MAX = 1024        # the page's log lines waiting for the disk; one more is dropped, counted
 MAX_CONNECTIONS = 64            # connections handled at once; one more is a 503 and closed at once,
                                 # so a flood of idle sockets cannot spawn a thread each without end
 EVENTS_PER_USER = 4             # /api/events streams one requester holds open; one more is 429
@@ -360,16 +362,16 @@ def punish_sleep():
 
 
 # -------------------------------------------------------------------- log
-_log_lock = threading.Lock()
+_log_lock = threading.Lock()            # one write to forge.log at a time
+_log_queue = None                       # the page's lines on their way to its writer thread
+_log_writer = None
+_log_dropped = 0                        # lines a full queue dropped since the writer's last write
+_log_dropped_lock = threading.Lock()
 
 
-def log(line):
-    """One line into forge.log (0600, rotated at 1 MB). Never a token,
-    never a body; printable and at most LOG_LINE_MAX characters, since the
-    request path in it is a peer's own bytes and the log is tailed to a
-    terminal (spark forge start)."""
-    from . import text as textmod
-    line = textmod.printable(line, keep="")[:LOG_LINE_MAX]
+def _log_write(lines):
+    """Stamped lines appended to forge.log in one open (0600, rotated at
+    1 MB)."""
     with _log_lock:
         try:
             state_dir()
@@ -380,9 +382,101 @@ def log(line):
                 pass
             fd = vault.open_private(FORGE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
             with os.fdopen(fd, "a", encoding="utf-8") as f:
-                f.write("%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), line))
+                f.write("".join(lines))
         except OSError:
             pass
+
+
+def _stamped(line):
+    return "%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), line)
+
+
+def log(line):
+    """One line into forge.log. Never a token, never a body; printable
+    and at most LOG_LINE_MAX characters, since the request path in it is
+    a peer's own bytes and the log is tailed to a terminal (spark forge
+    start). In the page's own process the line goes to its writer thread
+    (log_start) and never waits for the disk, so a slow disk cannot hold
+    a request's thread or its connection. A line that finds the queue
+    full is dropped and counted."""
+    global _log_dropped
+    from . import text as textmod
+    line = _stamped(textmod.printable(line, keep="")[:LOG_LINE_MAX])
+    q = _log_queue
+    if q is None:
+        _log_write([line])
+        return
+    try:
+        q.put_nowait(line)
+    except queue.Full:
+        with _log_dropped_lock:
+            _log_dropped += 1
+
+
+def _log_drain(q):
+    """The writer thread: every line queued since its last write, in
+    order, in one open. The lines a full queue dropped meanwhile are
+    counted in a line of their own before them. None ends it."""
+    global _log_dropped
+    while True:
+        lines = [q.get()]
+        while lines[-1] is not None:
+            try:
+                lines.append(q.get_nowait())
+            except queue.Empty:
+                break
+        done = lines[-1] is None
+        lines = [l for l in lines if l is not None]
+        with _log_dropped_lock:
+            dropped, _log_dropped = _log_dropped, 0
+        if dropped:
+            lines.insert(0, _stamped("%d log lines dropped: the disk was too slow to take them" % dropped))
+        try:
+            if lines:
+                _log_write(lines)
+        except Exception:                       # the writer outlives a bad line
+            pass
+        if done:
+            return
+
+
+def log_start():
+    """From here on this process's log lines go through a queue of
+    LOG_QUEUE_MAX to one writer thread: the page's handlers never wait
+    for the disk."""
+    global _log_queue, _log_writer
+    if _log_queue is None:
+        q = queue.Queue(LOG_QUEUE_MAX)
+        _log_writer = threading.Thread(target=_log_drain, args=(q,), name="forge-log", daemon=True)
+        _log_writer.start()
+        _log_queue = q
+
+
+def log_stop(timeout=10):
+    """Every queued line written and the writer ended, so a stop loses
+    nothing; log() writes in place again. A disk stalled past `timeout`
+    keeps what it has not taken."""
+    global _log_queue, _log_writer
+    q, writer = _log_queue, _log_writer
+    if q is None:
+        return
+    try:
+        q.put(None, timeout=timeout)
+        writer.join(timeout)
+    except queue.Full:
+        pass
+    _log_queue = _log_writer = None
+    if writer.is_alive():
+        return
+    late = []                               # a handler's line after the end mark
+    while True:
+        try:
+            late.append(q.get_nowait())
+        except queue.Empty:
+            break
+    late = [l for l in late if l is not None]
+    if late:
+        _log_write(late)
 
 
 def log_tail(n=40):
@@ -2210,6 +2304,7 @@ def cmd_foreground(args):
                         % (url, e.strerror or e, recorded))
         forget()
         return _die("cannot bind %s: %s" % (url, e.strerror or e))
+    log_start()
     _write_url(url)
     engine.write_pid(FORGE_PID, os.getpid())
     if served and tls.is_own(cfg.forge_cert):
@@ -2239,6 +2334,7 @@ def cmd_foreground(args):
         log("stop")
         srv.server_close()
         forget()
+        log_stop()
     return 0
 
 

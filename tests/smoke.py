@@ -4379,7 +4379,7 @@ def presence_pty_cases(t, env, home):
          and p.returncode == 1 and p.stderr.startswith(b"! ") and b"(O.O)" not in p.stderr and b"\x1b" not in p.stderr
          and rcn == 1 and b"(O.O)" not in rawn and b"! " + said[0][8:].encode() in rawn,
          "presence pty: a stub BrainError is `! (O.O) ...`, the lead resting alarmed; piped and unawakened it is "
-         "`! ...` as before", repr((rows[:3], p.stderr, rawn[-80:])))
+         "`! ...` as before", repr(((rc, p.returncode, rcn), rows[:3], p.stderr, rawn[-80:])))
 
     # --- spark recall: the wait in the hint row under SPARK_HINT_ROW
     hist = "ls -la\ndocker network rm $(docker network ls -q)\ngit status\nrm -rf /tmp/build\ncd /tmp\n"
@@ -6755,18 +6755,20 @@ def own_mark_cases(t, url):
     t.ok(not any(_pers.is_dangerous(c) for c in _missed),
          "danger: an option that takes its value as the next word hides the command word -- missed, knowingly",
          str([c for c in _missed if _pers.is_dangerous(c)]))
-    # the five lines alone, on 100 kB of their worst shapes
+    # the five lines alone, on 100 kB of their worst shapes; the cap times
+    # the work with process time, since the wall clock also counts the
+    # suites beside this one on a shared runner
     _new = [p for p in _pers.DANGER if _pers._PM_OPTS in p.pattern]
     _slow = []
     for _h in ("apt-get", "dnf", "zypper", "pacman", "brew", "paccache"):
         for _w in (_h + " " + "-x " * 34000, (_h + " -x;") * 14000, (_h + " -x|") * 14000, (_h + " ") * 14000,
                    _h + " -S" + "c" * 99000 + "9", (_h + " -Sx ") * 12000, ";" * 50000 + _h + " " * 40000,
                    ("(" + _h + " -S") * 12000, _h + " " + "-" * 99000):
-            _t0 = time.time()
+            _t0 = time.process_time()
             for _p in _new:
                 _p.search(_w[:100000])
-            if time.time() - _t0 >= 1.0:
-                _slow.append((_w[:14], round(time.time() - _t0, 2)))
+            if time.process_time() - _t0 >= 1.0:
+                _slow.append((_w[:14], round(time.process_time() - _t0, 2)))
     t.ok(len(_new) == 6 and not _slow, "danger: the v1.87 lines read 100 kB of their worst shapes in under 1 s",
          "%d lines; %s" % (len(_new), _slow))
 
@@ -7520,15 +7522,16 @@ def main():
             t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
                  "danger: %s is marked; its read and install forms stay plain" % _name,
                  str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
-        # the new lines stay linear: 100 kB of their own worst shape reads in under 1 s
+        # the new lines stay linear: 100 kB of their own worst shape reads in
+        # under 1 s of process time (the work, not the runner's other suites)
         _worst = ["crontab " + "-u " * 34000, "crontab " + "-i " * 34000 + "x", "flatpak " + "-x " * 34000,
                   "pip " + "-x " * 34000, "npm " + "-g " * 34000, "kill -9 " + "12 " * 34000]
         _slow = []
         for _w in _worst:
-            _t0 = time.time()
+            _t0 = time.process_time()
             _pers.is_dangerous(_w[:100000])
-            if time.time() - _t0 >= 1.0:
-                _slow.append((_w[:12], round(time.time() - _t0, 2)))
+            if time.process_time() - _t0 >= 1.0:
+                _slow.append((_w[:12], round(time.process_time() - _t0, 2)))
         t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 1 s", str(_slow))
         # v1.75: the reading of the commands (persona._read). A command
         # word the shell rewrites is opaque and dangerous; so is a
@@ -7650,11 +7653,11 @@ def main():
                   "ssh " * 25000, "tmux " * 20000, "awk " + "-v x=1 " * 14000, "sed " + "-e x " * 20000]
         _slow = []
         for _w in _worst:
-            _t0 = time.time()
+            _t0 = time.process_time()           # the work, not the runner's other suites
             _pers.is_dangerous(_w[:100000] + " ")
             _pers.opaque(_w[:100000] + " ")
-            if time.time() - _t0 >= 1.0:
-                _slow.append((_w[:12], round(time.time() - _t0, 2)))
+            if time.process_time() - _t0 >= 1.0:
+                _slow.append((_w[:12], round(time.process_time() - _t0, 2)))
         t.ok(not _slow and _pers._read("$(" * 40 + "x") == (_pers.TOO_DEEP, True)
              and _pers.opaque("nice " * 9 + "ls") == _pers.TOO_DEEP and _pers.opaque("nice " * 8 + "ls") == "",
              "danger: the reading reads 100 kB of its worst shapes in under 1 s; past its caps it is TOO_DEEP", str(_slow))
@@ -9701,15 +9704,17 @@ def main():
             _h, _names = _text.hold_secrets("key " + _blob)
             t.ok(_blob not in _h and _names == ["a long base64 run"],
                  "hold: a %d-character encoded run is held" % len(_blob), _h)
-        _t0 = time.time()
+        # the caps time the work with process time: the wall clock also
+        # counts the suites beside this one on a shared runner
+        _t0 = time.process_time()
         _text.held_spans(("=" * 5000 + " ") * 200 + "Ab1" * 300000)
-        t.ok(time.time() - _t0 < 1.0, "hold: a megabyte of runs holds in under a second",
-             "%.2fs" % (time.time() - _t0))
+        _dt = time.process_time() - _t0
+        t.ok(_dt < 1.0, "hold: a megabyte of runs holds in under a second", "%.2fs" % _dt)
         for _what, _d in (("a URL that never ends", "http://" * 285 + "?" + "_" * 1000000),
                           ("a megabyte of codes", ("pin: 12-34 https://x?token=" + "a" * 40 + " ") * 15000)):
-            _t0 = time.time()
+            _t0 = time.process_time()
             _text.held_spans(_d)
-            _dt = time.time() - _t0
+            _dt = time.process_time() - _t0
             t.ok(_dt < 1.0, "hold: %s (%d chars) holds in under a second" % (_what, len(_d)), "%.2fs" % _dt)
         # a figure a line states outside its quotes is the source's own: the
         # model's sum (31) is its claim, not the text's, and is dropped

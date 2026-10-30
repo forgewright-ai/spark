@@ -1946,7 +1946,11 @@ and may change freely.
    which the page sends after its second click. The log line carries a
    sha256 prefix of the command and its length, never its text, and a
    second line the rc. The server holds at most
-   `forgeserve.MAX_CONNECTIONS` (64) connections, one more is 503. A
+   `forgeserve.MAX_CONNECTIONS` (64) connections, one more is 503. No
+   request waits for the disk: the server's log lines go through a
+   queue of `forgeserve.LOG_QUEUE_MAX` (1024) to one writer thread, in
+   order. A line that finds the queue full is dropped, and the writer's
+   next line says how many were. A stop writes every queued line. A
    user holds `EVENTS_PER_USER` (4) event streams, one more is 429. A
    name keeps `SESSIONS_PER_NAME` (20) sessions, the oldest dropped.
    Generation admission is shared by `/api/chat`, `/api/do/propose` and

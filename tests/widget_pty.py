@@ -1210,7 +1210,8 @@ def failure_row(shell, widget, tmp, env, ok):
         until(lambda s: s[:2] == ["", "F>"], 20)
         time.sleep(0.5)
         keys("echo OUT-LINE; sh -c 'exit 3'")
-        rows = until(lambda s: any("failed (3)" in r for r in s))
+        # the failure line is drawn before the prompt under it: wait for both
+        rows = until(lambda s: any("failed (3)" in r and s[i + 1:i + 2] == ["F>"] for i, r in enumerate(s)))
         at = next((i for i, r in enumerate(rows) if "failed (3)" in r), -1)
         good = (0 < at < len(rows) - 1 and rows[at] == "* failed (3) -- Esc s asks why"
                 and rows[at - 1] == "OUT-LINE" and rows[at + 1] == "F>")
@@ -1219,7 +1220,8 @@ def failure_row(shell, widget, tmp, env, ok):
             print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
         time.sleep(0.3)
         subprocess.run(t + ["send-keys", "Escape", "s"], check=True)
-        rows = until(lambda s: any("Enter explains the error" in r for r in s))
+        rows = until(lambda s: any("Enter explains the error" in r and "".join(s[i + 1:i + 2]).startswith("F> { echo OUT-LINE")
+                                   for i, r in enumerate(s)))
         at = next((i for i, r in enumerate(rows) if "Enter explains the error" in r), -1)
         good = (0 < at < len(rows) - 1 and rows[at - 1] == "OUT-LINE" and rows[at + 1].startswith("F> { echo OUT-LINE")
                 and not any("failed (3)" in r for r in rows))

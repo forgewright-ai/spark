@@ -142,6 +142,22 @@ def req(url, method, path, body=None, headers=None, timeout=10):
         c.close()
 
 
+def forge_log(state, want, secs=5):
+    """forge.log's text once `want` holds of it, else as it is after
+    `secs`: the page writes its lines from a thread of its own, a moment
+    after the request that made them."""
+    end = time.time() + secs
+    while True:
+        try:
+            with open(os.path.join(state, "forge.log"), encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            text = ""
+        if want(text) or time.time() >= end:
+            return text
+        time.sleep(0.1)
+
+
 def sse(raw):
     """[(event, data)] of an SSE body; data parsed as JSON when it is."""
     out = []
@@ -806,27 +822,56 @@ def tls_cases(ok, spark, env, home, state, exe):
         ok(rc == 0 and "a root of" not in out, "own again: nothing minted twice", out[:300])
         rc, out, _ = spark("serve", "https", "own", "--name", "elsewhere.example", extra=oenv)
         ok(rc == 2 and "does not cover elsewhere.example" in out, "a name the root does not cover is refused", out)
-        p, st = start(dict(oenv, CAFILE=os.path.join(own, "root.crt")))
+
+        def root_said(since, rport):
+            """The forge's own word on the root's listener, from forge.log
+            past `since` bytes: "root" when it listens on rport, "warning"
+            when the port was taken, "" when neither came in 10 s."""
+            end = time.time() + 10
+            while time.time() < end:
+                try:
+                    with open(os.path.join(state, "forge.log"), "rb") as f:
+                        f.seek(since if os.fstat(f.fileno()).st_size >= since else 0)   # a rotated log from its start
+                        new = f.read().decode("utf-8", "replace")
+                except OSError:
+                    new = ""
+                if " root http://127.0.0.1:%d\n" % rport in new:
+                    return "root"
+                if " warning: root listener: " in new:
+                    return "warning"
+                time.sleep(0.2)
+            return ""
+
+        # the root's listener is a server of its own on the page's port plus
+        # one. free_pair holds that port only inside this suite: a suite
+        # beside it can take it before the forge binds it, and then the
+        # forge warns and serves without it. So the forge's line is waited
+        # for, and on the warning the page starts again on a new pair.
+        for _ in range(3):
+            try:
+                since = os.path.getsize(os.path.join(state, "forge.log"))
+            except OSError:
+                since = 0
+            p, st = start(dict(oenv, CAFILE=os.path.join(own, "root.crt")))
+            said = root_said(since, port2 + 1) if st == 200 else ""
+            if said != "warning":
+                break
+            print("  note the root listener's port %d was taken: a new pair" % (port2 + 1))
+            stop(p)
+            port2 = free_pair()
+            url2 = "https://127.0.0.1:%d" % port2
+            oenv = {"SPARK_FORGE_PORT": str(port2)}
         try:
             ok(st == 200, "the page answers over TLS with the own pair")
             if st != 200:
                 print(p.communicate()[0][-1500:])
-            # the root's listener is a server of its own beside the page's: on a
-            # loaded runner it answered a moment after the page did (a refused
-            # connection, or another test's server still on the port), so it
-            # is waited for, up to 10 s, and the wait's last answer is the one
-            # judged
-            st, hd, body = 0, {}, b""
-            for _ in range(50):
-                try:
-                    st, hd, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/ca")
-                except OSError:
-                    st = 0
-                if st == 200 and hd.get("Content-Type") == "application/x-x509-ca-cert":
-                    break
-                time.sleep(0.2)
+            try:
+                st, hd, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/ca")
+            except OSError:
+                st, hd, body = 0, {}, b""
             ok(st == 200 and hd.get("Content-Type") == "application/x-x509-ca-cert" and body == tls.read_pem(os.path.join(own, "root.crt")),
-               "GET /ca on the root's listener: the root in DER, the type phones install from", (st, hd.get("Content-Type"), len(body)))
+               "GET /ca on the root's listener: the root in DER, the type phones install from",
+               (said, st, hd.get("Content-Type"), len(body)))
             st, _, body = req("http://127.0.0.1:%d" % (port2 + 1), "GET", "/")
             ok(st == 200 and b"install the certificate at http://127.0.0.1:%d/ca" % (port2 + 1) in body and url2.encode() in body,
                "GET / there says what to do", body[:160])
@@ -1519,7 +1564,7 @@ def main():
             # moment the server is slow enough to need a second look.
             st, _, _ = req(url, "GET", "/api/log?n=30", headers=bearer)
             ok(st == 404, "/api/log is gone (v1.97: nothing on the page read it) -> 404", st)
-            lg = open(state + "/forge.log").read()
+            lg = forge_log(state, lambda t: "login failed" in t and "wrong bearer" in t)
             ok(oct(os.stat(state + "/forge.log").st_mode & 0o777) == "0o600" and token not in lg and smoke.TOKEN not in lg, "forge.log 0600, no token in it")
             ok("login failed" in lg and "wrong bearer" in lg, "forge.log has the login events", lg[-300:])
             # events: the first bytes carry the snapshot
@@ -1870,8 +1915,8 @@ def main():
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo hi"}, headers=post)
             ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "hi\n"}, "/api/do/run echo hi -> rc 0, tail", raw[:100])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo do-run-marker-words"}, headers=post)
-            lg = [l for l in open(state + "/forge.log").read().splitlines() if " do/run " in l]
             digest = hashlib.sha256(b"echo do-run-marker-words").hexdigest()[:12]
+            lg = [l for l in forge_log(state, lambda t: " do/run %s rc 0\n" % digest in t).splitlines() if " do/run " in l]
             ok(st == 200 and any(l.endswith(" do/run %s 24 chars" % digest) for l in lg)
                and any(l.endswith(" do/run %s rc 0" % digest) for l in lg)
                and not any("marker" in l or "echo" in l for l in lg),
@@ -1986,7 +2031,7 @@ def main():
             d = json.loads(raw)
             ok(st == 200 and d["reply"]["kind"] == "done" and d.get("unchecked") == ["96"],
                "/api/do/propose: a done number no output backs comes back unchecked", raw[:300])
-            lg = open(state + "/forge.log").read()
+            lg = forge_log(state, lambda t: re.search(r"do/run [0-9a-f]{12} rc 1$", t, re.M))
             ok(re.search(r"do/run [0-9a-f]{12} 7 chars$", lg, re.M) and re.search(r"do/run [0-9a-f]{12} 5 chars$", lg, re.M)
                and re.search(r"do/run [0-9a-f]{12} rc 1$", lg, re.M)
                and not re.search(r"do/run [0-9a-f]{12} (echo hi|false)$", lg, re.M),
