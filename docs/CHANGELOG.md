@@ -9,6 +9,47 @@
   in a night on the box. The whole context is one request's now, and
   callers take their turn, as the page already made them. The room
   stays `SPARK_CTX`, by hand (#157).
+- Fixed: `spark read` read first the part of a long text a rare word
+  ranked highest, and never the part that answers. Asked how to delete
+  at the destination the files gone from the source, rsync's manual
+  read part 2 and answered `--update` and `--remove-source-files`,
+  never `--delete`. Words are counted over passages now, and a part
+  scores its best three (#160).
+- Fixed: the prompt line checked options only up to a sub-command, so
+  an invented `dnf repoquery --owns`, `systemctl restart --frobnicate`,
+  `zypper install --frobnicate` and `brew install --frobnicate`
+  passed. An option there is held to the program's manual now, and to
+  the command's own page where there is one: dnf reads dnf5's pages,
+  and `-y` stays right after `dnf5 install`. git keeps its rule. A
+  `--no-FOO` is right where the manual names `--FOO`, so `systemctl
+  list-units --no-legend` is no longer doubted (#161).
+- Fixed: `read`, `do`, `recall` and `edit ? --source` sent a credential
+  line as it was when its word followed an underscore, a dot or a
+  quote: the shapes an env file, a shell export and JSON give it
+  (`DB_PASSWORD=`, `export AUTH_TOKEN=`, `"password":`). They hold it
+  now; a word inside another word (`passwordless`) still passes.
+- Fixed: a slow disk could make the page refuse everyone with 503
+  busy. Each request wrote its line to `forge.log`, under one lock,
+  before its slot came back, so a stalled write filled all 64 slots.
+  The page's log lines go through a queue of 1,024 to one writer
+  thread now, in order, and no request waits for the disk. A line that
+  finds the queue full is dropped, and the next line says how many
+  were. A stop writes every queued line (#165).
+- `spark ver` names the license and the repo again: under the logo,
+  the version line ends with MIT and the repo follows, then one blank
+  line before the prompt. `spark ver --credits` and the end of `spark
+  help` add the engine and its repo, then the notice with CREDITS.md
+  before its last line. The install notice is two lines: the own-risk
+  line said again what "no warranty" and "read a command before you
+  run it" already say (#164).
+- Tests: the CI flakes that still hit `try/` runs wait on real
+  conditions. policy_test sends a busy 503 once more after
+  `/api/health` answers; widget_pty waits for the prompt row under the
+  failure line; forge_smoke waits for the forge's root line and takes
+  a new port pair on its warning; the 1 s caps of the danger reading
+  and the secret hold time process time; presence prints its exit
+  codes; the tests that read `forge.log` wait for their lines (#165,
+  #144).
 
 ## v1.111
 
