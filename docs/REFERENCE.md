@@ -2085,11 +2085,13 @@ and may change freely.
     "answers 4" against "answers 422", anchors nowhere, in every
     grounded contract. One that does not anchor is followed by
     ` [not in the text]` where it stands. A span right after `->`, a
-    Unicode arrow or `=>` is the model's proposal. It is not checked,
-    not counted, and followed by ` [proposed]`, so a reader can tell a
-    quote from a proposal. Under `--source` a source proposes nothing,
-    so such a span is checked and counted like any other quote. The
-    turn records `quotes` and `unanchored`.
+    Unicode arrow or `=>` is the model's proposal. So is one after an
+    arrow and up to four words of instruction, `-> change to`
+    (`text.PROPOSAL`). It is not checked, not counted, and followed by
+    ` [proposed]`, so a reader can tell a quote from a proposal. Under
+    `--source` a source proposes nothing, so such a span is checked and
+    counted like any other quote. The turn records `quotes` and
+    `unanchored`.
     `--sel A B` is a `?` with stdin the whole file. It sends one window
     of at most 16 kB (`edit._edit_window`). The selection goes whole,
     with head, cut and tail past 12 kB, between the lines `[selection

@@ -9016,6 +9016,21 @@ def main():
              and [q[0] for q in textmod.quotes('the line is "request: \\"POST /x\\" now"')] == ['request: "POST /x" now'],
              "quotes: a path's closing backslash leaves the quote closing; an escaped pair stays inside",
              str(textmod.quotes('the path "C:\\temp\\" is used and "foo bar baz" too')))
+        # a fix written as an arrow and a few words of instruction is a
+        # proposal too (#112); a quote further from the arrow is checked
+        _fixes = {'1. "becuase" -> change to "because" to fix the spelling.': ["becuase"],
+                  '"arent" -> replace with "aren\'t"': ["arent"],
+                  '"arent" -> use "aren\'t"': ["arent"],
+                  '"arent" -> change it to: "aren\'t"': ["arent"],
+                  '"arent" -> as the text says "the docs" here': ["arent", "the docs"],
+                  '"arent" -> fix it, and later "the docs" reads flat': ["arent", "the docs"],
+                  '"arent" -> change it to be just "now"': ["arent", "now"]}
+        _got = {k: [q[0] for q in textmod.quotes(k)] for k in _fixes}
+        _note = "the release is moved to friday becuase the docs arent ready.\n"
+        _marked = textmod.Ground(_note).mark('1. "becuase" -> change to "because" to fix the spelling.')
+        t.ok(_got == _fixes and _marked == '1. "becuase" -> change to "because" [proposed] to fix the spelling.',
+             "quotes: a span after an arrow and a few words of instruction is a proposal, one further on a quote",
+             repr((_got, _marked)))
         STATE["ask_quotes"] = True
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False

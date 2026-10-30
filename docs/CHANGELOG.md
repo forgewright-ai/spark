@@ -8,6 +8,9 @@
 - Fixed: under zsh an unmatched glob stopped a whole step, so
   `mv *.jpg *.jpeg images/` moved nothing; a zsh step runs with
   `+o nomatch` now, as in bash (#109).
+- Fixed: `spark edit ?` marked a fix written as `"was" -> change to
+  "now"` as `[not in the text]`; a span after an arrow and up to four
+  words of instruction is a proposal now, marked `[proposed]` (#112).
 
 ## v1.110
 

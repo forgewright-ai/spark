@@ -1055,7 +1055,16 @@ ANCHOR_MARK = " [not in the text]"
 PROPOSED_MARK = " [proposed]"
 
 
-PROPOSAL = re.compile(r"(->|→|=>)\s*$")
+# A proposal is the span right after an arrow, or after an arrow and a
+# few words of instruction: `"was" -> change to "now"`, `-> replace it
+# with "now"`, `-> use "now"`. Four words at most, and only these, so a
+# quote further from the arrow (`-> as the text says "now"`) is still a
+# quote of the text, checked.
+_INSTRUCTION = ("change|changed|replace|replaced|rewrite|reword|rephrase|write|"
+                "use|using|make|correct|fix|try|say|read|spell|consider|should|"
+                "could|would|be|become|becomes|it|this|that|to|with|by|into|"
+                "as|instead|perhaps|maybe|simply|just")
+PROPOSAL = re.compile(r"(->|→|=>)\s*(?:(?:%s)\b[\s,:]*){0,4}$" % _INSTRUCTION, re.I)
 
 
 def quoted(m):
@@ -1077,9 +1086,10 @@ def quotes(line, proposals=True):
     """[(span, start, end)] -- every quoted span on one line (double
     quotes, curly double quotes or backticks; 3..200 chars) with the index
     of its opening mark and the one just past its closing mark. A span
-    right after an arrow (`"was" -> "should be"`) is the model's own
-    proposal, not a quote of the text: left out, unless `proposals` is
-    False (a reader's source, where nothing is proposed)."""
+    right after an arrow (`"was" -> "should be"`), or after an arrow and
+    a few words of instruction (`-> change to "now"`, PROPOSAL), is the
+    model's own proposal, not a quote of the text: left out, unless
+    `proposals` is False (a reader's source, where nothing is proposed)."""
     return [(quoted(m), m.start(), m.end()) for m in QUOTE.finditer(line)
             if not (proposals and PROPOSAL.search(line[:m.start()]))]
 
