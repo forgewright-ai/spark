@@ -2051,7 +2051,8 @@ and may change freely.
     from a larger file, so the rewrite replaces exactly it. The name is
     a basename, never a path, and no `[cwd]` line rides, ever. Output is
     raw text: no mark, no wrap, a code fence around the answer removed,
-    a rewrite ending the way the input ended.
+    a rewrite ending the way the input ended. A `?` answer ends with one
+    newline, so the shell's next prompt starts a line of its own.
     Every chunk passes `text.Printable` first (`edit._printable_feed`):
     no escape or control character reaches the terminal or the buffer.
     A carriage return stays when the text on stdin has one. When every

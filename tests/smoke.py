@@ -8737,7 +8737,7 @@ def main():
         t.ok("Before the cursor:\nOnce\n\nAfter the cursor:\n upon a time" in umsg, "edit: the completion sends before and after", repr(umsg))
         n0 = len(STATE["bodies"])
         rc, out, _ = spark("edit", "--type", "markdown", "?", "why", stdin="Some prose.\n")
-        t.ok(rc == 0 and out == "1. line 2: typo\n", "edit: ? streams the answer", repr(out))
+        t.ok(rc == 0 and out == "1. line 2: typo\n", "edit: ? streams the answer, its own last newline kept, never a second", repr(out))
         t.ok(len(STATE["bodies"]) == n0 + 2, "edit: a question is two requests -- the reading, then the answer", str(len(STATE["bodies"]) - n0))
         reading, answer = STATE["bodies"][-2], STATE["bodies"][-1]
         t.ok(reading.get("model") == "spark" and '\\"language\\"' in reading.get("grammar", ""), "edit: the reading is a spark-role JSON request", json.dumps(reading)[:200])
@@ -9035,8 +9035,9 @@ def main():
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
         t.ok(rc == 0 and out == '1. "Some prose." reads flat\n2. "Sum prose" [not in the text] is misspelled\n'
-             '3. "prose. And more" runs on\n4. “more here,” drifts\n5. "Sum prose" [not in the text] -> "Some verse" [proposed] reads better\nno newline',
-             "edit ?: a misquote is marked where it stands; a proposal after -> is marked [proposed], not checked; the last line flushes", repr(out))
+             '3. "prose. And more" runs on\n4. “more here,” drifts\n5. "Sum prose" [not in the text] -> "Some verse" [proposed] reads better\nno newline\n',
+             "edit ?: a misquote is marked where it stands; a proposal after -> is marked [proposed], not checked; "
+             "the last line flushes, ending its line (#113)", repr(out))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("kind") == "answer" and lt.get("quotes") == 5 and lt.get("unanchored") == 2,
@@ -9047,7 +9048,7 @@ def main():
         rc, out, _ = spark("edit", "?", "--source", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
         t.ok(rc == 0 and '5. "Sum prose" [not in the text] -> "Some verse" [not in the text] reads better' in out
-             and "[proposed]" not in out,
+             and "[proposed]" not in out and out.endswith("better\nno newline\n"),
              "edit ? --source: a span after an arrow is checked as a quote, never marked [proposed]", repr(out))
         import io as _io
         from spark import text as _textmod

@@ -648,8 +648,11 @@ def cmd_edit(args):
     # a rewrite of a text whose every line ends CRLF ends its lines so too
     crlf = kind == "rewrite" and _crlf(data)
     streamed = _CRLF(sys.stdout) if crlf and held_out is None else None
-    fence = textmod.Fence(anchors or held_out or streamed or sys.stdout,
-                          newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
+    # a `?` answer is read, not spliced: it ends with one newline, as
+    # read and ask do, so the shell's next prompt starts a line of its own
+    # (#113). A completion goes in at the cursor as the model sent it
+    ends = {"rewrite": data.endswith("\n") if data else True, "answer": True}
+    fence = textmod.Fence(anchors or held_out or streamed or sys.stdout, newline=ends.get(kind))
 
     def done():
         fence.close()

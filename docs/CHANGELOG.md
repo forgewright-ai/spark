@@ -11,6 +11,9 @@
 - Fixed: `spark edit ?` marked a fix written as `"was" -> change to
   "now"` as `[not in the text]`; a span after an arrow and up to four
   words of instruction is a proposal now, marked `[proposed]` (#112).
+- Fixed: the `spark edit ?` review ended without a newline, so the next
+  prompt joined its last line; it ends with one newline now, as `spark
+  read` and `spark ask` do, never a second (#113).
 
 ## v1.110
 
