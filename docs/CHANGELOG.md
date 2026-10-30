@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.109
+
+- `voice.env` says why the runtime is held at sherpa-onnx 1.13.8: 2.0.0
+  builds espeak-ng out and ignores the data_dir Kokoro reads
+  espeak-ng-data through, so the pt-BR voice would go silent. It moves
+  only with phonemes made on this side, for English and pt-BR both.
+  `tests/voice_test.py` fails a bump before that (#150).
+
 ## v1.108
 
 - `spark serve https own` writes the key identifiers into its leaf and

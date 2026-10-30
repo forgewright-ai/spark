@@ -315,6 +315,20 @@ check("the SBOM lists voice.env's pins: a sherpa-onnx per flavour, the three mod
 check("uninstall: the kept voice goes with spark's config, the engine with the data dir",
       "voice" in uninstall.SPARK_CONFIG and voice.voice_dir() != os.path.join(uninstall.DATA_DIR, "voice")
       and os.path.join(uninstall.DATA_DIR, "voice").startswith(uninstall.DATA_DIR))
+# the pin's reason: Kokoro reads espeak-ng-data through the runtime's
+# data_dir, and sherpa-onnx 2.0.0 ignores that field and ships no
+# espeak-ng. So the runtime stays 1.x while voice.py hands it the data,
+# and a bump without phonemes made on this side fails here
+_src = open(os.path.join(REPO, "lib", "spark", "voice.py"), encoding="utf-8").read()
+check("voice.env: the runtime stays 1.x while voice.py hands Kokoro espeak-ng-data (2.0.0 ignores data_dir, voice.env says why)",
+      not ('"espeak-ng-data"' in _src and not pins["VOICE_RUNTIME_VERSION"].startswith("v1.")),
+      pins["VOICE_RUNTIME_VERSION"])
+_mouth = os.path.join(voice.voice_dir(), "mouth")
+if os.path.isdir(_mouth):
+    check("the mouth on this machine holds espeak-ng-data (the pinned Kokoro archive)",
+          os.path.isdir(os.path.join(_mouth, "espeak-ng-data")), sorted(os.listdir(_mouth))[:8])
+else:
+    print("  skip the mouth holds espeak-ng-data   (no voice on this machine)")
 total = sum(p["size"] for p in ps) / 1e6
 check("voice.env: about 600 MB in all on this machine (%d MB)" % total, 570 < total < 620)
 mouth = [p for p in ps if p["name"] == "mouth"][0]
