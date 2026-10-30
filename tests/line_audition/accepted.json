@@ -517,6 +517,10 @@
    [
     "git lgo",
     "command"
+   ],
+   [
+    "systemctl restart --frobnicate sshd",
+    "flag"
    ]
   ],
   "arch": [
@@ -526,6 +530,10 @@
    ],
    [
     "pacman --frobnicate",
+    "flag"
+   ],
+   [
+    "systemctl restart --frobnicate sshd",
     "flag"
    ]
   ],
@@ -543,6 +551,22 @@
    [
     "systemctl frobnicate sshd",
     "command"
+   ],
+   [
+    "dnf repoquery --owns /usr/bin/curl",
+    "flag"
+   ],
+   [
+    "dnf install --frobnicate htop",
+    "flag"
+   ],
+   [
+    "dnf search --bogus pdf",
+    "flag"
+   ],
+   [
+    "systemctl restart --frobnicate sshd",
+    "flag"
    ]
   ],
   "opensuse": [
@@ -552,6 +576,14 @@
    ],
    [
     "zypper --frobnicate search pdf",
+    "flag"
+   ],
+   [
+    "zypper install --frobnicate htop",
+    "flag"
+   ],
+   [
+    "systemctl restart --frobnicate sshd",
     "flag"
    ]
   ],
@@ -563,6 +595,10 @@
    [
     "brew frobnicate htop",
     "command"
+   ],
+   [
+    "brew install --frobnicate htop",
+    "flag"
    ]
   ],
   "spark": [

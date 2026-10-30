@@ -347,6 +347,19 @@ def _valued(entry):
 _WORDISH = re.compile(r"^[A-Za-z0-9][\w.:+-]*$")
 
 
+def _known(head, entry):
+    """The test of a word against the commands the entry's manual lists:
+    one of them, a word its page shows the program taking (`seen`), the
+    program's own alias, or a prefix of one where the manual says they
+    may be abbreviated. None when the manual lists no commands."""
+    cs = intake.commands_of(getattr(entry, "commands", None))
+    if not cs:
+        return None
+    names = frozenset(cs.words) | frozenset(cs.seen)
+    own = _aliases(head)
+    return lambda w: w in names or w.lower() in own or (cs.prefix and any(c.startswith(w) for c in names))
+
+
 def _command(head, args, entry, valued):
     """A command finding: the entry lists its program's commands and the
     command word -- the first positional word past the options -- is none
@@ -356,14 +369,9 @@ def _command(head, args, entry, valued):
     example). A word right after an option may be that option's value, so
     a later word that is a command clears it. A word that is not
     word-shaped (a path, a $VAR, a glob) is unknown, never wrong."""
-    cs = intake.commands_of(getattr(entry, "commands", None))
-    if not cs:
+    known = _known(head, entry)
+    if known is None:
         return []
-    names = frozenset(cs.words) | frozenset(cs.seen)
-    own = _aliases(head)
-
-    def known(w):
-        return w in names or w.lower() in own or (cs.prefix and any(c.startswith(w) for c in names))
     maybe, after_opt, skip = None, False, False
     for a in args:
         if skip:
@@ -424,9 +432,12 @@ def _mentions(entry, token):
     return re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(token), blob) is not None
 
 
-def _flags(head, args, entry):
+def _flags(head, args, entry, negated=True):
     """The options in `args` the entry does not name. `find -exec ... ;`
-    is the command's own, and `--` ends the options."""
+    is the command's own, and `--` ends the options. A `--no-FOO` is
+    named where the manual names `--FOO` (systemctl's --legend=BOOL
+    takes --no-legend); spark's own help names its options whole, so
+    _spark asks with `negated` False."""
     long, short, wordset = _options(entry)
     if not (long or short or wordset):
         return []
@@ -448,7 +459,8 @@ def _flags(head, args, entry):
             continue                                # a word, stdin, a phrase, a count (head -10)
         if a.startswith("--"):
             name = a.split("=", 1)[0]
-            if name not in long and name not in wordset:
+            if name not in long and name not in wordset and not (
+                    negated and name.startswith("--no-") and "--" + name[5:] in long):
                 found.append((name, a))
             skip = "=" not in a and name in valued
             continue
@@ -554,7 +566,7 @@ def _spark(args, store=None):
         # word everything is the user's text
         end = next((i for i, a in enumerate(rest) if not a.startswith("-") and a not in lits), len(rest)) \
             if free else len(rest)
-        out.extend(_flags("spark " + verb, [a for a in rest[:end] if a not in _HELP], entry))
+        out.extend(_flags("spark " + verb, [a for a in rest[:end] if a not in _HELP], entry, negated=False))
     return out + [Finding("slot", "spark " + verb, a) for a in dict.fromkeys(held)]
 
 
@@ -602,6 +614,33 @@ def _placeholders(line):
 
 # a synopsis that runs something after the program's own words
 _TAKES = re.compile(r"(?i)\b(?:sub)?command\b|\butility\b|\bscript\b|\bprogramfile\b")
+# a synopsis whose options follow its command word: `dnf5 <command>
+# [options]`, `zypper command [--command-opts]`, `brew command [--verbose]`
+_AFTER = re.compile(r"(?i)(?:^|\s)<?(?:sub)?command>?\s+\[(?:-|options\b)")
+
+
+def _synopsis(entry):
+    """The entry's synopsis as text: a store keeps a string, a snapshot
+    its lines."""
+    s = getattr(entry, "synopsis", "") or ""
+    return s if isinstance(s, str) else "\n".join(str(x) for x in s)
+
+
+def _parent(head, syn, store):
+    """The program whose entries per subcommand `head` reads: its own
+    (git log), or the one its synopsis names (dnf's manual is dnf5's,
+    and its pages are dnf5 install, dnf5 search). '' for none."""
+    parents = grounding.parents(store)
+    if head in parents:
+        return head
+    first = syn.split(None, 1)[:1]
+    return first[0] if first and first[0] in parents else ""
+
+
+def _own(head, entry, word):
+    """Is `word` a command of the program's own: one its manual lists."""
+    known = _known(head, entry)
+    return known is not None and _WORDISH.match(word) is not None and known(word)
 
 
 def _stage(words, store):
@@ -632,24 +671,40 @@ def _stage(words, store):
         entry = _entry(store, head)
         if entry is None:
             continue
-        # a program with an entry per subcommand (git log, xbps-query):
+        # a program with an entry per subcommand (git log, dnf5 install):
         # the options before the subcommand are the program's, after it
-        # the subcommand's own -- and after one with no entry, nobody's.
+        # the subcommand's own -- and the program's too where its
+        # synopsis puts them after the command (dnf5 <command> [options]).
+        # After one with no entry, nobody's (a git alias), unless the
+        # synopsis says the program's own follow it.
         # A program whose synopsis runs a command, a utility or a script
         # after its words (ssh HOST ls -la, python3 x.py --port) has its
-        # own options checked up to that word and no further.
+        # own options checked up to that word and no further -- unless
+        # the word is the program's own command: one its manual lists
+        # (systemctl restart, brew install), or any word where the
+        # synopsis puts the options after it. Then they are checked to
+        # the end.
         valued = _valued(entry)
         out.extend(_command(head, args, entry, valued))
         i = 0
         while i < len(args) and args[i] != "--" and args[i].startswith("-"):
             i += 2 if (args[i] in valued and "=" not in args[i]) else 1
         word = args[i] if i < len(args) and args[i] != "--" else ""
-        if word and head in grounding.parents(store) and re.match(r"^[a-z][\w-]*$", word):
+        syn = _synopsis(entry)
+        after = _AFTER.search(syn) is not None
+        parent = _parent(head, syn, store) if word else ""
+        if parent and re.match(r"^[a-z][\w-]*$", word):
             out.extend(_flags(head, args[:i], entry))
-            sub = _entry(store, "%s %s" % (head, word))
+            sub = _entry(store, "%s %s" % (parent, word))
             if sub is not None:
-                out.extend(_flags("%s %s" % (head, word), args[i + 1:], sub))
-        elif word and _TAKES.search(str(getattr(entry, "synopsis", "") or "")):
+                found = _flags("%s %s" % (head, word), args[i + 1:], sub)
+                if after:
+                    mine = {f.word for f in _flags(head, args[i + 1:], entry)}
+                    found = [f for f in found if f.word in mine]
+                out.extend(found)
+            elif after:
+                out.extend(_flags(head, args[i + 1:], entry))
+        elif word and _TAKES.search(syn) and not (after or _own(head, entry, word)):
             out.extend(_flags(head, args[:i], entry))
         else:
             out.extend(_flags(head, args, entry))

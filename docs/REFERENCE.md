@@ -954,8 +954,17 @@ and may change freely.
    (`grounding.new_tools`), never its own command's manuals. A finding
    has a kind
    (`judge.Finding`). `missing` is a program that is not on this
-   machine, and `flag` an option its manual does not name. `command` is
-   a word the manual's list of commands lacks. `verb` is a word or an
+   machine, and `flag` an option its manual does not name. A
+   `--no-FOO` counts as named where a program's manual names `--FOO`, as
+   systemctl's `--legend=BOOL` takes `--no-legend`. After a
+   sub-command, an option is held to the sub-command's own page where
+   the store has one (`git log`). Where the synopsis puts the options
+   after the command (`dnf5 <command> [options]`), the program's own
+   are taken there too, and `dnf` reads dnf5's pages. A program whose
+   manual lists its commands (`systemctl restart`) is checked to the
+   end, and one that runs another command (`ssh HOST ls -la`) up to
+   that command. `command` is a word the manual's list of commands
+   lacks. `verb` is a word or an
    option spark does not take, and `placeholder` a `<name>` left in the
    line. `quote` is a quote, a `$(` or a backtick left open. `slot` is
    a capital word of spark's own help copied as it stands, such as

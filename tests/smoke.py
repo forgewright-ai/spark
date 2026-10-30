@@ -1687,6 +1687,55 @@ def knowledge_cases(t):
             judge._WHICH.clear()
             judge._ENTRIES.clear()
 
+    # v1.112: the options after a sub-command are checked too. dnf's
+    # manual is dnf5's, its synopsis puts the options after the command,
+    # and its pages are dnf5's own (dnf5 install): there an option is the
+    # program's or the page's. systemctl's manual lists its commands,
+    # and its --legend=BOOL takes --no-legend, before the command or
+    # after. git keeps its rule: after the subcommand, its own alone.
+    class Here(Fixture):
+        def has_program(self, name):
+            return name in self.by
+
+    dsyn = "dnf5 <command> [options] [<args>...]"
+    dopts = OS_(("--assumeyes", "--refresh"), "y", ())
+    dlines = ["-y, --assumeyes  Automatically answer yes for all questions."]
+    sub_st = Here([
+        E("dnf", "program", "man", "Package manager", dsyn, dopts, dlines, "rpm:dnf5", (0, 0)),
+        E("dnf5", "program", "man", "Package manager", dsyn, dopts, dlines, "rpm:dnf5", (0, 0)),
+        E("dnf5 install", "program", "man", "Install Command", "dnf5 [GLOBAL OPTIONS] install [OPTIONS] <PACKAGE>...",
+          OS_(("--allowerasing", "--skip-broken"), "", ()), ["--allowerasing  Allow removing installed packages."],
+          "rpm:dnf5", (0, 0)),
+        E("systemctl", "program", "man", "Control the systemd system and service manager",
+          "systemctl [OPTIONS...] COMMAND [UNIT...]", OS_(("--now", "--user", "--legend"), "", ()),
+          ["--now  Start or stop the unit too.", "--legend=BOOL  Enable or disable printing of the legend."],
+          "rpm:systemd", (0, 0),
+          intake.CommandSet(("start", "stop", "restart", "enable", "status", "list-units"), False)),
+        E("git", "program", "man", "the stupid content tracker", "git [--version] [-C <path>] <command> [<args>]",
+          OS_(("--version",), "C", ()), ["-C <path>  Run as if git was started in <path>"], "rpm:git", (0, 0)),
+        E("git log", "program", "man", "Show commit logs", "git log [<options>]",
+          OS_(("--oneline",), "n", ()), ["--oneline  a shorthand for --pretty=oneline"], "rpm:git", (0, 0)),
+    ])
+    bad = []
+    for cmd, want in (
+            ("dnf5 install -y htop", []), ("dnf install -y htop", []), ("dnf -y install htop", []),
+            ("dnf install --allowerasing htop", []), ("dnf upgrade --refresh", []),
+            ("dnf install --frob htop", [("flag", "dnf install", "--frob")]),
+            ("dnf5 install --frob htop", [("flag", "dnf5 install", "--frob")]),
+            ("dnf repoquery --owns /usr/bin/curl", [("flag", "dnf", "--owns")]),
+            ("systemctl restart --now sshd", []), ("systemctl --user restart x", []),
+            ("systemctl restart --frob sshd", [("flag", "systemctl", "--frob")]),
+            ("systemctl list-units --no-legend", []), ("systemctl --no-legend list-units", []),
+            ("systemctl list-units --no-frob", [("flag", "systemctl", "--no-frob")]),
+            ("git log --oneline", []), ("git log --version", [("flag", "git log", "--version")])):
+        got = [tuple(f) for f in judge.verdict(cmd, sub_st).findings]
+        if got != want:
+            bad.append("%s -> %s (want %s)" % (cmd, got, want))
+    judge._ENTRIES.clear()
+    t.ok(not bad, "knowledge: verdicts after a sub-command -- dnf5 install -y is valid, dnf's options and its "
+         "page's are both taken, an invented one is found; systemctl's too, and its --no-legend is valid; git keeps "
+         "its own", "; ".join(bad))
+
     # v1.87: a spark verb's options against the store's own `spark VERB`
     # entry, built the way intake builds it -- from the verb's own -h
     # (intake.spark_help, intake.spark_entry). An option no help names is
