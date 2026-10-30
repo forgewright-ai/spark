@@ -2,12 +2,13 @@
 
 ## v1.110
 
-- CI on main no longer runs the gate twice. A `gate` job asks whether
-  the commit already passed on its `try/` branch (`tests/land.sh
-  --passed`, the one question); when it did, every other job skips and
-  `green` accepts it, so main keeps a run of its own for the landing's
-  time and spends one minute, not six. A commit that reached main any
-  other way still gets the full run (#145).
+- CI on main no longer runs the gate twice. lint's first step asks
+  whether the commit already passed on its `try/` branch
+  (`tests/land.sh --passed`, the one question); when it did, lint
+  stops, every other job skips and `green` accepts it, so main keeps a
+  run of its own for the landing's time and spends one minute, not six.
+  A commit that reached main any other way still gets the full run
+  (#145).
 
 ## v1.109
 

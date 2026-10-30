@@ -29,12 +29,12 @@
 # are the only download.
 # A tag push runs nothing here: the tag's commit already passed. A newer
 # push cancels an older run on a try/ branch or a pull request, never on
-# main. On main the gate job asks first whether this very commit already
+# main. On main, lint's first step asks whether this very commit already
 # passed here, on its try/ branch (tests/land.sh --passed, the one
-# question); when it did, every other job skips and green accepts it, so
-# main keeps a run of its own for the landing's time (tests/land.sh
-# --landed-at reads it) without running the gate twice (#145). A commit
-# that reached main any other way gets the full run.
+# question); when it did, lint stops there, every other job skips and
+# green accepts it, so main keeps a run of its own for the landing's time
+# (tests/land.sh --landed-at reads it) without running the gate twice
+# (#145). A commit that reached main any other way gets the full run.
 name: ci
 on:
   push:
@@ -47,23 +47,32 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
-  gate:
-    # main alone: did this commit pass here already? The answer is one
-    # output, done, that lint reads; a try/ branch and a pull request skip
-    # this job and run everything
-    if: github.ref == 'refs/heads/main'
+  lint:
+    # the cheap checks first, on one runner: the privacy gate over the
+    # whole tree, syntax, ASCII, shellcheck, docs_test, patch_test and
+    # zizmor over these workflows. Every other job needs it, so a lint
+    # failure costs this job's minute, not a run on every slot. The
+    # personal word list is a repository secret (one word per line); a
+    # hit names the file, never the line -- this log is public. A fork
+    # without it gets a NOTICE and the generic patterns only. On main its
+    # first step asks whether this commit passed here already, on its
+    # try/ branch; when it did, `done` is true, the other steps and every
+    # job that needs lint skip, and green accepts it (#145)
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     permissions:
       contents: read
-      actions: read   # the workflow runs of this commit
+      actions: read   # the workflow runs of this commit, for the question on main
     outputs:
-      done: ${{ steps.ask.outputs.done }}
+      done: ${{ steps.gate.outputs.done }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
+          fetch-depth: 0   # patch_test reads the tags
           persist-credentials: false
-      - id: ask
+      - id: gate
+        name: on main, did this commit pass on its try/ branch already?
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
@@ -73,28 +82,11 @@ jobs:
           else
             echo "done=false" >> "$GITHUB_OUTPUT"
           fi
-  lint:
-    # the cheap checks first, on one runner: the privacy gate over the
-    # whole tree, syntax, ASCII, shellcheck, docs_test, patch_test and
-    # zizmor over these workflows. Every other job needs it, so a lint
-    # failure costs this job's minute, not a run on every slot. The
-    # personal word list is a repository secret (one word per line); a
-    # hit names the file, never the line -- this log is public. A fork
-    # without it gets a NOTICE and the generic patterns only. On main it
-    # runs only when the gate found no earlier green run of this commit;
-    # every other job needs lint, so they follow it
-    needs: gate
-    if: ${{ !cancelled() && (github.ref != 'refs/heads/main' || needs.gate.outputs.done != 'true') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
-        with:
-          fetch-depth: 0   # patch_test reads the tags
-          persist-credentials: false
       - name: shellcheck
+        if: steps.gate.outputs.done != 'true'
         run: sudo apt-get install -y -qq shellcheck >/dev/null
       - name: the gate, lint
+        if: steps.gate.outputs.done != 'true'
         env:
           SPARK_PRIVACY_TERMS_SECRET: ${{ secrets.SPARK_PRIVACY_TERMS }}
           SPARK_GATE_FAIL_FAST: 1
@@ -107,6 +99,7 @@ jobs:
         # permission than it uses, a checkout that leaves the token on
         # disk. A finding this tree means is ignored inline, with its
         # reason on the line.
+        if: steps.gate.outputs.done != 'true'
         run: |
           python3 -m venv "$RUNNER_TEMP/zizmor"
           # the wheel and the sdist by their sha256: a replaced upload of the
@@ -118,6 +111,7 @@ jobs:
 
   linux:
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -165,6 +159,7 @@ jobs:
     # reads `na` for services, as docs/INSTALL.md, section 6 (the container
     # note) promises.
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     # debian:13 pinned by its multi-arch index digest: a tag can move, a digest
     # is the image. Moved by hand (Docker Hub: the manifest of debian:13)
@@ -217,6 +212,7 @@ jobs:
     # Arch's base already holds gcc-libs, llama.cpp's OpenMP), the console
     # row unset here and the GRUB row an honest skip without a UKI.
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     container: archlinux:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Arch there is, and -Syu moves it to today anyway
     timeout-minutes: 20
@@ -257,6 +253,7 @@ jobs:
     # machine's, so this job proves what debian and arch cannot: bootstrap
     # writes the user's runsvdir service, and spark-check runs supervised.
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     container: ghcr.io/void-linux/void-glibc-full:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Void there is, and -Su moves it to today anyway
     timeout-minutes: 20
@@ -319,6 +316,7 @@ jobs:
     # container -- packages through dnf, and "is it installed" asked of rpm
     # by provider (libgomp proves the install path when the image lacks it).
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     # fedora:44 pinned by its multi-arch index digest, as debian:13 is: a
     # versioned release, so a tag can move and a digest is the image. Moved
@@ -366,6 +364,7 @@ jobs:
     # installed" asked of rpm by provider (python3 is python313's
     # capability there, no package of its own).
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Tumbleweed there is, and dup moves it to today anyway
     timeout-minutes: 20
@@ -415,6 +414,7 @@ jobs:
     # AppArmor refuse the user namespace bwrap needs; the runner is thrown
     # away with the job
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -451,6 +451,7 @@ jobs:
           awk -F'\t' '$3=="sandbox" { print; found=1; if ($2!="ok" || $4 !~ /copy/) bad=1 } END { exit bad || !found }' /tmp/row.txt
   macos:
     needs: lint
+    if: needs.lint.outputs.done != 'true'
     runs-on: macos-latest
     timeout-minutes: 40
     strategy:
@@ -510,22 +511,20 @@ jobs:
     # and fails when any of them failed, was cancelled or was skipped.
     # tests/land.sh still asks the run as a whole; this job is for GitHub's
     # own gate on main.
-    needs: [gate, lint, linux, debian, arch, void, fedora, opensuse, sandbox, macos]
+    needs: [lint, linux, debian, arch, void, fedora, opensuse, sandbox, macos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: every job passed
-        # the gate's own result is not counted: it is skipped off main by
-        # design. When it said done, the skipped jobs are the point
+        # when lint said done (main, the commit passed on try/ already),
+        # the skipped jobs are the point and the run is green
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
-          GATE: ${{ needs.gate.result }}
-          DONE: ${{ needs.gate.outputs.done }}
+          DONE: ${{ needs.lint.outputs.done }}
         run: |
-          RESULTS=$(printf '%s' " $RESULTS " | sed "s/ $GATE / /")
           if [ "$DONE" = true ]; then
-            echo "ci: main, already passed on its try/ branch -- the gate alone ran ($RESULTS)"
+            echo "ci: main, already passed on its try/ branch -- lint's question alone ran ($RESULTS)"
             exit 0
           fi
           case " $RESULTS " in
