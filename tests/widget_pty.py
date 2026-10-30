@@ -1506,6 +1506,88 @@ def rendered_height(shell, widget, tmp, env, ok):
         subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
 
 
+def first_row(shell, widget, tmp, env, ok):
+    """A real screen (#116): a prompt on the screen's first row, after
+    clear or Ctrl-L, has no row above it. spark's row is opened above
+    the prompt first, so a danger's command stays whole and readable on
+    the line Enter would run; at height 2 a two-line prompt keeps its
+    first line too."""
+    if not shutil.which("tmux"):
+        print("  skip first row: no tmux")
+        return
+    hint = "! Deletes things -- careful -- read it before Enter"
+
+    def session(name, height, ps):
+        e = dict(env, TERM="screen-256color", XDG_STATE_HOME=os.path.join(tmp, "first-state-" + name))
+        e.pop("SPARK_HEIGHT", None)
+        if height > 1:
+            e["SPARK_HEIGHT"] = str(height)
+        t = ["tmux", "-S", os.path.join(tmp, "tmux-r%s.sock" % name), "-f", "/dev/null"]
+        argv = "bash --norc --noprofile -i" if shell == "bash" else "zsh -f -i"
+        cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in e.items()) + " " + argv
+        subprocess.run(t + ["new-session", "-d", "-x", "70", "-y", "14", "-c", os.path.join(tmp, "work"), cmd],
+                       check=True)
+
+        def screen():
+            return [r.rstrip() for r in subprocess.run(t + ["capture-pane", "-p"], capture_output=True,
+                                                       text=True).stdout.splitlines()]
+
+        def until(want, timeout=8):
+            end = time.time() + timeout
+            while time.time() < end:
+                s = screen()
+                if want(s):
+                    return s
+                time.sleep(0.2)
+            return screen()
+
+        def keys(s, enter=True):
+            subprocess.run(t + ["send-keys", "-l", s], check=True)
+            if enter:
+                subprocess.run(t + ["send-keys", "Enter"], check=True)
+
+        def check(want, what):
+            rows = until(lambda s: s[:len(want)] == want)
+            good = rows[:len(want)] == want
+            ok(good, what)
+            if not good:
+                print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+        if shell == "bash":
+            keys("PS1=%s; source %s; clear" % (shlex.quote(ps), widget))
+        else:
+            keys("PROMPT=$%s; source %s; clear" % (shlex.quote(ps), widget))
+        return t, until, keys, check
+
+    t, until, keys, check = session("1", 1, "F> ")
+    try:
+        until(lambda s: s[:1] == ["F>"], 20)
+        time.sleep(0.5)
+        keys("? delete my homework")
+        check([hint, "F> echo EXECUTED-MARK"], "first row, after clear: the hint opens a row above, the command whole")
+        subprocess.run(t + ["send-keys", "C-u"], check=True)
+        time.sleep(0.3)
+        subprocess.run(t + ["send-keys", "C-l"], check=True)
+        until(lambda s: s[:1] == ["F>"])
+        time.sleep(0.5)
+        keys("? delete my homework")
+        check([hint, "F> echo EXECUTED-MARK"], "first row, after Ctrl-L: the hint opens a row above, the command whole")
+        subprocess.run(t + ["send-keys", "Enter"], check=True)
+        rows = until(lambda s: any(r == "EXECUTED-MARK" for r in s))
+        ok("EXECUTED-MARK" in rows and "F> echo EXECUTED-MARK" in rows,
+           "first row: Enter runs the command that was on screen")
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
+    t, until, keys, check = session("2", 2, "INFO-LINE\\nP> ")
+    try:
+        until(lambda s: s[:2] == ["INFO-LINE", "P>"], 20)
+        time.sleep(0.5)
+        keys("? delete my homework")
+        check([hint, "INFO-LINE", "P> echo EXECUTED-MARK"],
+              "first row, height 2: the hint opens its row, the prompt's two lines whole below it")
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
+
+
 def pager_main():
     """`spark help` (the real one) in a 10-row pty: taller than the screen,
     so it goes through $PAGER -- a stub that logs its stdin and prints a
@@ -2297,6 +2379,9 @@ def rows_main(shell, widget):
 
         # 9. the rendered screen: a wrapped question, hint above, prompt intact
         wrapped(shell, widget, tmp, env, PROMPT, ok)
+
+        # 9a. the prompt on the screen's first row (#116): a row opens above
+        first_row(shell, widget, tmp, env, ok)
 
         # 9b2. the alert (v1.81): a check row that turned worse, said once
         # in each pane; zsh's Ctrl-C leaves no face

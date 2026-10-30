@@ -20,6 +20,9 @@
 - Fixed: setup at a terminal asked for sudo with no step needing root,
   so a standard Mac account could not set up a client. Now it asks only
   for the dry run's `(sudo)` rows, and names them (#121).
+- Fixed: after clear or Ctrl-L spark's row was drawn over a first-row
+  command line, hiding a `!` command; both widgets now open the row
+  above the prompt first (#116).
 
 ## v1.110
 

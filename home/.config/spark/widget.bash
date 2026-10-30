@@ -401,9 +401,14 @@ _spark_unface() {
 # The row is _spark_height rows up (1 unless the look file or SPARK_HEIGHT
 # says more: a two-line prompt takes 2). The face counts toward the
 # width. What it writes replaces the resting face: _spark_faced is spent.
+# A prompt on the screen's first row (after clear or Ctrl-L) has no row
+# above it. ESC M up and ESC D down, once a row, first open the rows it
+# lacks, so the hint never lands on the command line. Where the rows are
+# there, the cursor comes back to where it was and nothing moves.
 _spark_hinted=''          # spark drew in the row above since this prompt came
+_spark_ri=$'\eM\eM\eM\eM\eM' _spark_ind=$'\eD\eD\eD\eD\eD'
 _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouched
-    local t=$1 w=${COLUMNS:-80}
+    local t=$1 w=${COLUMNS:-80} n=$(( 2 * _spark_height ))
     [[ -n $t ]] && _spark_hinted=1
     _spark_face "$t"
     t=$_spark_ft
@@ -411,7 +416,8 @@ _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouche
     # shellcheck disable=SC2086  # empty means no count: the mark alone
     _spark_paint "$t" $_spark_fn
     _spark_faced=''
-    printf '\0337\033[%dA\r\033[2K%s\0338' "$_spark_height" "$_spark_out"
+    printf '%s%s\0337\033[%dA\r\033[2K%s\0338' "${_spark_ri:0:n}" "${_spark_ind:0:n}" \
+        "$_spark_height" "$_spark_out"
 }
 
 # The line streams (contract 4): line 1 -- the command, its danger known --

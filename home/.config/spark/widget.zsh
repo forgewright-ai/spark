@@ -391,16 +391,21 @@ _spark_unface() {
 # above" the prompt itself), and the text must fit the width (a wrapped
 # hint would push the prompt down). The face counts toward that width.
 # What it writes replaces the resting face: _spark_faced is spent.
+# A prompt on the screen's first row (after clear or Ctrl-L) has no row
+# above it. ESC M up and ESC D down, once a row, first open the rows it
+# lacks, so the hint never lands on the command line. Where the rows are
+# there, the cursor comes back to where it was and nothing moves.
 typeset -g _spark_hinted=''   # spark drew in the row above since this prompt came
+typeset -g _spark_ri=$'\eM\eM\eM\eM\eM' _spark_ind=$'\eD\eD\eD\eD\eD'
 _spark_say() {
-    local t=$1
+    local t=$1 n=$(( 2 * _spark_height ))
     [[ -n $t ]] && _spark_hinted=1
     _spark_face "$t"
     t=$_spark_ft
     (( ${#t} > COLUMNS - 2 )) && t=${t[1,COLUMNS-3]}$_spark_d
     _spark_paint "$t" $_spark_fn
     _spark_faced=''
-    print -rn -- $'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
+    print -rn -- "${_spark_ri[1,n]}${_spark_ind[1,n]}"$'\e7\e['"$_spark_height"$'A\r\e[2K'"$_spark_out"$'\e8'
 }
 
 # The line streams (contract 4): line 1 -- the command, its danger known --
