@@ -5,6 +5,9 @@
 - Fixed: `spark do` called a step that starts with a shell keyword
   "not on this machine"; a loop, a test or a group (`for`, `while`,
   `if`, `[[`) is offered now (#111).
+- Fixed: under zsh an unmatched glob stopped a whole step, so
+  `mv *.jpg *.jpeg images/` moved nothing; a zsh step runs with
+  `+o nomatch` now, as in bash (#109).
 
 ## v1.110
 

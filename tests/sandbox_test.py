@@ -1355,7 +1355,8 @@ def test_step_mac_shape():
           env.get("TMPPREFIX") == os.path.join(os.path.realpath(d + "/tmp"), "zsh"), env.get("TMPPREFIX"))
     check("STEP_ENV: a clean environment",
           set(env) == {"PATH", "HOME", "LANG", "TMPDIR", "TMPPREFIX"} | {k for k, _ in sandbox.STEP_ENV}, sorted(env))
-    check("step: the shell runs last", argv[-3:] == ["zsh", "-c", "echo hi"])
+    check("step: the shell runs last, zsh with an unmatched glob a word as in bash (#109)",
+          argv[-5:] == ["zsh", "+o", "nomatch", "-c", "echo hi"], argv[-5:])
     shutil.rmtree(d)
 
 
@@ -1496,6 +1497,13 @@ def test_real():
         run = sandbox.new_run(root, "t")
         rc, out = step(run, "cat > here.txt <<'EOF'\nfrom a here-document\nEOF\ncat here.txt", shell=zsh)
         check("real: a here-document runs under zsh in the copy", rc == 0 and "from a here-document" in out, out)
+        sandbox.discard(run)
+        # a step written for bash: an unmatched glob stays a word, the
+        # pictures that exist move (#109)
+        run = sandbox.new_run(root, "t")
+        rc, out = step(run, "touch trip.jpg; mkdir -p images && mv *.jpg *.jpeg images/; ls images", shell=zsh)
+        check("real: under zsh an unmatched glob does not stop the step", "no matches found" not in out
+              and "trip.jpg" in out, (rc, out))
         sandbox.discard(run)
     else:
         skip("real: a here-document under zsh", "no zsh here")

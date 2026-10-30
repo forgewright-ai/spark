@@ -1207,7 +1207,10 @@ and may change freely.
    its pipe read `LEASH_GRACE` 0.5 seconds more and no longer. So a
    grandchild that left the group with `setsid` and holds the pipe
    cannot keep the step alive. That covers the page's steps, a sandboxed
-   run's and a program's. `spark do --sandbox` (`lib/spark/sandbox.py`)
+   run's and a program's. Every step runs as `sandbox.shell_argv` says:
+   the login shell with `-c`, and zsh with `+o nomatch` too. A model
+   writes for bash, so an unmatched glob stays a word, as in bash.
+   `spark do --sandbox` (`lib/spark/sandbox.py`)
    moves the user's Enter and never removes it: containment replaces
    the per-step Enter, and the Enter moves to the apply.
    `sandbox.probe()` answers first (the `sandbox` row). A no is one

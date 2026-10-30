@@ -10752,6 +10752,20 @@ def main():
         t.ok(_rc == 124 and "hi" in _tail and time.time() - _t0 < 5,
              "do.run(timeout=): a setsid grandchild holding the pipe cannot keep a step past its leash",
              (_rc, _tail, time.time() - _t0))
+        # a step written for bash under zsh: an unmatched glob stays a word
+        # as in bash, so the pictures that exist move (#109)
+        if shutil.which("zsh"):
+            _g = tempfile.mkdtemp(dir=home)
+            for _f in ("lease.pdf", "scan-001.png", "trip.jpg"):
+                open(os.path.join(_g, _f), "w").close()
+            _rc, _tail = _do.run("mkdir -p images && mv *.jpg *.jpeg *.png *.gif images/ 2>/dev/null",
+                                 "zsh", cwd=_g, echo=False)
+            t.ok(sorted(os.listdir(os.path.join(_g, "images"))) == ["scan-001.png", "trip.jpg"]
+                 and "no matches found" not in _tail,
+                 "do.run: under zsh an unmatched glob does not stop a step written for bash", (_rc, _tail))
+            shutil.rmtree(_g)
+        else:
+            t.skip("do.run: an unmatched glob under zsh", "no zsh here")
         # the head-word guard in do: never offered, fed back, the loop goes on
         # v1.101 (#104): a done right after a step that failed is asked once
         # more with its exit code, then said with it -- never a plain success

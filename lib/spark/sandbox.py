@@ -933,6 +933,17 @@ def _step_env(home, tmp):
     return env
 
 
+def shell_argv(shell, cmd):
+    """`shell -c cmd`, the argv every step of spark do runs through. A
+    model writes its steps for bash, so under zsh an unmatched glob stays
+    a word as it does in bash (`+o nomatch`): `mv *.jpg *.jpeg dir/`
+    moves the pictures that exist, never stops whole (#109). Nothing
+    else of the user's shell changes."""
+    if os.path.basename(shell) == "zsh":
+        return [shell, "+o", "nomatch", "-c", cmd]
+    return [shell, "-c", cmd]
+
+
 def step_cwd(run, platform=None):
     """The directory a step runs in: the clone on macOS (the `[cwd]` a
     sandboxed goal names), the project itself on Linux (the overlay, or
@@ -972,7 +983,7 @@ def step(run, shell, cmd, platform=None):
     argv.append("--clearenv")
     for k, v in sorted(_step_env(home, "/tmp").items()):
         argv += ["--setenv", k, v]
-    argv += [shell, "-c", cmd]
+    argv += shell_argv(shell, cmd)
     return argv, step_cwd(run, plat), {"PATH": os.environ.get("PATH") or "/usr/bin:/bin"}
 
 
@@ -990,7 +1001,7 @@ def _uvar():
 def _mac_step(run, shell, cmd):
     d = run["dir"]
     clone, rhome, tmp = (os.path.realpath(os.path.join(d, s)) for s in ("clone", "home", "tmp"))
-    argv = _mac_profile(clone, rhome, tmp, os.path.join(d, "profile.sb")) + [shell, "-c", cmd]
+    argv = _mac_profile(clone, rhome, tmp, os.path.join(d, "profile.sb")) + shell_argv(shell, cmd)
     return argv, clone, _step_env(rhome, tmp)
 
 

@@ -650,7 +650,7 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     group is killed, rc 124. A run stopped mid-step (Ctrl-C, SIGTERM)
     takes a leashed step's group down with it: its own session is no
     terminal's to kill."""
-    argv, env, pre = [shell, "-c", command], None, None
+    argv, env, pre = sandbox.shell_argv(shell, command), None, None
     if box is not None:
         argv, cwd, env = sandbox.step(box, _shell_path(shell), command)
         pre = sandbox.preexec
