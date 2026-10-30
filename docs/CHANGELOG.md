@@ -14,6 +14,9 @@
 - Fixed: the `spark edit ?` review ended without a newline, so the next
   prompt joined its last line; it ends with one newline now, as `spark
   read` and `spark ask` do, never a second (#113).
+- Fixed: with `COLUMNS` exported, ps cut the engine's command line, so
+  `serve` warned of old settings and serve off missed its own engine.
+  Every ps that reads a command line now asks with `-ww` (#119).
 
 ## v1.110
 

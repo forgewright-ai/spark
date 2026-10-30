@@ -3572,6 +3572,62 @@ def server_pids_cases(t):
     t.ok(_en.pids_in_ps(ps, 8080) == [101, 505], "engine: only a real llama-server on the port is one", str(_en.pids_in_ps(ps, 8080)))
 
 
+def ps_width_cases(t):
+    """#119: procps cuts a command line to $COLUMNS when it is exported,
+    unless ww asks for no limit. Every reader of an engine's command line
+    asks with ww, so a flag near the end is still seen. The ps on PATH is
+    a stub that cuts the way procps does."""
+    from unittest.mock import patch
+    from spark import engine as _en, stats as _st, voice as _vo
+    tmp = tempfile.mkdtemp(prefix="spark-ps-width-")
+    line = ("/x/llama.cpp-b1/llama-server -m /x/models/m.gguf --alias spark,m --host 192.0.2.5 -c 8192"
+            " -ngl 99 -fa on -ctk q8_0 -t 4 --port 8080 --cache-ram 0 --api-key-file /x/state/api-token"
+            " --no-webui /x/spark-voice-1")
+    with open(os.path.join(tmp, "ps"), "w") as f:
+        f.write("#!/bin/sh\n"
+                "wide=; pid=\n"
+                "for a; do case $a in -*ww*) wide=1;; *pid=*) pid=1;; esac; done\n"
+                "l='%s'\n"
+                "[ -n \"$pid\" ] && l=\"4242 $l\"\n"
+                "[ -z \"$wide\" ] && [ -n \"$COLUMNS\" ] && l=$(printf '%%s' \"$l\" | cut -c1-\"$COLUMNS\")\n"
+                "printf '%%s\\n' \"$l\"\n" % line)
+    os.chmod(os.path.join(tmp, "ps"), 0o755)
+
+    class Cfg:
+        port = 8080
+        client = False
+        token_file = "/x/state/api-token"
+
+    keep = {k: os.environ.get(k) for k in ("COLUMNS", "PATH")}
+    os.environ.update(COLUMNS="40", PATH=tmp + os.pathsep + os.environ["PATH"])
+    played = []
+    try:
+        with patch.object(_en, "engine_bin", lambda cfg: "/x/llama.cpp-b1/llama-server"), \
+                patch.object(_en, "pidfile_pid", lambda: 0):
+            argv = _en.live_args(Cfg())
+            t.ok(_en.host_cache(argv or []) == "0", "engine: live_args reads --cache-ram past $COLUMNS (#119)", repr(argv))
+            t.ok(_en.server_pids(8080) == [4242], "engine: server_pids finds --port past $COLUMNS (#119)")
+            t.ok(_en.own_pids(Cfg()) == [4242], "engine: own_pids finds --api-key-file past $COLUMNS (#119)")
+            cmd = _en.pid_cmdline(2 ** 22 + 4242)      # no such pid: /proc has none, ps is asked
+            t.ok(cmd.endswith("/x/spark-voice-1"), "engine: pid_cmdline reads the whole line past $COLUMNS (#119)", cmd)
+        got = _st.running_settings(Cfg()) or {}
+        t.ok(got.get("ngl") == "99" and got.get("kv") == "q8_0",
+             "stats: running_settings reads -ngl and -ctk past $COLUMNS (#119)", repr(got))
+        with open(os.path.join(tmp, "playing"), "w") as f:
+            f.write("4242\n")
+        with patch.object(_vo, "PLAYING_FILE", os.path.join(tmp, "playing")), patch.object(_vo, "_PLAYING", []), \
+                patch.object(_vo.os, "killpg", lambda pid, sig: played.append(pid)):
+            _vo.stop()
+        t.ok(played == [4242], "voice: stop reads the player's line past $COLUMNS (#119)", repr(played))
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def client_units_cases(t):
     """v1.89.1 (#19): `spark client URL` stops and removes the check unit
     as it does the engine's and the page's, on each init: a client has no
@@ -14018,6 +14074,7 @@ site.cmd_headless([])
         continuing_tag_cases(t)
         model_name_cases(t)
         server_pids_cases(t)
+        ps_width_cases(t)
         client_units_cases(t)
         own_engine_cases(t)
         engine_env_cases(t)

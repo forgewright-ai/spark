@@ -1141,7 +1141,7 @@ def stop():
     tmp = words[1] if len(words) > 1 and _ours(words[1]) else ""
     if pid > 1:
         try:
-            out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True,
+            out = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True,
                                  timeout=5).stdout
         except (OSError, subprocess.SubprocessError):
             out = ""

@@ -355,7 +355,7 @@ def live_args(cfg):
     serve's), from ps on both OSes; None when none runs or ps fails."""
     want = engine_bin(cfg)
     try:
-        out = subprocess.run(["ps", "-axo", "args="], capture_output=True, text=True, errors="replace", timeout=5).stdout
+        out = subprocess.run(["ps", "-axww", "-o", "args="], capture_output=True, text=True, errors="replace", timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return None
     for line in out.splitlines():
@@ -663,7 +663,7 @@ def mem_available_gb():
 
 
 def top_consumers(n=3):
-    rc, out = run(["ps", "-axm", "-o", "rss=,comm="] if IS_MAC else ["ps", "-axo", "rss=,comm=", "--sort=-rss"])
+    rc, out = run(["ps", "-axmww", "-o", "rss=,comm="] if IS_MAC else ["ps", "-axww", "-o", "rss=,comm=", "--sort=-rss"])
     rows = []
     for line in out.splitlines()[:n]:
         p = line.split(None, 1)
@@ -690,7 +690,7 @@ def mem_needed_gb(cfg, model):
 # --------------------------------------------------------------- processes
 def server_pids(port):
     """pids of every llama-server bound to this port, ours or not"""
-    rc, out = run(["ps", "-axo", "pid=,command="])
+    rc, out = run(["ps", "-axww", "-o", "pid=,command="])
     return pids_in_ps(out, port)
 
 
@@ -703,7 +703,7 @@ def own_pids(cfg):
     is another server's key, so there only the token spark mints counts.
     Any other llama-server is the user's own, wherever its binary lives:
     spark never signals it."""
-    rc, out = run(["ps", "-axo", "pid=,command="])
+    rc, out = run(["ps", "-axww", "-o", "pid=,command="])
     mine = pidfile_pid()
     files = {TOKEN_FILE} if cfg.client else {TOKEN_FILE, cfg.token_file}
     marks = [" --api-key-file %s " % f for f in files if f]
@@ -741,7 +741,7 @@ def pid_cmdline(pid):
             return f.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
     except OSError:
         pass
-    rc, out = run(["ps", "-o", "command=", "-p", str(pid)])
+    rc, out = run(["ps", "-ww", "-o", "command=", "-p", str(pid)])
     return out.strip() if rc == 0 else ""
 
 

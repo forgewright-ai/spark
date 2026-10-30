@@ -130,7 +130,7 @@ def kb(n):
 def running_settings(cfg):
     """The tuning flags of the llama-server that runs here, from its command line."""
     from . import run
-    rc, out = run(["ps", "-axo", "command="])
+    rc, out = run(["ps", "-axww", "-o", "command="])
     for line in out.splitlines():
         if "llama-server" in line and "--port %d" % cfg.port in line:
             a = line.split()
