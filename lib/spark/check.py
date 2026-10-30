@@ -651,6 +651,12 @@ def row_serve(ctx):
             if n not in names:
                 names.append(n)
         where = "at %s, %s" % (url.split("//")[-1], " and ".join(names) or "no model listed")
+        # the slots and the cells a slot (#157): llama-server opens four
+        # slots of its own accord and, unified, shares one pool of SPARK_CTX
+        # among them, so two 4k prompts fill it and a third purges one
+        slots, cells = wire.props_slots(ctx.cfg, url)
+        if slots:
+            where += ", %d slot%s of %d cells" % (slots, "" if slots == 1 else "s", cells)
         # a connection the engine holds to another host is a path off
         # this machine, which nothing spark serves needs (engine.outbound)
         out = engine.outbound(engine.own_pids(ctx.cfg))

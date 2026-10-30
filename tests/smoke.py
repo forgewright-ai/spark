@@ -2993,7 +2993,7 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/v1/models":
             return self._send(200, {"data": [{"id": "my-own-7b-q4.gguf"}]})
         if self.path == "/props":
-            return self._send(200, {"default_generation_settings": {"n_ctx": 4096}})
+            return self._send(200, {"total_slots": 1, "default_generation_settings": {"n_ctx": 4096}})
         self._send(404, {})
 
     def do_POST(self):
@@ -3168,6 +3168,15 @@ def own_engine_cases(t):
         rc, out, _ = spark(exe=snip)
         rc2, out2, _ = spark(exe=snip, extra={"SPARK_CTX": "2048"})
         rc3, out3, _ = spark(exe=snip, extra={"SITE_AI_MODEL": "auto"})
+        # #157: the slots and the cells a slot, as the serve row says them
+        snip2 = os.path.join(tmp, "slots.py")
+        with open(snip2, "w") as f:
+            f.write("import sys\nsys.path.insert(0, %r)\nfrom spark import config, wire\n"
+                    "c = config.load()\nprint(wire.props_slots(c, %r), wire.props_slots(c, 'http://127.0.0.1:9'))\n"
+                    % (os.path.join(REPO, "lib"), url))
+        rcs, outs, _ = spark(exe=snip2)
+        t.ok(rcs == 0 and outs.strip() == "(1, 4096) (0, 0)",
+             "wire.props_slots: the engine's slots and cells a slot from /props; (0, 0) where nothing answers", outs)
         t.ok(rc == 0 and out.split()[0] == "4096" and out2.split()[0] == "2048" and out3.split()[0] == "8192"
              and int(out2.split()[1]) < int(out.split()[1]) < int(out3.split()[1]),
              "own engine: /props n_ctx sizes the budget, SPARK_CTX wins, a machine that serves keeps its own",

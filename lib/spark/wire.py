@@ -423,6 +423,20 @@ def props_ctx(cfg, url, timeout=HEALTH_TIMEOUT):
         return 0
 
 
+def props_slots(cfg, url, timeout=HEALTH_TIMEOUT):
+    """(slots, cells a slot) of a llama-server: GET /props, total_slots
+    and default_generation_settings.n_ctx; (0, 0) when it does not say.
+    With a unified cache the slots share one pool of that size (#157)."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url + "/props", headers=_headers(cfg)), timeout=timeout) as r:
+            d = json.load(r)
+        slots, n = d.get("total_slots"), d["default_generation_settings"]["n_ctx"]
+        ok = all(isinstance(x, int) and not isinstance(x, bool) and x > 0 for x in (slots, n))
+        return (slots, n) if ok else (0, 0)
+    except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
+        return (0, 0)
+
+
 def note_peer(cfg, url, kind):
     """Record what answered at the client's peer URL: kind is `spark` or
     `engine`. Any other URL is not the peer and is not recorded."""

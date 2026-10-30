@@ -10,6 +10,12 @@
   git, gcc, make, pip, npm and cargo unchanged under it on Debian 12,
   Ubuntu 24.04 and arm64; a step that sandboxes itself now fails with a
   readable `EPERM` (#156).
+- The `serve` row says the engine's slots and the cells a slot, read
+  from `/props` (`wire.props_slots`): `4 slots of 8192 cells`. llama.cpp
+  opens four slots of its own accord and shares one unified cache of
+  `SPARK_CTX` among them, so two 4k prompts fill it and a third purges
+  a slot's warm prefix; the next such log is read from the row (#157,
+  the engine's flags stay the owner's call).
 - CI on main no longer runs the gate twice. lint's first step asks
   whether the commit already passed on its `try/` branch
   (`tests/land.sh --passed`, the one question); when it did, lint
