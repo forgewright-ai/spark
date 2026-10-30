@@ -560,7 +560,9 @@ more than one model is not supported. spark downloads no model for it,
 and never starts or stops it. Your threads and memory stay on this
 machine, encrypted. `spark client off` goes back to a model spark runs
 here. Stop your server first when it holds port 8080, or set
-`SPARK_PORT`. Ollama is not supported yet.
+`SPARK_PORT`. A stock `llama-server` started with no `--port` listens
+on 9931 since its build b11960, and `spark setup` looks there too.
+Ollama is not supported yet.
 
 `spark setup --engine URL` needs the server to answer. It refuses the
 address of a spark machine: `spark client URL` is the command for that

@@ -3433,6 +3433,7 @@ def own_engine_cases(t):
                     "asked = []\nbuiltins.input = lambda q='': asked.append(q) or sys.argv[1]\n"
                     "setup._join = lambda *a: 'join ' + a[5]\n"
                     "opts = {'engine': None, 'model': sys.argv[2] or None}\n"
+                    "if len(sys.argv) > 3: setup.ENGINE_PORTS = (int(sys.argv[3]),)\n"
                     "print(setup._own_engine(config.load(), 'n', 'u', opts, False, False), asked)\n" % os.path.join(REPO, "lib"))
         e5 = {"HOME": tmp + "/home5", "XDG_CONFIG_HOME": tmp + "/home5/.config", "XDG_STATE_HOME": tmp + "/home5/.local/state",
               "SPARK_PORT": str(port2)}
@@ -3448,6 +3449,11 @@ def own_engine_cases(t):
              "setup at a terminal: a system llama-server in spark's engine dir is still the user's, and is offered", repr(got))
         t.ok(got[1].splitlines()[-1].startswith("None [") and [g.strip() for g in got[2:]] == ["None []"] * 3,
              "setup at a terminal: n declines; a model named, spark's own engine or nothing on the port asks nothing", repr(got[1:]))
+        # #153: a stock llama-server started with no --port listens on its
+        # own default, 9931 since b11960, not on SPARK_PORT: looked for there too
+        got9 = spark("", "", str(port2), exe=ask, extra=dict(e5, SPARK_PORT="9"))[1]
+        t.ok("* a llama-server of yours answers at %s" % url2 in got9 and got9.splitlines()[-1].startswith("join %s [" % url2),
+             "setup at a terminal: a server on llama-server's own default port is found and offered when SPARK_PORT is silent", got9)
 
         # bootstrap's token row mints nothing on a client
         benv = dict(env, SITE_AI_MODEL="none", SITE_PEER_AI_URL=url2, HOME=tmp + "/home4", XDG_CONFIG_HOME=tmp + "/home4/.config",

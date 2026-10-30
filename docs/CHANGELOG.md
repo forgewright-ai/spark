@@ -2,6 +2,10 @@
 
 ## v1.109
 
+- `spark setup` finds a llama-server of yours on llama-server's own
+  default port, 9931 since b11960, as well as on `SPARK_PORT`
+  (`setup.ENGINE_PORTS`), and offers the one that answers. `SPARK_PORT`
+  stays 8080 (#153).
 - The engine pin moves from llama.cpp b10689 to b11960 (2026-10-28,
   0.8.0): the six tarballs fetched, their sha256 taken and their build
   attestations verified against ggml-org/llama.cpp. Every flag spark

@@ -466,6 +466,24 @@ def _keys(cfg, yes):
 
 
 USE_IT = "   use it, and download no model? [Y/n]: "
+# llama-server's own default port is 9931 since b11960 (8080 before, which
+# SPARK_PORT's default still is): a stock server started with no --port
+# listens there, so setup looks on both, SPARK_PORT first
+ENGINE_PORTS = (9931,)
+
+
+def _own_url(cfg):
+    """The URL of a llama-server of the user's on this machine, or "":
+    SPARK_PORT first, then ENGINE_PORTS. A spark machine's page there is
+    not one, and on SPARK_PORT neither is spark's own engine."""
+    for port in (cfg.port,) + tuple(p for p in ENGINE_PORTS if p != cfg.port):
+        url = "http://127.0.0.1:%d" % port
+        if wire.health(url) != "ok" or wire.forge_health(url, cfg=cfg) is not None:
+            continue
+        if port == cfg.port and engine.own_pids(cfg):
+            continue
+        return url
+    return ""
 
 
 def _joining(yes):
@@ -495,7 +513,8 @@ def _engine_probe(cfg, url):
 def _own_engine(cfg, name, user, opts, yes, voice, keys_off=None):
     """The user's own llama-server: `--engine URL` (_parse checked its
     shape, _run probed it), or at a terminal one that answers on this
-    machine's SPARK_PORT and is not spark's, with no model chosen yet
+    machine's SPARK_PORT or llama-server's own default port (_own_url)
+    and is not spark's, with no model chosen yet
     and no shared engine here -- asked once. The join's rc when it is
     used, None when setup goes on as before."""
     global ASKED
@@ -504,8 +523,8 @@ def _own_engine(cfg, name, user, opts, yes, voice, keys_off=None):
         if (yes or opts["model"] is not None or "SITE_AI_MODEL" in os.environ or "SITE_AI_MODEL" in cfg.site_file
                 or os.access(SHARE_TOKEN, os.R_OK)):
             return None
-        url = "http://127.0.0.1:%d" % cfg.port
-        if wire.health(url) != "ok" or wire.forge_health(url, cfg=cfg) is not None or engine.own_pids(cfg):
+        url = _own_url(cfg)
+        if not url:
             return None
         ASKED = True
         say("* a llama-server of yours answers at %s" % url)
