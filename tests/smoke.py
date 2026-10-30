@@ -9334,6 +9334,15 @@ def main():
             t.ok(_pmw.missing_word("spark model list") == "" and _pmw.missing_word("explain") == ""
                  and _pmw.missing_word("frobnicate --x") == "frobnicate",
                  "missing_word: spark and explain are always here; an unknown head is named", "")
+            # a shell keyword or reserved word is grammar, never a missing
+            # program: a loop, a test or a group is offered like any step
+            _kw = ["for f in *.jpeg; do echo $f; done", "while true; do :; done",
+                   "until false; do :; done", "if true; then :; fi", "case x in x) :;; esac",
+                   "select x in a; do :; done", "function f { :; }", "time ls", "! true",
+                   "{ ls; }", "( ls )", "(cd x && ls)", "[[ -f x ]]", "(( 1 ))"]
+            _said = [(c, _pmw.missing_word(c)) for c in _kw if _pmw.missing_word(c)]
+            t.ok(not _said and _pmw.missing_word("sudo frobnicate") == "frobnicate",
+                 "missing_word: a step that starts with a shell keyword is offered (#111)", repr(_said))
         finally:
             os.environ["PATH"] = _path
         # the prompt-line audition's grader (tests/line_audition.py) holds its

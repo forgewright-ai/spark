@@ -5,7 +5,7 @@ completion, incorrect actions, recovery and latency through the
 configured model connection. Decision models remain candidates until
 tested on the same held-out tasks.
 
-What comes after v1.110, in rough order. Nothing here is a promise.
+What comes after v1.111, in rough order. Nothing here is a promise.
 `docs/CHANGELOG.md` says what shipped.
 
 No new verb until items 1 and 2 are done.

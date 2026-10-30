@@ -1934,8 +1934,10 @@ def proof_ok(command):
 def missing_word(command):
     """The command's head word when nothing on this machine answers to it,
     else ''. A leading sudo/env/nohup is skipped; a shell builtin, a path,
-    an assignment or anything `which` finds counts as found. '' always
-    means go ahead -- this guard never blocks."""
+    an assignment or anything `which` finds counts as found, and so does
+    a shell keyword or reserved word (a loop, a test, a group, a
+    subshell): the guard names only a missing program. '' always means
+    go ahead -- this guard never blocks."""
     words = (command or "").split()
     while words and words[0] in ("sudo", "env", "nohup"):
         words = words[1:]
@@ -1945,6 +1947,11 @@ def missing_word(command):
     # '...', a script): `spark model list` was once told "spark: not on
     # this machine"
     if not w or "=" in w or "/" in w or w in SH_BUILTINS or w in ("spark", "explain") or shutil.which(w):
+        return ""
+    # `for`, `while`, `if`, `{`, `[[`, `!`: the shell's own grammar, never
+    # a program on PATH (#111). A word glued to `(` or `{` opens a
+    # subshell, an arithmetic or a group
+    if w in SH_KEYWORDS or w in NO_COMMAND or w[0] in "({":
         return ""
     return w
 

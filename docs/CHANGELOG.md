@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.111
+
+- Fixed: `spark do` called a step that starts with a shell keyword
+  "not on this machine"; a loop, a test or a group (`for`, `while`,
+  `if`, `[[`) is offered now (#111).
+
 ## v1.110
 
 - A Linux step of `spark do --sandbox` runs under a seccomp filter:
