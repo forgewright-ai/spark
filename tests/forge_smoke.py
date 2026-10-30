@@ -644,6 +644,13 @@ def free_pair():
     the root listener's port twice in one night (#144)."""
     while True:
         p = free_port()
+        # a listener already on the second port answers a connect, whatever
+        # a bind says of it (the runner's stub of an earlier case did once)
+        try:
+            socket.create_connection(("127.0.0.1", p + 1), timeout=0.2).close()
+            continue
+        except OSError:
+            pass
         s = socket.socket()
         try:
             s.bind(("127.0.0.1", p + 1))
