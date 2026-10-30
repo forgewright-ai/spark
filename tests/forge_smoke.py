@@ -105,13 +105,23 @@ RESERVED = set()     # ports a free_pair promised to a root listener: free_port 
 
 
 def free_port():
-    while True:
-        s = socket.socket()
-        s.bind(("127.0.0.1", 0))
-        p = s.getsockname()[1]
-        s.close()
-        if p not in RESERVED:
-            return p
+    # a reserved port that comes back is held bound until another is found:
+    # macOS hands the port just released out again to the very next bind, so
+    # closing it and asking again spun forever on the runner (the 40-minute
+    # cap of 2026-10-30)
+    held = []
+    try:
+        while True:
+            s = socket.socket()
+            s.bind(("127.0.0.1", 0))
+            p = s.getsockname()[1]
+            if p not in RESERVED:
+                s.close()
+                return p
+            held.append(s)
+    finally:
+        for s in held:
+            s.close()
 
 
 def req(url, method, path, body=None, headers=None, timeout=10):
