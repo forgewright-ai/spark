@@ -12,8 +12,10 @@ erase existing data. The rest is for later.
   Atomic Linux variants such as Fedora Silverblue and openSUSE Aeon
   are not supported. Use x86-64 or ARM64 for the supplied engine.
 - Use zsh or bash 4 or newer for the prompt line. macOS's system bash
-  is 3.2, so use zsh there. Have `sudo`, `git`, `curl`, Python 3.9 or
-  newer and `ssh-keygen`. Section 2 checks these before installation.
+  is 3.2, so use zsh there. Have `git`, `curl`, Python 3.9 or newer
+  and `ssh-keygen`, and `sudo` for a machine that runs a model. Setup
+  asks for `sudo` only when a step needs root, and names the step.
+  Section 2 checks these before installation.
 - A CPU can run a model without a GPU. Listed model files range from
   1.3 to 17.4 GB and need a 3 to 21 GB model memory budget. The
   budget defaults to 60 percent of RAM plus GPU memory; it is not a
@@ -151,8 +153,8 @@ when asked. Open Ubuntu and run Debian's step 3.
 
 ## 2. Install spark
 
-1. Check what spark needs: `sudo`, `git`, `curl`, `python3` 3.9 or
-   newer, and `ssh-keygen`.
+1. Check what spark needs: `git`, `curl`, `python3` 3.9 or newer,
+   `ssh-keygen`, and `sudo` for a machine that runs a model.
 
    ```sh
    for c in sudo git curl python3 ssh-keygen; do
@@ -227,9 +229,9 @@ then asks. `spark ver --credits` shows the notice again.
    `*` is the one `auto` picks here.
 2. Asks whether spark should read aloud in a clear voice, for low
    vision. The default is no.
-3. On Linux, may ask for `sudo` once for a package: `libgomp1` on
-   Debian and openSUSE, `libgomp` on Void and Fedora, and the Vulkan
-   drivers with a GPU.
+3. Asks for `sudo` once, only when a step needs root, and names the
+   step. On Linux that is a package: `libgomp1` on Debian and openSUSE,
+   `libgomp` on Void and Fedora, and the Vulkan drivers with a GPU.
 4. Downloads the engine and the model, and checks both by sha256.
 5. Writes a token, adds one line to your rc file and starts the
    services: the engine, the page's server and a check every 5 minutes.

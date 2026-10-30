@@ -160,6 +160,17 @@ made() {   # made STEP -- record a root-side change THIS bootstrap made, so
     mkdir -p "$SPARK_STATE_DIR" 2>/dev/null || true
     grep -qx "$1" "$SPARK_STATE_DIR/made" 2>/dev/null || echo "$1" >> "$SPARK_STATE_DIR/made"
 }
+root_pending() {
+    # The root steps this apply would take, named as the dry run's rows
+    # name them: every row that needs root says (sudo). "hostname",
+    # "packages and linger"; empty when none. A dry run that did not
+    # finish names nothing it can vouch for: "a root step", so the ask
+    # still comes first.
+    dry=$(sh "$REPO/bootstrap.sh" --dry-run 2>/dev/null || true)
+    printf '%s\n' "$dry" | tail -1 | grep -qE '^(Nothing to do|[0-9]+ to do)$' || { echo "a root step"; return 0; }
+    printf '%s\n' "$dry" | awk '$1 == "would" && /[(]sudo/ && !seen[$2]++ { n[++k] = $2 }
+        END { for (i = 1; i <= k; i++) printf "%s%s", n[i], (i == k ? "\n" : (i == k - 1 ? " and " : ", ")) }'
+}
 sudo_upfront() {
     # Ask once, here, before anything is touched. A run that stops at the
     # first root step has already changed things and springs a password
@@ -169,16 +180,24 @@ sudo_upfront() {
     # ssh there is nobody to type, and demanding sudo there would break
     # every run that needed no root at all -- `spark update` on a
     # converged machine is exactly that.
+    #
+    # And only when a step needs root (#121): the dry run says which, and
+    # the ask names them. With none, a user who has no sudo (a standard
+    # account on a shared Mac) sets up all the same.
     [ "$MODE" = apply ] || return 0
     [ "$(id -u)" -ne 0 ] || return 0
     [ "$client" = 1 ] && return 0               # a client of a shared engine needs no root
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -n true 2>/dev/null && return 0    # passwordless, or already cached
+        [ -t 0 ] || return 0                    # nobody to ask: let the root step speak
+    fi
+    steps=$(root_pending)
+    [ -n "$steps" ] || return 0                 # no step needs root: nothing to ask
     if ! command -v sudo >/dev/null 2>&1; then
-        echo "! this needs sudo, and there is none here -- nothing changed" >&2
+        echo "! sudo is needed for $steps, and there is none here -- nothing changed" >&2
         exit 1
     fi
-    sudo -n true 2>/dev/null && return 0        # passwordless, or already cached
-    [ -t 0 ] || return 0                        # nobody to ask: let the root step speak
-    printf 'spark needs sudo once, now.\n'
+    printf 'spark needs sudo once, now, for %s.\n' "$steps"
     if ! sudo -v; then
         echo "! no sudo -- nothing changed" >&2
         exit 1

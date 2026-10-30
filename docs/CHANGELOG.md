@@ -17,6 +17,9 @@
 - Fixed: with `COLUMNS` exported, ps cut the engine's command line, so
   `serve` warned of old settings and serve off missed its own engine.
   Every ps that reads a command line now asks with `-ww` (#119).
+- Fixed: setup at a terminal asked for sudo with no step needing root,
+  so a standard Mac account could not set up a client. Now it asks only
+  for the dry run's `(sudo)` rows, and names them (#121).
 
 ## v1.110
 

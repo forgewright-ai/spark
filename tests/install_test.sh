@@ -821,4 +821,49 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qE '^skip +packages +not in this zypper:.* libgomp1 \(spark targets openSUSE Tumbleweed\)$' && ok "openSUSE, a name no repository holds: the row skips and names its target" || bad "openSUSE absent row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -2 | tr '\n' ' ')"
 fi
 
+# 15. sudo at a terminal (#121): an apply asks for sudo only when a root
+#     step is pending, and names it. A standard user (a sudo that refuses
+#     -n and -v) sets up a machine with no model. With a root step pending
+#     (Linux: a package, macOS: the hostname) the ask names it, and the
+#     refusal changes nothing. stdin is a pty, the one place sudo_upfront
+#     asks. launchctl and systemctl fail, so no service of this machine is
+#     reached, and the knowledge reads empty dirs.
+S=$T/sudo; mkdir -p "$S/bin" "$S/pm-all" "$S/pm-bare" "$S/empty"
+printf '#!/bin/sh\ncase $1 in -n) exit 1 ;; -v) echo "Sorry, user ada may not run sudo." >&2; exit 1 ;; esac\necho "SUDO CALLED: $*" >&2; exit 97\n' > "$S/bin/sudo"
+printf '#!/bin/sh\nexit 1\n' > "$S/bin/launchctl"; cp "$S/bin/launchctl" "$S/bin/systemctl"
+printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$S/pm-all/pacman"
+printf '#!/bin/sh\ncase $1 in -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$S/pm-bare/pacman"
+chmod +x "$S/bin/sudo" "$S/bin/launchctl" "$S/bin/systemctl" "$S/pm-all/pacman" "$S/pm-bare/pacman"
+at_tty() {   # at_tty HOME PM SITE_ENV: bootstrap applied in a fresh HOME, a pty on stdin
+    mkdir -p "$1/.config/spark"; printf '%b' "$3" > "$1/.config/spark/site.env"
+    HOME=$1 XDG_CONFIG_HOME=$1/.config XDG_STATE_HOME=$1/.local/state XDG_DATA_HOME=$1/.local/share \
+    SPARK_OS_RELEASE="$T/os-release-arch" SPARK_SYSFS_DRM="$T/nodrm" PATH="$S/bin:$S/$2:$PATH" \
+    SPARK_SHARE_TOKEN="$S/no-share-token" SPARK_SHARE_URL="$S/no-share-url" \
+    SPARK_KNOWLEDGE_PATH="$S/empty" SPARK_KNOWLEDGE_MANPATH="$S/empty" SPARK_KNOWLEDGE_APPS="$S/empty" \
+    SPARK_KNOWLEDGE_SERVICES="$S/empty" SPARK_KNOWLEDGE_SOURCES="$S/empty" \
+    python3 -c 'import os, subprocess, sys
+m, s = os.openpty()
+p = subprocess.run(sys.argv[1:], stdin=s, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+sys.stdout.write(p.stdout.decode("utf-8", "replace"))
+sys.exit(p.returncode)' sh "$REPO/bootstrap.sh" 2>&1
+}
+rc=0; out=$(at_tty "$S/home-none" pm-all 'SITE_NAME=notebook\nSITE_USER=ada\nSITE_AI_MODEL=none\n') || rc=$?
+if [ "$rc" = 0 ] && ! printf '%s\n' "$out" | grep -qiE 'needs sudo|no sudo|SUDO CALLED' && [ -f "$S/home-none/.config/spark/spark.env" ]; then
+    ok "a terminal, no root step pending: the apply asks no sudo and completes (#121)"
+else
+    bad "no root step, at a terminal (rc $rc): $(printf '%s\n' "$out" | grep -iE 'sudo|^!' | head -3 | tr '\n' ' ')"
+fi
+case $(uname -s) in
+    Darwin) step=hostname; pm=pm-all; site='SITE_NAME=spark-not-this-name\nSITE_SET_HOSTNAME=yes\nSITE_AI_MODEL=none\n' ;;
+    *) step=packages; pm=pm-bare; site='SITE_NAME=notebook\nSITE_AI_MODEL=none\n' ;;
+esac
+rc=0; out=$(at_tty "$S/home-root" "$pm" "$site") || rc=$?
+if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -qx "spark needs sudo once, now, for $step\." \
+   && printf '%s\n' "$out" | grep -qx '! no sudo -- nothing changed' && ! printf '%s\n' "$out" | grep -q 'SUDO CALLED' \
+   && [ ! -e "$S/home-root/.config/spark/spark.env" ]; then
+    ok "a terminal, $step pending: the ask names it, a refused sudo changes nothing (#121)"
+else
+    bad "$step pending, at a terminal (rc $rc): $(printf '%s\n' "$out" | grep -iE 'sudo|^!' | head -3 | tr '\n' ' ')"
+fi
+
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

@@ -758,8 +758,13 @@ and may change freely.
    root asks for sudo once, before it touches anything (`sudo_upfront`),
    and only at a terminal. Over ssh or a pipe there is nobody to answer,
    and a run needing no root, such as `spark update` on a converged
-   machine, must not be made to ask. No sudo on the machine at all is
-   one line and exit 1, up front. The `rc` row appends one marked line
+   machine, must not be made to ask. What needs root is what the dry run
+   marks `(sudo)`: `root_pending` runs it first and names those rows in
+   the ask, `spark needs sudo once, now, for packages.` With none
+   pending there is no ask. So a user with no sudo, a standard account
+   on a shared Mac, sets up a machine with no model. No sudo on the
+   machine at all, with a root step pending, is one line and exit 1, up
+   front. The `rc` row appends one marked line
    (marker `config/spark/hook.`) to the end of the login shell's rc
    file: `~/.bashrc` or `~/.zshrc`, by `$SHELL`, else the passwd entry.
    It creates the file if absent and never truncates it. A symlinked rc
