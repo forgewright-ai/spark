@@ -2,6 +2,13 @@
 
 ## v1.109
 
+- A trust by hand is pinned. `spark mcp trust NAME on` writes
+  `MCP_SERVER_<NAME>_PIN`, the program's sha256 and each tool's flag as
+  listed then. A program that changed, or an older trust with no pin,
+  reads as not trusted and the `mcp` row says so with the remedy. A
+  tool whose flags ask less than the pin's did, or one the pin never
+  saw, takes the typed `yes` again until the person trusts the server
+  again (#154).
 - `spark setup` finds a llama-server of yours on llama-server's own
   default port, 9931 since b11960, as well as on `SPARK_PORT`
   (`setup.ENGINE_PORTS`), and offers the one that answers. `SPARK_PORT`

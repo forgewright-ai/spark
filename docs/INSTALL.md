@@ -374,7 +374,11 @@ spark mcp call notes add_note text=milk
 - A tool that changes something asks you to type `yes`, unless its
   server is trusted and the tool says it destroys nothing. spark's own
   programs are trusted, and `spark mcp` says which server is. `spark
-  mcp trust NAME on` trusts another, `off` takes it back.
+  mcp trust NAME on` trusts another, `off` takes it back. A trust by
+  hand remembers the program and what each tool said of itself. After
+  an upgrade that changes the program, or a tool that now claims to
+  destroy less, `spark check` says so and the typed `yes` is back
+  until you run `spark mcp trust NAME on` again.
 - The prompt line, `spark do` and `/do` in a chat know the tools
   `spark mcp` listed last. A tool step is a `spark mcp call` line: you
   read it before `Enter`, as any other step. Inside `--sandbox` a tool

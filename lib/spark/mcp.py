@@ -55,6 +55,12 @@ TITLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.'/_-]{0,79}$")   # a title a brief
 ARG_WORD = re.compile(r"^[a-z][a-z0-9_]{0,31}$")          # an argument's name a step may carry
 ENUM_WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")   # a choice a brief may name; any other enum reads TEXT
 TRUST_SUFFIX = "_TRUST"
+# the pin a trust by hand takes (spark mcp trust NAME on): the program's
+# sha256 and each tool's flag then -- r reads, d may destroy, - neither
+# -- so an upgrade that changes the program, or a tool whose flags
+# weaken, asks the typed yes again until the person trusts it again
+PIN_SUFFIX = "_PIN"
+FLAG_ORDER = {"r": 0, "-": 1, "d": 2}     # what a flag asks: weaker is lower
 
 # The programs trusted by default: the trusted chain. A server whose
 # program, its link resolved, carries one of these names, and whose file
@@ -182,11 +188,55 @@ def home_short(path):
 # ---------------------------------------------------------------- the list
 class Spec:
     """One server on the list: its name, its argv, whether it is trusted
-    and why, and what keeps it from starting ('' when nothing does)."""
-    __slots__ = ("name", "argv", "trusted", "why", "problem")
+    and why, what keeps it from starting ('' when nothing does), and the
+    pin a trust by hand took ((program sha256, {tool: flag}), else None)."""
+    __slots__ = ("name", "argv", "trusted", "why", "problem", "pin")
 
-    def __init__(self, name, argv, trusted, why, problem):
-        self.name, self.argv, self.trusted, self.why, self.problem = name, argv, trusted, why, problem
+    def __init__(self, name, argv, trusted, why, problem, pin=None):
+        self.name, self.argv, self.trusted, self.why, self.problem, self.pin = name, argv, trusted, why, problem, pin
+
+
+def program_sha(path):
+    """The sha256 of the program file, '' when it cannot be read."""
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
+def tool_flag(t):
+    """A tool's flag for the pin: r reads, d may destroy, - neither."""
+    return "r" if t.read_only else ("d" if t.destructive else "-")
+
+
+def pin_value(prog_sha, tools):
+    """The _PIN line's value: the program's sha256, then tool=flag each."""
+    return " ".join([prog_sha] + ["%s=%s" % (t.name, tool_flag(t)) for t in sorted(tools, key=lambda t: t.name)])
+
+
+def parse_pin(value):
+    """(sha256, {tool: flag}) from a _PIN value, None for another shape."""
+    words = (value or "").split()
+    if not words or not re.match(r"^[0-9a-f]{64}$", words[0]):
+        return None
+    flags = {}
+    for w in words[1:]:
+        name, _, flag = w.partition("=")
+        if not TOOL_NAME.match(name) or flag not in FLAG_ORDER:
+            return None
+        flags[name] = flag
+    return words[0], flags
+
+
+def weakened(pin_flag, flag):
+    """True when a tool's flag asks less than the pin's did: a tool new
+    to the pin counts, since nothing vouched for it."""
+    return pin_flag is None or FLAG_ORDER[flag] < FLAG_ORDER[pin_flag]
 
 
 def private_group(gid, uid):
@@ -329,7 +379,7 @@ def specs(path=None):
     out = []
     for key, val in kv.items():
         m = KEY.match(key)
-        if not m or key.endswith(TRUST_SUFFIX):
+        if not m or key.endswith((TRUST_SUFFIX, PIN_SUFFIX)):
             continue
         name = m.group(1).lower()
         argv = val.split()
@@ -341,15 +391,20 @@ def specs(path=None):
         problem = program_problem(argv[0]) if argv else "no program"
         trust = kv.get(key + TRUST_SUFFIX, "")
         member = chain_member(argv[0]) if argv else ""
-        if trust == "yes":
-            trusted, why = True, "trusted (spark mcp trust)"
+        pin = parse_pin(kv.get(key + PIN_SUFFIX, "")) if trust == "yes" else None
+        if trust == "yes" and pin is None:
+            trusted, why = False, "not trusted: trusted before its tools were pinned -- spark mcp trust %s on" % name
+        elif trust == "yes" and argv and program_sha(argv[0]) != pin[0]:
+            trusted, why, pin = False, "not trusted: the program changed since spark mcp trust -- spark mcp trust %s on" % name, None
+        elif trust == "yes":
+            trusted, why = True, "trusted (spark mcp trust, pinned)"
         elif trust == "no":
             trusted, why = False, "not trusted (spark mcp trust)"
         elif member and not problem:
             trusted, why = True, "trusted (the trusted chain: %s)" % member
         else:
             trusted, why = False, "not trusted"
-        out.append(Spec(name, argv, trusted, why, problem))
+        out.append(Spec(name, argv, trusted, why, problem, pin))
     return out
 
 
@@ -373,11 +428,12 @@ class Tool:
     title, the input schema, and what its annotations mean here (`hints`,
     as said; `read_only` and `destructive`, the spec's defaults where it
     says nothing)."""
-    __slots__ = ("server", "name", "title", "schema", "read_only", "destructive", "trusted")
+    __slots__ = ("server", "name", "title", "schema", "read_only", "destructive", "trusted", "weak")
 
     def __init__(self, server, name, title, schema, read_only, destructive, trusted):
         self.server, self.name, self.title, self.schema = server, name, title, schema
         self.read_only, self.destructive, self.trusted = read_only, destructive, trusted
+        self.weak = ""      # why its flags are not believed, when the pin says they weakened
 
     def needs_yes(self):
         """The typed yes: every tool of a server not trusted; a trusted
@@ -651,6 +707,12 @@ class Server:
             cursor = res.get("nextCursor")
             if not isinstance(cursor, str) or not cursor:
                 break
+        if self.spec.pin is not None:
+            # a trust by hand believes the flags the pin saw: a tool whose
+            # flag asks less now, or one the pin never saw, asks the yes
+            for t in out:
+                if weakened(self.spec.pin[1].get(t.name), tool_flag(t)):
+                    t.trusted, t.weak = False, "its flags changed since spark mcp trust"
         return out, dropped
 
     def resources(self):
@@ -1272,7 +1334,7 @@ def _list_one(sp, verbose):
     for t in tools:
         req = " ".join("%s=%s" % (k, kd) for k, kd, r in t.args() if r)
         opt = " ".join("[%s=%s]" % (k, kd) for k, kd, r in t.args() if not r)
-        mark = "reads" if t.read_only and t.trusted else ("asks yes" if t.needs_yes() else "")
+        mark = "reads" if t.read_only and t.trusted else ("asks yes" + (" (%s)" % t.weak if t.weak else "") if t.needs_yes() else "")
         call = ("%s %s %s" % (t.name, req, opt) if verbose else "%s %s" % (t.name, req)).rstrip()
         lines.append(("  %-30s %-28s %s" % (call, t.title, mark)).rstrip())
     if dropped:
@@ -1327,25 +1389,27 @@ def _key(name):
 
 
 def _write(**kv):
-    """The list's keys set (a value None drops its line), 0600."""
+    """The list's keys set (a value None drops its line), 0600: the
+    drops written first, then the keys set through site.set_keys, so a
+    call that drops one key and sets another does both."""
     from . import site
-    lines = []
-    try:
-        with open(MCP_ENV, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        pass
     drop = {k for k, v in kv.items() if v is None}
-    lines = [l for l in lines if l.split("=", 1)[0] not in drop]
     put = {k: v for k, v in kv.items() if v is not None}
+    if drop:
+        lines = []
+        try:
+            with open(MCP_ENV, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            pass
+        lines = [l for l in lines if l.split("=", 1)[0] not in drop]
+        os.makedirs(os.path.dirname(MCP_ENV), exist_ok=True)
+        fd = vault.open_private(MCP_ENV, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + ("\n" if lines else ""))
+        os.chmod(MCP_ENV, 0o600)
     if put:
         site.set_keys(_file=MCP_ENV, _quiet=True, **put)
-        return
-    os.makedirs(os.path.dirname(MCP_ENV), exist_ok=True)
-    fd = vault.open_private(MCP_ENV, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + ("\n" if lines else ""))
-    os.chmod(MCP_ENV, 0o600)
 
 
 def cmd_add(words):
@@ -1394,7 +1458,21 @@ def cmd_trust(words):
     if len(words) == 1:
         say("%-10s %s" % (sp.name, sp.why))
         return 0
-    _write(**{_key(sp.name) + TRUST_SUFFIX: "yes" if words[1] == "on" else "no"})
+    if words[1] == "off":
+        _write(**{_key(sp.name) + TRUST_SUFFIX: "no", _key(sp.name) + PIN_SUFFIX: None})
+    else:
+        # the pin: the program as it is and each tool's flag as listed
+        # now, written with the trust; a server that does not list stays
+        # unpinned, so not trusted, and the line says so
+        try:
+            with Server(sp).initialize() as srv:
+                tools, _dropped = srv.tools()
+        except Refused as e:
+            _write(**{_key(sp.name) + TRUST_SUFFIX: "yes", _key(sp.name) + PIN_SUFFIX: None})
+            say("! %s: its tools could not be listed (%s), so nothing is pinned and it is not trusted yet -- "
+                "spark mcp trust %s on again when it starts" % (sp.name, e.hint, sp.name))
+            return 1
+        _write(**{_key(sp.name) + TRUST_SUFFIX: "yes", _key(sp.name) + PIN_SUFFIX: pin_value(program_sha(sp.argv[0]), tools)})
     sp = spec(words[0])
     lines, tl = _list_one(sp, False)
     _merge_tools(sp.name, tl)

@@ -909,7 +909,10 @@ and may change freely.
      (contract 16), written by `spark mcp add`, `rm` and `trust`, 0600:
      `MCP_SERVER_<NAME>="<absolute path> [words]"`, `NAME` matching
      `[A-Z][A-Z0-9_]{0,31}`, and `MCP_SERVER_<NAME>_TRUST`, `yes` or
-     `no`. A key that ends `_TRUST` is no server.
+     `no`. `MCP_SERVER_<NAME>_PIN` is what `spark mcp trust NAME on`
+     saw: the program's sha256, then `tool=flag` for each tool, the
+     flag `r` (reads), `d` (may destroy) or `-` (`mcp.pin_value`). A
+     key that ends `_TRUST` or `_PIN` is no server.
    Precedence: non-empty environment, then `spark.env`, then `site.env`,
    then default. Empty values do not hide a lower-precedence value.
    `tests/config/cases.json`, run by `tests/smoke.py`, holds the shared
@@ -2457,7 +2460,16 @@ and may change freely.
     (`mcp.chain_member`, by the clone's origin). Another program of that
     name is not the chain. Or it is a server whose
     `MCP_SERVER_<NAME>_TRUST` is `yes` (`spark mcp trust NAME on|off`),
-    and `no` turns a chain member off. The spec's defaults hold: no
+    and `no` turns a chain member off. A trust by hand is pinned: `on`
+    lists the tools and writes `MCP_SERVER_<NAME>_PIN`, the program's
+    sha256 and each tool's flag then. A program whose sha256 differs, or
+    a `yes` with no pin (a list from before v1.109), reads as not
+    trusted. The `mcp` row says so, with the remedy: `spark mcp trust
+    NAME on` again. A tool whose flag asks less than the pin's did, or
+    one the pin never saw, takes the typed `yes` (`mcp.weakened`,
+    `Tool.weak`); `spark mcp NAME` marks it. `off` drops the pin. The
+    chain's trust is not pinned: its provenance is the clone's origin.
+    The spec's defaults hold: no
     readOnlyHint is false, and no destructiveHint is true. From a
     trusted server a tool that may destroy takes the typed `yes`. From
     any other server every tool does (`Tool.needs_yes`). The gate comes

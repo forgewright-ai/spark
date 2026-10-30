@@ -1363,8 +1363,9 @@ def row_sends(ctx):
 def row_mcp(ctx):
     """contract 16: the MCP servers spark may start -- the list's lines
     and their programs, read and never started (a check starts no
-    server). A list others may write, or a program spark would refuse
-    to start, is a warn; no list is na."""
+    server). A list others may write, a program spark would refuse to
+    start, or a trust by hand whose pin no longer holds, is a warn; no
+    list is na."""
     from . import mcp
     if not os.path.isfile(mcp.MCP_ENV):
         return na("no MCP server on the list")
@@ -1382,6 +1383,11 @@ def row_mcp(ctx):
     bad = [s for s in specs if s.problem]
     if bad:
         return warn("%s: %s" % (bad[0].name, bad[0].problem), "spark mcp rm %s" % bad[0].name)
+    # a trust by hand whose pin no longer holds: the program changed, or
+    # an older list trusted before pins -- said, with the one remedy
+    loose = [s for s in specs if s.why.startswith("not trusted:")]
+    if loose:
+        return warn("%s: %s" % (loose[0].name, loose[0].why.split(" -- ")[0]), "spark mcp trust %s on" % loose[0].name)
     trusted = sum(1 for s in specs if s.trusted)
     return ok("%d server%s on the list, %d trusted" % (len(specs), "" if len(specs) == 1 else "s", trusted))
 
