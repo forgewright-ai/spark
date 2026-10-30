@@ -2,6 +2,12 @@
 
 ## v1.109
 
+- The engine pin moves from llama.cpp b10689 to b11960 (2026-10-28,
+  0.8.0): the six tarballs fetched, their sha256 taken and their build
+  attestations verified against ggml-org/llama.cpp. Every flag spark
+  passes is in the new server's own table, and the glibc floor is the
+  old one, 2.34 on x86_64 and 2.38 on aarch64. llama-server's own
+  default port is 9931 there; spark's stays 8080 (#152).
 - The engine starts with a clean environment: `engine.ENV_KEEP` and
   `engine.ENV_PREFIXES` name what it gets (its path, its locale, the
   GPU variables), and every `LLAMA_ARG_*` of a shell is dropped, so

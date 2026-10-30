@@ -14,7 +14,7 @@ spark's own artwork.
 llama.cpp -- https://github.com/ggml-org/llama.cpp -- MIT
 (c) The ggml authors
 
-Release b10689 (`LLAMA_VERSION` in `engine.env`), 6 flavours, each
+Release b11960 (`LLAMA_VERSION` in `engine.env`), 6 flavours, each
 pinned by sha256: macOS arm64, macOS x64, Linux x64, Linux x64 Vulkan,
 Linux arm64, Linux arm64 Vulkan.
 
