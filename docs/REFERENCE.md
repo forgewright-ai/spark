@@ -2218,8 +2218,13 @@ and may change freely.
     part. A longer source is parts, each opening with the last
     `PART_OVERLAP` (400) characters of the one before. `--part N` reads
     that part. Without it spark picks (`read.ranked`): BM25 over the
-    parts by the question's words, intake's tokenizer with a camelCase
-    word split, no model. A word's forms meet (`read._key`: "logging"
+    parts' passages by the question's words, intake's tokenizer with a
+    camelCase word split, no model. A passage is a paragraph, one longer
+    than `PASSAGE` (600) characters cut at a space. A word is as rare as
+    the passages that hold it, and a part scores the sum of its `BEST`
+    (3) passages. So a man page's topic, said in every part, still
+    counts, and one stray word in another part does not put that part
+    first. A word's forms meet (`read._key`: "logging"
     and "log", "deleting" and "delete"). A reader's word and the text's
     word for the same thing count as one term (`read.SAME`, a named line
     each: computer and machine, folder and directory). The text's word

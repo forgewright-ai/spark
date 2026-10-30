@@ -38,7 +38,8 @@
 #                     parts (each carrying PART_OVERLAP chars of the one
 #                     before) and `--part N` reads one. Without it spark
 #                     picks: the parts ranked here by the question's
-#                     words (ranked: BM25, no model), the best read
+#                     words (ranked: BM25 over their passages, no
+#                     model), the best read
 #                     first and the next only when it does not answer,
 #                     TRIES at most -- a bare question reads part 1.
 #                     The answer's first line names the part it read,
@@ -75,6 +76,10 @@ PART_OVERLAP = 400      # a part carries this much of the one before it
 # second is read only when the first does not answer, and no third.
 TRIES = 2
 K1, B = 1.2, 0.75       # BM25's saturation and length weight, the textbook pair
+# The ranking scores passages, not whole parts: a paragraph, one longer
+# than PASSAGE cut into pieces, and a part scores the sum of its BEST.
+PASSAGE = 600
+BEST = 3
 MODE = "read-source"    # persona.MODES key
 READ_TOKENS = 500
 READ_TIMEOUT = 180
@@ -140,7 +145,7 @@ SAME_WEIGHT = 0.5
 
 
 def _terms(s):
-    """The words a part is ranked by: intake's one tokenizer, a camelCase
+    """The words a passage is ranked by: intake's one tokenizer, a camelCase
     word split first (sshd_config's PasswordAuthentication holds
     "password")."""
     from . import intake        # here: a source of one part never pays the import
@@ -157,7 +162,7 @@ def _key(term):
 
 
 def _same_of():
-    """{key: the keys of its SAME line}, the words keyed as a part's are."""
+    """{key: the keys of its SAME line}, the words keyed as a passage's are."""
     out = {}
     for head, rest in SAME:
         keys = frozenset(_key(t) for w in [head] + rest.split() for t in _terms(w))
@@ -166,45 +171,74 @@ def _same_of():
     return out
 
 
+def passages(part):
+    """The pieces of a part the ranking scores: its paragraphs (a blank
+    line between two), one longer than PASSAGE characters cut into
+    pieces of at most that, at a space where there is one."""
+    out = []
+    for para in re.split(r"\n\s*\n", part):
+        while len(para) > PASSAGE:
+            cut = max(para.rfind(" ", 1, PASSAGE + 1), para.rfind("\n", 1, PASSAGE + 1))
+            cut = cut if cut > 0 else PASSAGE
+            out.append(para[:cut])
+            para = para[cut:]
+        if para.strip():
+            out.append(para)
+    return out
+
+
 def ranked(data, question):
     """The parts of `data` to read for `question`, best first: BM25 over
-    the parts by the question's words, ties to the earlier part, a part
-    holding none of them left out. A word of the question's SAME line
-    counts too, at SAME_WEIGHT, and the line is one term to BM25 (its
-    rarity is the line's, not the word's). One part, a bare question, or
-    words no part holds (another language) is [1]."""
+    the parts' passages by the question's words, a part scoring the sum
+    of its BEST passages, ties to the earlier part, a part holding none
+    of them left out. A word's rarity is counted over the passages, not
+    the parts: a man page says its topic in every part, and counted over
+    three parts that word weighed next to nothing, so one stray word in
+    another part outranked the part that answers (#160). A word of the
+    question's SAME line counts too, at SAME_WEIGHT, and the line is one
+    term to BM25 (its rarity is the line's, not the word's). One part, a
+    bare question, or words no part holds (another language) is [1]."""
     total = parts_of(len(data))
     asked = list(dict.fromkeys(_key(t) for t in _terms(question)))
     if total == 1 or not asked:
         return [1]
     same = _same_of()
-    counts, lens = [], []
+    owner, counts, lens = [], [], []
     for n in range(1, total + 1):
-        tf = {}
-        words = _terms(part_slice(data, n))
-        for w in words:
-            k = _key(w)
-            tf[k] = tf.get(k, 0) + 1
-        counts.append(tf)
-        lens.append(len(words) or 1)
-    avg = sum(lens) / float(total)
+        for p in passages(part_slice(data, n)):
+            words = _terms(p)
+            if not words:
+                continue
+            tf = {}
+            for w in words:
+                k = _key(w)
+                tf[k] = tf.get(k, 0) + 1
+            owner.append(n)
+            counts.append(tf)
+            lens.append(len(words))
+    if not counts:
+        return [1]
+    avg = sum(lens) / float(len(lens))
 
     def weight(tf, k):
-        """The question's term `k` in a part: its own count, plus its SAME
-        line's other words at SAME_WEIGHT."""
+        """The question's term `k` in a passage: its own count, plus its
+        SAME line's other words at SAME_WEIGHT."""
         return tf.get(k, 0) + SAME_WEIGHT * sum(tf.get(o, 0) for o in same.get(k, ()) if o != k)
-    scores = []
-    for i, tf in enumerate(counts):
+    idf = {}
+    for k in asked:
+        df = sum(1 for c in counts if weight(c, k))
+        idf[k] = math.log(1 + (len(counts) - df + 0.5) / (df + 0.5))
+    best = {}
+    for n, tf, ln in zip(owner, counts, lens):
         score = 0.0
         for k in asked:
             f = weight(tf, k)
-            if not f:
-                continue
-            df = sum(1 for c in counts if weight(c, k))
-            idf = math.log(1 + (total - df + 0.5) / (df + 0.5))
-            score += idf * f * (K1 + 1) / (f + K1 * (1 - B + B * lens[i] / avg))
-        scores.append((score, i + 1))
-    return [n for score, n in sorted(scores, key=lambda s: (-s[0], s[1])) if score > 0] or [1]
+            if f:
+                score += idf[k] * f * (K1 + 1) / (f + K1 * (1 - B + B * ln / avg))
+        if score > 0:
+            best.setdefault(n, []).append(score)
+    scores = [(sum(sorted(s, reverse=True)[:BEST]), n) for n, s in best.items()]
+    return [n for _score, n in sorted(scores, key=lambda s: (-s[0], s[1]))] or [1]
 
 
 def opening(part):

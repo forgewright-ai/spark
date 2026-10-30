@@ -9714,6 +9714,26 @@ def main():
              "and a word's forms alike (deleting and delete, logging and log)",
              str([readmod.ranked(_alt, "how do I use the model that runs on my other computer"),
                   readmod.ranked(_dirs, "which folder holds it"), readmod.ranked(_forms, "deleting the old files")]))
+        # a man page's shape (#160): the topic word in every part and dense
+        # in part 1, a rare word of the question once, in part 2 alone.
+        # Counted over the three parts, "delete" weighed next to nothing and
+        # "new" put part 2 first; counted over passages, part 1 wins. Each
+        # part's own paragraphs follow a filler one, past the overlap
+        _fill = "plain filler words here, said again and again. " * 10 + "\n\n"
+        _rp = lambda *ps: (_fill + "".join(p + "\n\n" for p in ps) + _fill * 40)[
+            :readmod.READ_MAX - readmod.PART_OVERLAP]
+        _man = (_rp(*["--delete: delete the files the source no longer has."] * 8)
+                + _rp("The files of the source.", "--delete is said here too.", "A new name.")
+                + _rp("The files of the source.", "--delete again."))
+        _long = readmod.passages("one two\n\n" + "word " * 300 + "\n  \nlast")
+        t.ok(readmod.ranked(_man, "how do I copy only the new files and delete the files that are gone "
+                                  "from the source") == [1, 2, 3]
+             and _long[0] == "one two" and _long[-1] == "last" and len(_long) == 5
+             and all(len(p) <= readmod.PASSAGE and set(p.split()) == {"word"} for p in _long[1:-1]),
+             "read: ranked weighs a word by the passages that hold it, so a rare word in part 2 does not "
+             "outrank part 1, where the topic is said most; a long paragraph is cut at a space",
+             str([readmod.ranked(_man, "how do I copy only the new files and delete the files that are gone "
+                                       "from the source"), [len(p) for p in _long]]))
         n0 = len(STATE["bodies"])
         rc, out, err = spark("read", "where", "is", "the", "spare", "key", stdin=keys)
         t.ok(rc == 0 and out == '[part 2 of 3]\nIt says "the spare key is under the mat".\n'
