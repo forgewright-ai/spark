@@ -23,6 +23,10 @@
 - Fixed: after clear or Ctrl-L spark's row was drawn over a first-row
   command line, hiding a `!` command; both widgets now open the row
   above the prompt first (#116).
+- Fixed: the page's chat showed a reply's `**bold**` marks raw; it now
+  draws them as bold by the terminal's rule, built as text nodes, so
+  `*.txt` and `**/` stay as typed and a stored thread reads the same
+  (#120).
 
 ## v1.110
 

@@ -123,10 +123,12 @@ for it, and no verb carries the word.
   marks of an emphasis only when they flank a word: a letter after an
   opening mark and none before it, the reverse to close. So `*.txt`,
   `**/`, `2*3*4` and `_names_` pass through. A ``` fence opens a block
-  that passes through whole until the closing fence. Awakened, it also
-  draws `inline code` in the accent, its backticks dropped, and a `- `,
-  `* ` or `N. ` line as a bullet whose wrapped lines hang under its
-  first word. The face is presence. It shows where the look's motion
+  that passes through whole until the closing fence. The page's chat
+  draws a reply's `**bold**` by the same rule, as a `strong` holding a
+  text node: the reply is never parsed as markup. Awakened, `text.Wrap`
+  also draws `inline code` in the accent, its backticks dropped, and a
+  `- `, `* ` or `N. ` line as a bullet whose wrapped lines hang under
+  its first word. The face is presence. It shows where the look's motion
   and words are active on the stream, and it says nothing: no line is
   printed for it, and no model is asked. In a wait it sits inside the
   pulse, the scanner and the waking bar. It leads a reply at a

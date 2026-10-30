@@ -981,6 +981,114 @@ def page_units(ok):
        "version.newest reads the newest v* tag as git sorts them, no subprocess", (n, want))
 
 
+# a stand-in document for the page's own functions under node: an
+# element keeps its children, a text node is its string, and innerHTML,
+# outerHTML and insertAdjacentHTML throw, so a reply is never parsed
+PAGE_DOM = r'''
+function N(tag) { this.tag = tag; this.kids = []; this.className = ""; this.style = {}; }
+N.prototype.appendChild = function (k) { this.kids.push(k); return k; };
+N.prototype.addEventListener = function () {};
+N.prototype.setAttribute = function () {};
+Object.defineProperty(N.prototype, "textContent", { set: function (s) { this.kids = [{ text: String(s) }]; } });
+["innerHTML", "outerHTML"].forEach(function (p) {
+  Object.defineProperty(N.prototype, p, { set: function () { throw new Error(p + " was set"); } });
+});
+N.prototype.insertAdjacentHTML = function () { throw new Error("insertAdjacentHTML was called"); };
+var document = { createElement: function (t) { return new N(t); }, createTextNode: function (s) { return { text: String(s) }; } };
+function tree(n) {
+  if (n.text !== undefined) return n.text;
+  if (n.tag === "button") return null;
+  return [n.tag].concat(n.kids.map(tree).filter(function (k) { return k !== null; }));
+}
+var cases = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify(cases.map(function (c) { return tree(rich(new N("div"), c[0], c[1])).slice(1); })));
+'''
+
+
+def page_marks(ok):
+    """#120: the page draws a reply's **bold** the way text.py's Wrap draws
+    it at a tty, built as nodes: a strong holding a text node, never
+    HTML. rich() and the helpers it calls are cut from the page's own
+    spark.js and run under node against PAGE_DOM. Every case without a
+    backtick is also fed to the real Wrap at a stand-in tty, and the two
+    must agree on every bold span. Skipped with a notice where there is
+    no node, as the page over TLS is without openssl."""
+    node = shutil.which("node")
+    if not node:
+        print("  skip the page's marks   (no node binary here)")
+        return
+    from spark import text as _text
+    with open(os.path.join(REPO, "lib", "spark", "forge", "spark.js"), encoding="utf-8") as f:
+        js = f.read()
+    ok(not re.search(r"\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML", js),
+       "spark.js: no innerHTML, outerHTML or insertAdjacentHTML anywhere")
+    ok('rich(d.appendChild(el("div", "txt")), text || "", role === "assistant")' in js
+       and js.count("rich(clear(txt), acc, true)") == 2,
+       "spark.js: a reply is marked when it streams in, when it stops and when a stored thread loads; a user's line is not")
+
+    def cut(name):
+        """one top-level function of the page, by its two-space indent"""
+        m = re.search(r"^  function %s\(.*?^  }$" % name, js, re.S | re.M)
+        return m.group(0) if m else ""
+    src = "\n".join(cut(n) for n in ("el", "alnum", "marks", "codeSpans", "fenceBlock", "rich"))
+    issue = ("1.  **Savory Rice and Egg Scramble with Spinach:** You could cook the rice first, ...\n"
+             "2.  **Simple Spinach and Egg Fried Rice:** If you have some oil, ...")
+    # [text, marked, the nodes the page builds: a string is a text node]
+    want = [
+        [issue, True, ["1.  ", ["strong", "Savory Rice and Egg Scramble with Spinach:"],
+                       " You could cook the rice first, ...\n2.  ", ["strong", "Simple Spinach and Egg Fried Rice:"],
+                       " If you have some oil, ..."]],
+        ["rm *.txt, then **/ and 2*3*4 stay as typed", True, ["rm *.txt, then **/ and 2*3*4 stay as typed"]],
+        ["*em* is plain, ***both*** is bold", True, ["em is plain, ", ["strong", "both"], " is bold"]],
+        ["**not closed here\nnext line", True, [["strong", "not closed here"], "\nnext line"]],
+        ["<b>x</b> & **y**", True, ["<b>x</b> & ", ["strong", "y"]]],
+        ["`a**b**c` and **d `e` f**", True, [["code", "a**b**c"], " and ", ["strong", "d ", ["code", "e"], " f"]]],
+        ["    **kept** in a code line", True, ["    **kept** in a code line"]],
+        ["```\n**x**\n```\n**y**", True, [["pre", ["code", "**x**"]], ["strong", "y"]]],
+        ["**the user's own** words", False, ["**the user's own** words"]],
+    ]
+    try:
+        p = subprocess.run([node, "-e", src + PAGE_DOM], input=json.dumps([w[:2] for w in want]),
+                           capture_output=True, text=True, timeout=30)
+        got = json.loads(p.stdout) if p.returncode == 0 else None
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        p, got = None, None
+        print("  node: %s" % e)
+    ok(got is not None and len(got) == len(want), "the page's rich() runs under node, every case",
+       p.stderr[-300:] if p else "")
+    for (t, marked, nodes), g in zip(want, got or []):
+        ok(g == nodes, "page: %r %s" % (t[:40], "drawn as the terminal draws it" if marked else "(a user's) stays as typed"),
+           (g, nodes))
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    def wrap(t):
+        """the terminal's bold spans for t, as the same nodes"""
+        s = Tty()
+        w = _text.Wrap(stream=s, mark=False)
+        w.width, w.living = 10 ** 6, False
+        w.feed(t)
+        w.close()
+        out, nodes, bold = s.getvalue()[:-1], [], False
+        for part in re.split(r"(\x1b\[(?:1|22|0)m)", out):
+            if part in ("\x1b[1m", "\x1b[22m", "\x1b[0m"):
+                bold = part == "\x1b[1m"
+            elif part:
+                nodes.append(["strong", part] if bold else part)
+        return nodes
+    def fold(n):
+        """Wrap folds a run of spaces between words into one, as the
+        browser does"""
+        if isinstance(n, str):
+            return re.sub(r"(?<=\S)  +", " ", n)
+        return [n[0]] + [fold(k) for k in n[1:]]
+    for (t, marked, nodes) in want:
+        if marked and "`" not in t:
+            ok(wrap(t) == [fold(n) for n in nodes], "page and terminal agree on %r" % t[:40], (wrap(t), nodes))
+
+
 def main():
     fails = 0
 
@@ -995,6 +1103,7 @@ def main():
     verb_runner(ok)
     thread_view(ok)
     page_units(ok)
+    page_marks(ok)
 
     stub = HTTPServer(("127.0.0.1", 0), Peek)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
