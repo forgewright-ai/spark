@@ -71,7 +71,9 @@
 #                                    the line with the line's own prompt,
 #                                    the person's config unchanged
 #   SPARK_LINE_BENCH_MACHINE=FILE    the machine picture's system part
-#                                    (persona.machine_facts): an empty one
+#                                    (persona.machine_facts) and the
+#                                    machine folder's facts and now
+#                                    (persona.machine_said): an empty one
 #                                    for an OS case, the desktop's for a
 #                                    desktop case, never the machine's
 #   SPARK_LINE_BENCH_MCP=DIR         a desktop's mcp-tools and mcp-values,
@@ -2642,9 +2644,11 @@ def cmd_selftest(_args):
           and len(values_raw) == len(purposes) + sum(len(v) for v in values.values())
           and len(purposes) >= 0.9 * len(desk) and all((srv, t) in {(a, b) for a, b, _f, _x, _y in desk}
                                                        for srv, t, _k in values)
-          and set(machine) >= {"apps", "folders", "services", "network", "programs", "absent"},
+          and set(machine) >= {"apps", "folders", "services", "network", "programs", "absent", "facts", "now"}
+          and all(isinstance(l, str) and l for k in ("facts", "now") for l in machine[k]),
           "desktop: the fixture is a desktop's whole list, every line a tool, purpose or value line of a "
-          "trusted server, and a machine picture", "%d tools, %d purposes" % (len(desk), len(purposes)))
+          "trusted server, and a machine picture with the lines a desktop writes in the machine folder (#167)",
+          "%d tools, %d purposes" % (len(desk), len(purposes)))
 
     # every case in cases.json is well formed: a new case cannot break a run
     data = load_cases()

@@ -33,7 +33,8 @@ from . import CONFIG_DIR, HOME, REPO, grounding, intake, persona
 # <word> the shell would read as a redirect) | quote (a quote, a $( or a
 # backtick the line never closes: the shell would wait for the rest) |
 # slot (a capital word of spark's own help left as written, NAME or URL:
-# a value only the user knows, so nothing is asked again)
+# a value only the user knows, so nothing is asked again) | value (a tool
+# call's value copied from the tool block's placeholder, name=NAME: #168)
 Finding = namedtuple("Finding", "kind head word")
 
 
@@ -567,6 +568,8 @@ def _spark(args, store=None):
         end = next((i for i, a in enumerate(rest) if not a.startswith("-") and a not in lits), len(rest)) \
             if free else len(rest)
         out.extend(_flags("spark " + verb, [a for a in rest[:end] if a not in _HELP], entry, negated=False))
+    if verb == "mcp" and len(rest) > 2 and rest[0] == "call":
+        out.extend(Finding("value", "spark mcp", w) for w in persona.tool_stand_ins(rest[1], rest[2], rest[3:]))
     return out + [Finding("slot", "spark " + verb, a) for a in dict.fromkeys(held)]
 
 

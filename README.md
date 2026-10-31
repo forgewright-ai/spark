@@ -216,6 +216,8 @@ it on a new install. What each command sends:
   start at boot and the network interfaces. With MCP servers on the
   list, every tool and its arguments. From a trusted server, the first
   words of each tool's description and the values its arguments take.
+  What a program of this machine writes in spark's machine folder: a
+  desktop's screens, keys and commands, and what is in use now.
   Never a file's text or a password.
 - `mcp call` and a tool step of `do`: the arguments you typed or
   confirmed go to that server. It is a program on this machine, and

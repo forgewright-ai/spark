@@ -297,13 +297,14 @@ def _nudged(messages):
     return out
 
 
-def _line_ask(s, text, on_delta=None, context="", again=None):
+def _line_ask(s, text, on_delta=None, context="", again=None, now=""):
     """One prompt-line request: streamed, the line's schema, the line's own
     slot (wire.LINE_SLOT), every chunk to on_delta as it comes. Returns
     (reply, ms). A reply that is not one JSON object is BrainError `bad`,
     worded as chat_json words it: wire.CUT_OUT (marked `capped`) when the
     cap ended it. `context` is a Reference block (the knowledge's
-    evidence): it rides the user message, never the prefix.
+    evidence) and `now` the machine folder's [now] block (#167): they
+    ride the user message, never the prefix.
 
     A reply that was a thought and no answer (BrainError `thought`) is
     asked again ONCE when nothing of it reached on_delta (`clean`): the
@@ -315,7 +316,7 @@ def _line_ask(s, text, on_delta=None, context="", again=None):
     feed = on_delta or (lambda d: None)
 
     def ask(retry=False):
-        messages = s._messages(text, context)
+        messages = s._messages(text, context, now)
         return wire.chat_stream(
             s.cfg, s.url, _nudged(messages) if retry else messages, feed, max_tokens=LINE_TOKENS,
             temperature=0.2, forge=s.forge, model=s.role, schema=persona.LINE_SCHEMA, slot=wire.LINE_SLOT,
@@ -830,6 +831,9 @@ def _said(f):
         return "%s in the command is never closed." % _open(f).capitalize()
     if f.kind == "slot":
         return "%s stands for a value only the user knows; keep it as it is." % f.word
+    if f.kind == "value":
+        return ("%s copies the tool list's placeholder; write the value itself: the user's, or one its Values name."
+                % f.word)
     return ("%s is a placeholder; write the real name, leave it out, or write ONE word in capitals such as NAME."
             % f.word)
 
@@ -858,8 +862,8 @@ def _left(f):
     if f.kind == "placeholder":
         name = " ".join(f.word.strip("<>[]").replace("_", " ").replace("-", " ").split())
         return "type the %s before Enter" % ("file name" if name in ("file", "filename") else _nw(name))
-    if f.kind == "slot":
-        return "type the %s before Enter" % _nw(f.word)
+    if f.kind in ("slot", "value"):
+        return "type the %s before Enter" % _nw(f.word.split("=", 1)[0])
     if f.kind == "quote":
         return _gap(f) + " -- close it before Enter"
     if f.kind == "command":
@@ -1056,16 +1060,17 @@ class _Early:
         return True
 
 
-def _guards(s, reply, command, hint, text, cwd, tried, ms):
+def _guards(s, reply, command, hint, text, cwd, tried, ms, now=""):
     """The two re-asks a cmd reply may earn, then the danger verdict:
-    (reply, command, hint, kind, ms) with kind `cmd` or `danger`."""
+    (reply, command, hint, kind, ms) with kind `cmd` or `danger`. `now`
+    rides the first message again, as it was sent."""
     # the head-word guard: a command whose head word nothing here
     # answers to is re-asked once; failing that, the hint says so.
     # Never blocks, never errors -- the user still sees a reply.
     missing = persona.missing_word(command)
     if missing:
         try:
-            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
+            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd, now=now)},
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
             retry, ms2 = _line_ask(s, "%s is not installed on this machine; use only commands that exist here." % missing)
             ms += ms2
@@ -1082,7 +1087,7 @@ def _guards(s, reply, command, hint, text, cwd, tried, ms):
         # the user just said failed, nor the fix the command that just
         # failed. One re-ask; then honesty.
         try:
-            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
+            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd, now=now)},
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
             retry, ms2 = _line_ask(s, "that exact command was already tried and failed; propose a different one.")
             ms += ms2
@@ -1098,7 +1103,7 @@ def _guards(s, reply, command, hint, text, cwd, tried, ms):
     return reply, command, hint, "danger" if flagged else "cmd", ms
 
 
-def _line_stream(s, text, early, context=""):
+def _line_stream(s, text, early, context="", now=""):
     """One streamed ask through `early`: (reply, ms, error). A _Stop ends
     the stream at the command the judge found wrong -- the reply is the
     fields so far. A BrainError comes back third, never raised. When the
@@ -1111,7 +1116,7 @@ def _line_stream(s, text, early, context=""):
         told.append(1)
         early.busy.tell(ASKING_AGAIN)
     try:
-        reply, ms = _line_ask(s, text, early.feed, context, again)
+        reply, ms = _line_ask(s, text, early.feed, context, again, now)
         return dict(reply, **early.parse.fields), ms, None     # a key's first value is the one printed
     except _Stop:
         return dict(early.parse.fields), early.ms(), None
@@ -1360,6 +1365,7 @@ def _cmd_line(args):
     # first request's user message (the prefix never changes)
     know = _Know(_line_arm(cfg, bench))
     context = know.upfront(text, tried)
+    now = persona.machine_now()             # #167: what is in use now, the first request's alone
     # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
     # the ask to line 1 -- through the guards' re-asks when a reply earns
     # one -- then in the reply's own mark until line 2
@@ -1380,7 +1386,7 @@ def _cmd_line(args):
         s.role, s._system = os.environ["SPARK_LINE_ROLE"], (lambda: prefix)
         sys.stderr.write("spark: SPARK_LINE_ROLE=%s -- a test seam: the line asks that role\n" % s.role)
     if s is not None:
-        reply, ms, err = _line_stream(s, ask_text, early, context)
+        reply, ms, err = _line_stream(s, ask_text, early, context, now)
     if err is None and early.head is None:
         # nothing went early: the whole reply, the guards, then the lines
         kind = reply.get("kind")
@@ -1391,17 +1397,17 @@ def _cmd_line(args):
         if is_cmd and not refused:
             if know.arm == "off":
                 n = len(s.history)
-                reply, command, hint, kind, ms = _guards(s, reply, command, hint, ask_text, cwd, tried, ms)
+                reply, command, hint, kind, ms = _guards(s, reply, command, hint, ask_text, cwd, tried, ms, now)
                 know.reasked = int(len(s.history) > n)
             else:
-                asked = persona.user_message(ask_text, cwd, context)
+                asked = persona.user_message(ask_text, cwd, context, now)
                 reply, command, hint, kind, ms, early, err = _judged(s, reply, command, hint, text, asked,
                                                                      ms, know, early)
             refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
         elif not is_cmd and know.arm != "off" and _names_command(reply.get("hint")):
             # the answer whole: the hint's one-line cut can drop the
             # command a long answer names at its end
-            asked = persona.user_message(ask_text, cwd, context)
+            asked = persona.user_message(ask_text, cwd, context, now)
             reply, command, hint, kind, ms, early, err = _as_command(s, reply, hint, asked, ms, know, early)
             is_cmd = kind != "answer"
             refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))

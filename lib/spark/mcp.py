@@ -1706,14 +1706,24 @@ def as_call(command, verbs=None):
     here answers to that word: `out_mute` becomes `spark mcp call out
     out_mute`, the words after it kept as they came. With `verbs`, the
     words spark takes first, so does `spark out_mute` where that word is
-    none of them. Anything else comes back as it was. The prompt line
-    rewrites before its judge and its danger checks, so both read the
-    call (#166)."""
+    none of them, and `spark SERVER WORD` where SERVER_WORD is a listed
+    tool of that server. A call's bare values are keyed (keyed, #168). Anything
+    else comes back as it was. The prompt line rewrites before its judge
+    and its danger checks, so both read the call (#166)."""
     import shutil
     c = (command or "").strip()
     w = c.split(None, 1)
     if len(w) == 2 and w[0] == "spark":
         tail = w[1].split(None, 1)
+        if tail[0] == "mcp":
+            return keyed(served(command))
+        if verbs is not None and tail[0] not in verbs and len(tail) == 2:
+            # `spark SERVER WORD`, a verb made of a listed server's name:
+            # that server's tool SERVER_WORD, where it lists one
+            sub = tail[1].split(None, 1)
+            tool = "%s_%s" % (tail[0], sub[0])
+            if TOOL_NAME.match(tool) and any((s, t) == (tail[0], tool) for s, t, _f, _a, _ti in listed()):
+                return keyed(" ".join(["spark mcp call", tail[0], tool] + sub[1:]))
         if verbs is None or not TOOL_NAME.match(tail[0]) or tail[0] in verbs:
             return command
         c, w = w[1], tail
@@ -1722,7 +1732,91 @@ def as_call(command, verbs=None):
     servers = {srv for srv, t, _f, _a, _ti in listed() if t == w[0]}
     if len(servers) != 1:
         return command
-    return "spark mcp call %s %s" % (servers.pop(), c)
+    return keyed("spark mcp call %s %s" % (servers.pop(), c))
+
+
+def served(command):
+    """A call line mended to a listed server and tool, where exactly one
+    fits (#168): `spark mcp call TOOL ...` with the server left out, and
+    `spark mcp call X TOOL ...` where X is no listed server, take the one
+    server that lists TOOL; `spark mcp call X SERVER TOOL ...` drops X;
+    `spark mcp call SERVER WORD` is SERVER_WORD, or the server's tool that
+    ends as WORD does past its first part (display window_transform is
+    display_transform), where SERVER lists no WORD. A small model wrote
+    the desktop's name, or no server at all. Anything else as it came."""
+    w = (command or "").strip().split(None, 5)
+    if len(w) < 4 or w[:3] != ["spark", "mcp", "call"]:
+        return command
+    have = {(s, t) for s, t, _f, _a, _ti in listed()}
+    servers = {s for s, _t in have}
+
+    def owner(tool):
+        got = {s for s, t in have if t == tool}
+        return got.pop() if len(got) == 1 else ""
+    if w[3] not in servers:
+        if owner(w[3]):
+            return " ".join(["spark mcp call", owner(w[3])] + w[3:])
+        if len(w) > 4 and owner(w[4]):
+            return " ".join(["spark mcp call", owner(w[4]), w[4]] + w[5:])
+        if len(w) == 6 and w[4] in servers and (w[4], w[5].split(None, 1)[0]) in have:
+            return " ".join(["spark mcp call", w[4], w[5]])
+        return command
+    if len(w) < 5 or (w[3], w[4]) in have:
+        return command
+    for t in ("%s_%s" % (w[3], w[4]), "%s_%s" % (w[3], w[4].split("_", 1)[-1])):
+        if (w[3], t) in have:
+            return " ".join(["spark mcp call", w[3], t] + w[5:])
+    return command
+
+
+def _required(server, tool):
+    """The listed tool's required arguments as [(KEY, KIND)], None when
+    listed() holds no such tool."""
+    for srv, t, _f, args, _ti in listed():
+        if (srv, t) == (server, tool):
+            return [tuple(a.split("=", 1)) for a in args.split(" ")] if args else []
+    return None
+
+
+def keyed(command):
+    """`command`, one spark mcp call line of words (an operator, an
+    expansion or a comment only inside quotes), with its bare values, the
+    words with no =, given in order to the listed tool's required
+    arguments it does not name yet (#168): `spark mcp call apps apps_open
+    mpv` is `... name=mpv`, quoted as shlex quotes. Only when there are
+    no more bare values than those arguments; else it comes back as it was."""
+    import shlex
+    c = command or ""
+    try:
+        lx = shlex.shlex(c, posix=True, punctuation_chars=True)
+        lx.whitespace_split, lx.commenters = True, ""
+        w = [] if re.search(r"[\n`$\\#]", c) else list(lx)
+    except ValueError:
+        return command
+    ok = len(w) > 4 and w[:3] == ["spark", "mcp", "call"] and NAME.match(w[3]) and TOOL_NAME.match(w[4])
+    req = _required(w[3], w[4]) if ok and not any(set(x) <= set("();<>|&") for x in w) else None
+    if req is None:
+        return command
+    hit, words = w[3:5], w[5:]
+    bare = [i for i, x in enumerate(words) if "=" not in x]
+    named = {x.split("=", 1)[0] for x in words if "=" in x}
+    left = [k for k, _kd in req if k not in named]
+    if not bare or len(bare) > len(left):
+        return command
+    for i, k in zip(bare, left):
+        words[i] = "%s=%s" % (k, words[i])
+    said = [k + "=" + shlex.quote(v) if ARG_WORD.match(k) else shlex.quote(x)
+            for x in words for k, _eq, v in [x.partition("=")]]
+    return " ".join(["spark", "mcp", "call", hit[0], hit[1]] + said)
+
+
+def stand_ins(server, tool, words):
+    """The KEY=VALUE words of a call whose value is the tool block's own
+    placeholder for that argument (_arg_form's NAME or N, the tools
+    file's TEXT): copied from the list, never a value (#168)."""
+    forms = {k: {x for x in (_arg_form("%s=%s" % (k, kd)).split("=", 1)[1], kd) if "|" not in x}
+             for k, kd in _required(server, tool) or ()}
+    return [x for x in words if x.partition("=")[2] in forms.get(x.partition("=")[0], ())]
 
 
 # a call line wrapped in a shell word that runs the next word -- `timeout 5`,

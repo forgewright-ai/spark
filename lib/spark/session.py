@@ -246,14 +246,15 @@ class Session:
             return persona.mode_prefix(self.cfg, self.mode, self.shell, local=True) + "\n\n" + persona.MODES[self.mode]
         return forge.system(self.cfg, self.mode, self.shell, self.mem)
 
-    def _messages(self, text, context=""):
+    def _messages(self, text, context="", now=""):
         # the [cwd] line is for the modes that propose commands relative
         # to it; in a conversation it is noise a chatty model narrates
-        # back ("your current working directory is ...")
+        # back ("your current working directory is ..."). `now` is the
+        # prompt line's [now] block, on its first request alone
         cwd = self.cwd if self.mode in ("line", "do", "explain") else ""
         return ([{"role": "system", "content": self._system()}]
                 + self.history
-                + [{"role": "user", "content": persona.user_message(text, cwd, context)}])
+                + [{"role": "user", "content": persona.user_message(text, cwd, context, now)}])
 
     def _retry_fresh(self, fn, can_retry=None):
         """A cached brain may have gone away: on `down`, resolve once more

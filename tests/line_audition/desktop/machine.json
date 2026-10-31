@@ -1,9 +1,34 @@
 {
- "about": "The line audition's desktop machine: what the prompt line reads of a Void desktop in place of the machine the audition runs on, with made-up names. apps, folders, services and network are the picture's system part (SPARK_LINE_BENCH_MACHINE). programs are on the run's PATH beside the void snapshot's tools, and absent are taken off it: a desktop's own, and what its cases say is not installed. The grader takes programs for installed, their options unchecked.",
+ "about": "The line audition's desktop machine: what the prompt line reads of a Void desktop in place of the machine the audition runs on, with made-up names. apps, folders, services and network are the picture's system part (SPARK_LINE_BENCH_MACHINE). programs are on the run's PATH beside the void snapshot's tools, and absent are taken off it: a desktop's own, and what its cases say is not installed. The grader takes programs for installed, their options unchecked. facts and now stand in for the machine folder's lines, as they ride: what a desktop writes there, its writer's line first.",
  "apps": [["aerc", "pm"], ["btop", "pm"], ["firefox", "pm"], ["foot", "pm"], ["micro", "pm"], ["mpv", "pm"], ["pyradio", "pm"]],
  "folders": ["documents", "downloads", "music", "notes", "pictures", "projects", "videos"],
  "services": ["acpid", "bluetoothd", "chronyd", "cupsd", "dbus", "dhcpcd", "greetd", "seatd", "socklog-unix", "sshd", "udevd", "wpa_supplicant"],
  "network": [["enp2s0", "wired"], ["wlp3s0", "wifi"]],
  "programs": ["aerc", "bluetoothctl", "btop", "firefox", "foot", "gio", "grim", "lpstat", "micro", "mpv", "notify-send", "pyradio", "slurp", "spark-shell", "swaymsg", "tmux", "udisksctl", "wl-copy", "wl-paste", "wpa_cli", "wpctl"],
- "absent": ["htop", "rg", "wget"]
+ "absent": ["htop", "rg", "wget"],
+ "facts": [
+  "spark-shell says of this machine:",
+  "- The session is sway 1.10 (Wayland, not X11), set up by spark-shell v0.114. X11 tools do not work here.",
+  "- On Wayland it has grim and slurp for a screenshot, wl-copy and wl-paste for the clipboard, notify-send for a notification and swaymsg for sway.",
+  "- The bar is on top. Super+Space opens the dialog, the launcher and the settings; Super+c opens the chat.",
+  "- Keys: Super+Return a terminal, Super+q closes the window, Super+Escape locks, Print a screenshot, Shift+Print an area, Super+k the next keyboard layout, Super+1 to Super+9 workspace N, Super+Shift+1 to Super+Shift+9 moves the window to N, the volume and brightness keys.",
+  "- spark-shell theme NAME|none, theme save NAME, theme delete NAME, theme back, theme wallpaper NAME, theme text bigger|smaller, theme transparency more|less.",
+  "- spark-shell layout NAME, layout save NAME, layout rename NAME NEW, layout delete NAME, layout back.",
+  "- spark-shell notes, notes NAME, notes add WORDS, notes find WORDS; spark-shell reminders add DAY TIME WORDS, reminders done|snooze|delete|restore NAME.",
+  "- spark-shell font FACE SIZE|none, font list; spark-shell bar on|off; spark-shell dialog.",
+  "- spark-shell desktop keys, desktop lock, desktop capture screen|area|window, desktop display brightness N|up|down, desktop keyboard next, desktop screen NAME scale N|mode WxH|on|off.",
+  "- To read the state: spark mcp read NAME; swaymsg -t get_outputs, get_workspaces or get_tree; wpctl status; bluetoothctl show.",
+  "- Screens: DP-3 = Acme P15 (a portable monitor), on the left; HDMI-A-1 = Lumen 27Q, on the right. Both normal; DP-3 1920x1200@60Hz, HDMI-A-1 1920x1080@60Hz.",
+  "- Workspaces: 1 and 2 on HDMI-A-1, 3 on DP-3. swaymsg workspace number N goes to one.",
+  "- Sound out: HD-Audio Generic Digital Stereo (HDMI) is the monitor's speakers; Soundbar is a Bluetooth speaker; Headphones are Bluetooth headphones. Sound in: Webcam Mic, a USB microphone.",
+  "- Bluetooth, paired: Headphones (headphones), Soundbar (speaker), Speaker (speaker).",
+  "- Keyboard layouts: us (English, US), br (Portuguese, Brazil). Pointer: tap to click on, natural scroll off, speed 0.",
+  "- Saved layouts: writing. Notes: todo.md, groceries.md. Palettes: dark and light ones; none is the terminal's own colors. Saved themes: none. Wallpapers: the drawings and default. Savers: clock, spark, starfield, drift. Printers: office-laser."
+ ],
+ "now": [
+  "- Windows open: con 14 foot (focused), con 21 firefox, con 27 mpv. Workspace 1 on HDMI-A-1 is focused.",
+  "- Sound: HD-Audio Generic Digital Stereo (HDMI) in use, volume 40%, not muted. Microphone: Webcam Mic connected, not muted. Bluetooth connected: none.",
+  "- Network: wired enp2s0 up with an address. Wi-Fi wlp3s0 connected to lab-5g.",
+  "- Keyboard layout us. Palette nord (dark), wallpaper fjord. Brightness 70. Idle screen after 10 minutes, lock after 15. No drive plugged. The bar is shown. Do not disturb is off."
+ ]
 }

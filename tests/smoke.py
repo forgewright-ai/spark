@@ -761,6 +761,10 @@ def answer_json(messages):
         return {"kind": "cmd", "command": "echo STEP-ONE", "hint": "say hello", "danger": False}
     # the judged line (v1.53): the first reply, and the re-ask's
     asked = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+    if "standin" in asked:      # #168: the tool block's placeholder copied; the judge's re-ask gets a value
+        again = KNOW_AGAIN in user and "standin-stuck" not in asked
+        return {"kind": "cmd", "command": "wifi_connect name=%s" % ("lab-5g" if again else "NAME"),
+                "hint": "joins it", "danger": False}
     if "know" in asked:
         got = know_answer(asked, KNOW_AGAIN in user or OWN_AGAIN in user or TOLD_AGAIN in user)
         if got:
@@ -791,7 +795,10 @@ def answer_json(messages):
         return {"kind": "cmd", "command": "rm -rf build", "hint": "Remove the build directory", "danger": False}
     if "baretool" in user:      # #166: a listed tool's name alone, the words after it its arguments
         bare = {"mute": "out_mute", "restart": "power_restart", "level": "out_level level=40", "shell": "ls -la",
-                "spark": "spark theme_back", "verb": "spark status"}
+                "spark": "spark theme_back", "verb": "spark status",
+                # #168: bare values, keyed to the required arguments still missing
+                "keyone": "spark mcp call apps apps_open mpv", "keytwo": "layout_rename web to=home",
+                "keymany": "apps_open mpv firefox"}
         word = next((w for w in bare if "baretool-" + w in user), "mute")
         return {"kind": "cmd", "command": bare[word], "hint": "does it", "danger": False}
     if "prooftest" in user:
@@ -2254,8 +2261,12 @@ def line_machine_cases(t, spark, home):
          "%d %d of %d" % (len(line_a), len(small), fits))
     t.ok(_pers.MODE_LINE.endswith("A check or an action on this machine (reach a host, download, remove, install, "
                                   "record, look up a setting) is always kind=cmd with the command that does it, never "
-                                  "words, even when the facts above already hold the answer."),
-         "line, #166: the brief ends on the one rule: a check or an action is a command, never words")
+                                  "words, even when the facts above or the [now] lines already hold the answer. What uses the "
+                                  "memory, the disk or the processor is a command that prints and exits (ps aux "
+                                  "--sort=-%mem | head, df -h, du -sh); btop, htop and top fill the screen and are "
+                                  "only for a request to open one."),
+         "line, #166: the brief ends on the one rule: a check or an action is a command, never words; #168: a "
+         "list prints and exits")
     # the rewrite, through the real line: the bench's tools, the stub's
     # bare names
     bench = dict(seams, SPARK_LINE_KNOW="judge")
@@ -2274,6 +2285,192 @@ def line_machine_cases(t, spark, home):
          "line, #166: a listed tool's bare name is its call, `spark TOOL` too, its danger the tool's own; a shell "
          "command and a verb of spark's stay",
          repr({k: v[:2] for k, v in got.items()}))
+
+
+def line_folder_cases(t, spark, home):
+    """#167: the machine folder, where a program of this machine (a
+    desktop) says what only it knows. Its .facts ride the line's prefix
+    under a line naming the writer and count where the tool block gives
+    way; its .now ride the first request's words alone. A file counts
+    only as a regular file of the user's own that no group or other may
+    write, in such a folder; the caps cut at a line's end; a stale .now
+    is skipped; under SPARK_LINE_BENCH=1 the folder is never read and the
+    seam's lists stand in. #168: a tool call's bare values are keyed to
+    its required arguments, and a value copied from the tool block's
+    placeholder is asked again. Scratch folders and made-up lines."""
+    import spark as _spark
+    from spark import config as _config, persona as _pers
+    desk = os.path.join(REPO, "tests", "line_audition", "desktop")
+    fixture = os.path.join(desk, "machine.json")
+    seams = {"SPARK_LINE_BENCH": "1", "SPARK_LINE_BENCH_MCP": desk, "SPARK_LINE_BENCH_MACHINE": fixture}
+    shown = {k: os.environ.get(k) for k in seams}
+    scratch = tempfile.mkdtemp(prefix="spark-machine-")
+    d = os.path.join(scratch, "machine")
+    saved_dir, saved_uid = _spark.STATE_DIR, os.getuid
+
+    def fresh():
+        shutil.rmtree(d, ignore_errors=True)
+        os.mkdir(d)
+        os.chmod(d, 0o700)
+
+    def put(name, text, mode=0o600, age=0):
+        p = os.path.join(d, name)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(p, mode)
+        if age:
+            os.utime(p, (time.time() - age, time.time() - age))
+
+    lines71 = ["- %s %02d" % ("w" * 65, i) for i in range(60)]        # 71 characters a line, its newline in
+    lines50 = ["- %s %02d" % ("n" * 44, i) for i in range(30)]        # 50: 24 of them are 1,200 exactly
+    try:
+        for k in seams:
+            os.environ.pop(k, None)
+        _spark.STATE_DIR = scratch
+        fresh()
+        put("desk.facts", "- screens: DP-3 on the left\n\x1b[31m- keys: Super+q\x07  closes\ta window\n\n"
+                          "- the key %s\n" % ("AKIA" + "Q" * 16))
+        put("old.facts", "- an old fact holds\n", age=16 * 60)
+        put("group.facts", "- group may write\n", 0o620)
+        put("other.facts", "- others may write\n", 0o602)
+        put("Bad.facts", "- a bad name\n")
+        put("desk.txt", "- not a kind\n")
+        put("desk.now", "- sound: HDMI out at 40%\n")
+        put("old.now", "- a stopped writer\n", age=16 * 60)
+        os.symlink(os.path.join(d, "desk.facts"), os.path.join(d, "linked.facts"))
+        os.mkfifo(os.path.join(d, "pipe.facts"), 0o600)
+        os.mkdir(os.path.join(d, "dir.facts"))
+        facts, now = _pers.machine_said("facts"), _pers.machine_said("now")
+        t.ok(facts == [("desk", ["- screens: DP-3 on the left", "- keys: Super+q closes a window", "- the key [held]"]),
+                       ("old", ["- an old fact holds"])]
+             and now == [("desk", ["- sound: HDMI out at 40%"])]
+             and _pers.machine_now() == "[now]\n- sound: HDMI out at 40%"
+             and _pers.machine_lines() == ["desk says of this machine:"] + facts[0][1]
+             + ["old says of this machine:", "- an old fact holds"],
+             "line, #167: the folder's own files count, sorted by name, control characters out and a secret's shape "
+             "held; a link, a file its group or others may write, a pipe, a folder, another name and a stale .now "
+             "never do", repr((facts, now)))
+        os.getuid = lambda: saved_uid() + 1
+        theirs = _pers.machine_said("facts")
+        os.getuid = saved_uid
+        os.chmod(d, 0o770)
+        shared = _pers.machine_said("facts")
+        os.chmod(d, 0o700)
+        os.rename(d, d + "-real")
+        os.symlink(d + "-real", d)
+        linked = _pers.machine_said("facts")
+        os.remove(d)
+        os.rename(d + "-real", d)
+        t.ok(theirs == [] and shared == [] and linked == [] and _pers.machine_said("facts"),
+             "line, #167: a folder of another user's, one its group may write and a linked one are never read",
+             repr((theirs, shared, linked)))
+        fresh()
+        put("big.facts", "\n".join(lines71) + "\n")
+        put("more.facts", "\n".join(lines71) + "\n")
+        put("big.now", "\n".join(lines50) + "\n")
+        put("more.now", "\n".join(lines50) + "\n")
+        facts, now = _pers.machine_said("facts"), _pers.machine_said("now")
+        t.ok([(n, len(ls)) for n, ls in facts] == [("big", 42), ("more", 21)]
+             and all(ls == lines71[:len(ls)] for _n, ls in facts)
+             and [(n, len(ls)) for n, ls in now] == [("big", 24), ("more", 6)]
+             and all(ls == lines50[:len(ls)] for _n, ls in now),
+             "line, #167: a .facts keeps 3,000 characters and all of them 4,500, a .now 1,200 and all 1,500, "
+             "each cut at a line's end", repr([(n, len(ls)) for n, ls in facts + now]))
+        os.environ["SPARK_LINE_BENCH"] = "1"
+        bench_none = (_pers.machine_said("facts"), _pers.machine_now())
+        os.environ.update(seams)
+        bench_seam = (_pers.machine_lines(), _pers.machine_now())
+        with open(fixture, encoding="utf-8") as f:
+            fx = json.load(f)
+        t.ok(bench_none == ([], "") and bench_seam[0] == fx["facts"] and bench_seam[0][0] == "spark-shell says of this machine:"
+             and bench_seam[1] == "[now]\n" + "\n".join(fx["now"]),
+             "line, #167: under SPARK_LINE_BENCH=1 the folder is never read: the seam's facts and now stand in, "
+             "the fixture's writer line first", repr(bench_none))
+        # the facts count in fixed: on the smallest slot whose block keeps
+        # its values without them, the block gives its values way to them
+        lean_json = os.path.join(scratch, "lean.json")
+        with open(lean_json, "w", encoding="utf-8") as f:
+            json.dump({k: v for k, v in fx.items() if k not in ("facts", "now")}, f)
+        os.environ["SPARK_LINE_BENCH_MACHINE"] = lean_json
+        cfg = _config.load()
+        wide = _pers.prefix(cfg, "bash", line=True, slot=100000)
+        slot = 1000 + int((len(wide) + 3 + len(_pers.MODE_LINE)) / _pers.LINE_CHARS_PER_TOKEN) + 2
+        lean = _pers.prefix(cfg, "bash", line=True, slot=slot)
+        os.environ["SPARK_LINE_BENCH_MACHINE"] = fixture
+        full = _pers.prefix(cfg, "bash", line=True, slot=slot)
+        t.ok("Values -- " in wide and lean == wide and "Values -- " not in full and fx["facts"][1] in full
+             and full.index("- Home folders:") < full.index("spark-shell says of") < full.index("MCP tools on this")
+             and "Windows open" not in full,
+             "line, #167: the facts follow the picture and count in fixed: on a slot the block fit, it gives its "
+             "values way to them; the now lines never ride the prefix", "slot %d" % slot)
+    finally:
+        os.getuid = saved_uid
+        _spark.STATE_DIR = saved_dir
+        for k, v in shown.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(scratch, ignore_errors=True)
+
+    # through the real line, from the folder in its own state dir
+    hd = os.path.join(home, ".local", "state", "spark", "machine")
+    os.makedirs(hd, exist_ok=True)
+    os.chmod(hd, 0o700)
+    for name, text in (("w1.facts", "- the bar is on top\n"), ("w1.now", "- sound: HDMI out at 40%\n")):
+        with open(os.path.join(hd, name), "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(os.path.join(hd, name), 0o600)
+    try:
+        def bodies(*args, stdin, extra=None):
+            n0 = len(STATE.setdefault("bodies", []))
+            rc, out, _err = spark(*args, stdin=stdin, extra=extra)
+            return rc, out.splitlines(), STATE["bodies"][n0:]
+        rc, lines, b = bodies("line", "--cwd", "/tmp", stdin="? folderask")
+        sysm, um = b[0]["messages"][0]["content"], b[0]["messages"][-1]["content"]
+        with open(os.path.join(hd, "w1.now"), "w", encoding="utf-8") as f:
+            f.write("- sound: muted\n")
+        _rc, _l, b2 = bodies("line", "--cwd", "/tmp", stdin="? folderask")
+        t.ok(rc == 0 and "\nw1 says of this machine:\n- the bar is on top\n" in sysm and "HDMI out" not in sysm
+             and um.startswith("[cwd /tmp]\n[now]\n- sound: HDMI out at 40%\n\nfolderask")
+             and b2[0]["messages"][0]["content"] == sysm and "\n- sound: muted\n" in b2[0]["messages"][-1]["content"],
+             "line, #167: the folder's facts ride the prefix under their writer's line, and its now lines ride the "
+             "words after the [cwd] line: a new state leaves the prefix the same bytes", repr(um[:120]))
+        rc, lines, b = bodies("line", "--cwd", "/tmp", stdin="? misscmd please")
+        t.ok(len(b) == 2 and b[1]["messages"][1]["content"] == b[0]["messages"][-1]["content"]
+             and "[now]" in b[0]["messages"][-1]["content"] and "[now]" not in b[1]["messages"][-1]["content"],
+             "line, #167: a re-ask carries the first request's words as they were sent, [now] and all, and no "
+             "second [now]", repr([m.get("content", "")[:60] for m in b[-1]["messages"]] if b else b))
+        _rc, _l, b = bodies("explain", stdin="bash: foo: command not found\n")
+        sent = json.dumps(b)
+        t.ok(b and "[now]" not in sent and "says of this machine" not in sent and "sound: muted" not in sent,
+             "line, #167: the folder is the prompt line's alone: explain carries none of it", sent[:200])
+        bench = dict(seams, SPARK_LINE_KNOW="judge")
+        _rc, _l, b = bodies("line", "--cwd", "/tmp", stdin="? folderask", extra=bench)
+        sysm, um = b[0]["messages"][0]["content"], b[0]["messages"][-1]["content"]
+        t.ok("spark-shell says of this machine:" in sysm and "w1 says" not in sysm
+             and um.startswith("[cwd /tmp]\n[now]\n- Windows open: con 14 foot (focused)") and "sound: muted" not in um,
+             "line, #167: a bench turn reads the seam's facts and now, never the folder", repr(um[:120]))
+        # #168, through the real line and the bench's desktop tools
+        got = {}
+        for word in ("keyone", "keytwo", "keymany"):
+            rc, lines, _b = bodies("line", stdin="? baretool-%s" % word, extra=bench)
+            got[word] = (rc, lines[:1])
+        t.ok(got == {"keyone": (0, ["cmd\tspark mcp call apps apps_open name=mpv"]),
+                     "keytwo": (0, ["cmd\tspark mcp call layout layout_rename name=web to=home"]),
+                     "keymany": (0, ["cmd\tspark mcp call apps apps_open mpv firefox"])},
+             "line, #168: a call's bare values go in order to the required arguments it lacks, and more bare "
+             "values than those are left as they came", repr(got))
+        rc, lines, b = bodies("line", stdin="? standin wifi", extra=bench)
+        rc2, lines2, _b = bodies("line", stdin="? standin-stuck wifi", extra=bench)
+        t.ok(rc == 0 and lines[:1] == ["cmd\tspark mcp call wifi wifi_connect name=lab-5g"] and len(b) == 2
+             and "name=NAME copies the tool list's placeholder" in b[1]["messages"][-1]["content"]
+             and rc2 == 0 and lines2[:1] == ["cmd\tspark mcp call wifi wifi_connect name=NAME"]
+             and "type the name before Enter" in (lines2[1:2] or [""])[0],
+             "line, #168: a value copied from the tool block's placeholder is asked again; still there, it lands "
+             "and the hint asks for the value", repr((lines, lines2)))
+    finally:
+        shutil.rmtree(hd, ignore_errors=True)
 
 
 def redirect_cases(t):
@@ -8108,6 +8305,7 @@ def main():
              "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
         line_knowledge_cases(t, spark, home)
         line_machine_cases(t, spark, home)
+        line_folder_cases(t, spark, home)
         redirect_cases(t)
         engine_wire_cases(t, spark, home, url)
         empty_answer_cases(t, spark, home, url, env)

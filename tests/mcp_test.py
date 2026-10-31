@@ -554,16 +554,71 @@ check("#166: a reply whose first word is a listed tool's exact name is its call;
       and mcp.as_call("echo hi") == "echo hi" and mcp.as_call("closes name=x") == "closes name=x"
       and mcp.as_call("spark mcp call stub close name=x") == "spark mcp call stub close name=x"
       and persona.tool_danger(mcp.as_call("close name=term")), "")
-from spark import grounding  # noqa: E402
+from spark import grounding, judge  # noqa: E402
 _verbs = grounding.spark_tree().verbs
 check("#166: so is `spark TOOL`, a listed tool's name after spark where it is no verb of spark's own",
       mcp.as_call("spark level level=3", _verbs) == "spark mcp call stub level level=3"
       and mcp.as_call("spark level level=3") == "spark level level=3"
       and mcp.as_call("spark status", _verbs) == "spark status" and mcp.as_call("spark mcp", _verbs) == "spark mcp"
       and mcp.as_call("spark closes", _verbs) == "spark closes", "")
-os.environ["SPARK_LINE_BENCH"] = "1"
+_listed = mcp.listed
+mcp.listed = lambda: [("notes", "notes_add", "", "words=WORDS", "notes add WORDS"),
+                      ("status", "status_show", "", "", "status show")]
+check("#168: `spark SERVER WORD` is that server's tool SERVER_WORD where it lists one; a spark verb, a word "
+      "no tool is and a bare server name are kept",
+      mcp.as_call("spark notes add milk", _verbs) == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark notes add words=milk", _verbs) == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark notes add milk") == "spark notes add milk"
+      and mcp.as_call("spark status show", _verbs) == "spark status show"
+      and mcp.as_call("spark notes new x", _verbs) == "spark notes new x"
+      and mcp.as_call("spark notes", _verbs) == "spark notes", "")
+check("#168: a call that names no listed server takes the one server that lists its tool, and drops a word "
+      "before a server that does; a listed server, a tool two servers list and one none lists stay",
+      mcp.as_call("spark mcp call desk notes_add words=milk") == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark mcp call desk notes notes_add milk") == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark mcp call desk notes_add") == "spark mcp call notes notes_add"
+      and mcp.as_call("spark mcp call notes notes_add words=x") == "spark mcp call notes notes_add words=x"
+      and mcp.as_call("spark mcp call desk nope x=1") == "spark mcp call desk nope x=1"
+      and mcp.as_call("spark mcp call desk notes nope") == "spark mcp call desk notes nope"
+      and mcp.as_call("spark mcp call notes add milk") == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark mcp call notes nope x") == "spark mcp call notes nope x"
+      and mcp.as_call("spark mcp call notes_add words=milk") == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark mcp call status_show") == "spark mcp call status status_show"
+      and mcp.as_call("spark mcp call notes desk_add milk") == "spark mcp call notes notes_add words=milk"
+      and mcp.as_call("spark mcp call notes") == "spark mcp call notes", "")
+mcp.listed = _listed
+# --- #168: a call's bare values are keyed to the required arguments it lacks
+check("#168: a bare value goes to the tool's required argument, in a call written whole or by the tool's name "
+      "alone, quoted as shlex quotes; a value with = stays",
+      mcp.as_call("spark mcp call stub close term") == "spark mcp call stub close name=term"
+      and mcp.as_call("close term") == "spark mcp call stub close name=term"
+      and mcp.as_call("spark level 30", _verbs) == "spark mcp call stub level level=30"
+      and mcp.as_call('spark mcp call stub echo "hi (there)"') == "spark mcp call stub echo text='hi (there)'"
+      and mcp.as_call("spark mcp call stub close name=term") == "spark mcp call stub close name=term", "")
+check("#168: more bare values than missing arguments, a tool not listed, a tool with none, an operator or an "
+      "expansion outside quotes: the call comes back as it was",
+      all(mcp.as_call(c) == c for c in ("spark mcp call stub close a b", "spark mcp call stub close name=a b",
+                                        "spark mcp call stub nope x", "spark mcp call stub envkeys x",
+                                        "spark mcp call stub close term; rm x", "spark mcp call stub close $HOME",
+                                        "spark mcp call stub close `id`", "spark mcp call stub close term # x")), "")
+check("#168: a value that is the tool block's own placeholder is no value: the judge finds it, and asks again",
+      mcp.stand_ins("stub", "close", ["name=NAME"]) == ["name=NAME"] and mcp.stand_ins("stub", "level", ["level=N"])
+      == ["level=N"] and mcp.stand_ins("stub", "echo", ["text=TEXT"]) == ["text=TEXT"]
+      and mcp.stand_ins("stub", "close", ["name=term", "name=Name"]) == []
+      and [tuple(f) for f in judge.verdict("spark mcp call stub close name=NAME").findings]
+      == [("value", "spark mcp", "name=NAME")] and judge.verdict("spark mcp call stub close name=term").ok, "")
+os.environ.update(SPARK_LINE_BENCH="1", SPARK_LINE_BENCH_MCP=os.path.join(REPO, "tests", "line_audition", "desktop"))
+check("#168: with two required arguments, a bare value takes the one not named yet, in order",
+      mcp.as_call("spark mcp call layout layout_rename web to=home") == "spark mcp call layout layout_rename name=web to=home"
+      and mcp.as_call("layout_rename web home") == "spark mcp call layout layout_rename name=web to=home"
+      and mcp.as_call("spark mcp call layout layout_rename to=home web") == "spark mcp call layout layout_rename to=home name=web"
+      and mcp.as_call("spark mcp call layout layout_rename a b c") == "spark mcp call layout layout_rename a b c"
+      and mcp.stand_ins("display", "display_brightness", ["level=LEVEL"]) == ["level=LEVEL"]
+      and mcp.stand_ins("bt", "bt_power", ["state=on|off"]) == [], "")
+del os.environ["SPARK_LINE_BENCH_MCP"]
 check("#166: a measured run carries no block of this machine's, and rewrites no word to its tool",
-      mcp.line_block() == "" and mcp.as_call("close name=term") == "close name=term", "")
+      mcp.line_block() == "" and mcp.as_call("close name=term") == "close name=term"
+      and mcp.as_call("spark mcp call stub close term") == "spark mcp call stub close term", "")
 del os.environ["SPARK_LINE_BENCH"]
 put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH)
 spark("mcp")

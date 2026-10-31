@@ -648,6 +648,9 @@ State is `~/.local/state/spark/`, 0700:
 - `mcp-values` 0600: each tool's purpose and its arguments' values, as
   a trusted server's list and rows said them (contract 16). The prompt
   line's prefix alone reads it.
+- `machine/` 0700: `NAME.facts` and `NAME.now`, 0600, what a program
+  of this machine such as the desktop writes for the prompt line
+  (contract 4). spark reads it and never writes it.
 - `line-seen` 0600, on a client: where its last line turn landed, and
   the `FORGE`'s newest thread and its turns then
   (`forge.LINE_SEEN`). A client's `??` reads it.
@@ -976,11 +979,15 @@ and may change freely.
    a capital word of spark's own help copied as it stands, such as
    `NAME` or `URL`. A slot is the user's own value, so it is never
    asked again: the line lands and its hint ends `type the NAME before
-   Enter`. Unknown is not wrong: a program with no entry, or a line the
-   judge cannot read, earns no finding. On spark's own commands the
-   judge reads the help's rows and the completion's words
-   (`grounding.spark_tree`). A leading option must be one `bin/spark`
-   answers, such as `--version`. A verb's options are held to its own
+   Enter`. `value` is a tool call's value copied from the tool block's
+   placeholder for it, `name=NAME` or `level=N`
+   (`persona.tool_stand_ins`, #168), and it is asked again. Unknown is
+   not wrong: a program with no
+   entry, or a line the judge cannot read, earns no finding. On
+   spark's own commands the judge reads the help's rows and the
+   completion's words (`grounding.spark_tree`). A leading option must
+   be one `bin/spark` answers, such as `--version`. A verb's options
+   are held to its own
    `-h`, the store's `spark VERB` entry, and a verb with no entry is
    unknown. Where the words a verb takes first are a closed set, the
    word must be one its rows or the completion list. Where a row writes
@@ -1039,10 +1046,26 @@ and may change freely.
    read it, and nothing in it is a state: no window, no level, no
    value in use. So the prefix is the same bytes until the machine
    changes. Of 348 wrong answers read one by one, four in five had
-   lacked a fact. Then every MCP tool rides (`mcp.line_block`,
-   contract 16). Under `SPARK_LINE_BENCH=1` the picture's system part
-   is the JSON file `SPARK_LINE_BENCH_MACHINE` names. The tools are the
-   directory `SPARK_LINE_BENCH_MCP` names, or none. So the line
+   lacked a fact. Then comes what a program of this machine, such as
+   the desktop, says in the machine folder (#167,
+   `persona.machine_said`). It is read on every request, with nothing
+   started. A `NAME.facts` file holds while the machine stays as it
+   is. Its lines ride here, sorted by `NAME`, each writer's under a
+   line naming it, and the tool block gives way to them. A `NAME.now`
+   file is true right now. Its lines ride the first request's user
+   message alone, `[now]` and the lines after the `[cwd]` line, never
+   the cached prefix. One older than 15 minutes is skipped: its writer
+   stopped. A file counts only as a regular file, never a link, of the
+   user's own that no group or other may write, in such a folder. Its
+   control characters go, a span that looks like a secret is held back
+   and an empty line is dropped. A file keeps 3,000 characters and all
+   the `.facts` 4,500, a `.now` 1,200 and all 1,500, cut at a line's
+   end (`persona.MACHINE_CAPS`). Then every MCP tool rides
+   (`mcp.line_block`, contract 16). Under `SPARK_LINE_BENCH=1` the
+   picture's system part is the JSON file `SPARK_LINE_BENCH_MACHINE`
+   names, and its `facts` and `now` lists stand in for the folder,
+   which is never read then. The tools are the directory
+   `SPARK_LINE_BENCH_MCP` names, or none. So the line
    audition's picture is never the machine's that runs it. With no
    file a bench turn reads this machine: `spark bench --line` measures
    the person's own line. The request fits the line's slot
@@ -1057,8 +1080,11 @@ and may change freely.
    alone, and no program here may answer to it. Then it is that tool's
    call: `out_mute` is `spark mcp call out out_mute`, the words after
    it kept (`cli._called`, `mcp.as_call`). So is `spark out_mute`,
-   where the word is no verb of spark's own. The command is rewritten
-   where it is read, before the judge and the danger checks, so
+   where the word is no verb of spark's own. A call's bare values,
+   words with no `=`, go in order to the required arguments it lacks
+   (`mcp.keyed`, #168), when there are no more of them: `spark mcp call
+   apps apps_open mpv` is `name=mpv`. The command is rewritten where it
+   is read, before the judge and the danger checks, so
    `persona.tool_danger` reads the call. An
    answer in words may name one of spark's own commands: `spark VERB`
    with a verb of the tree, never inside a noun phrase

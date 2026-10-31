@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.113.1
+
+- S3: the prompt line knew nothing only the desktop knows, its
+  workspaces, screens, keys and commands, nor what is in use now, so
+  it picked a near tool or answered in words. A program of the machine
+  writes those in spark's machine folder now: the lines that hold ride
+  the line's cached picture, the lines true now ride each request
+  beside the folder's path, and a stale file is skipped (#167)
+- S3: a tool call written with a bare value, `spark mcp call apps
+  apps_open mpv`, was refused, and one that copied the tool list's
+  placeholder, `name=NAME`, landed as a call. A bare value goes to the
+  tool's required arguments still missing, in order, and a placeholder
+  is asked again like any wrong command. A call that names no listed
+  server, or none, `spark mcp call spark-shell theme_palette`, takes the
+  one server that lists its tool, and a tool its server does not list
+  takes the one of its tools that ends the same way; `spark notes add
+  milk` and `spark mcp call reminders snooze` are notes_add and
+  reminders_snooze where those servers list them. A check the [now]
+  lines answer is still a command, and what uses the memory prints with
+  ps, never opens btop (#168)
+
 ## v1.113
 
 - The prompt line knows the machine it runs on (#166). Its prompt said
