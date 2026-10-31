@@ -21,9 +21,15 @@
 # result. Every string a server hands on passes scrub() before a
 # terminal, a brief or a record.
 #
-# `spark line` never comes here: the prompt line reads TOOLS_FILE, which
-# `spark mcp` writes, line by line (brief_tools), and never starts a
-# server or talks to one.
+# `spark line` never comes here: the prompt line reads TOOLS_FILE and
+# VALUES_FILE, which `spark mcp` writes, line by line (brief_tools,
+# line_block), and never starts a server or talks to one. VALUES_FILE is
+# what a trusted server's tools/list and rows said when it was listed:
+# each tool's short purpose, and the values its arguments take with what
+# each one is (resources/list and resources/read, never tools/call). The
+# timer's check lists a server again once its program changed since
+# (stale, refresh), so a desktop's new tools reach the line without a
+# person's `spark mcp`.
 
 import getpass
 import hashlib
@@ -47,6 +53,7 @@ from . import text as textmod
 PROTOCOL = "2025-06-18"           # the spec spark speaks, pinned: a server that answers another is closed
 MCP_ENV = os.environ.get("SPARK_MCP_ENV") or os.path.join(CONFIG_DIR, "mcp.env")
 TOOLS_FILE = os.path.join(STATE_DIR, "mcp-tools")   # what `spark mcp` last listed: the prompt line's and do's tools
+VALUES_FILE = os.path.join(STATE_DIR, "mcp-values")  # their purposes and their arguments' values: the prompt line's
 
 KEY = re.compile(r"^MCP_SERVER_([A-Z][A-Z0-9_]{0,31})$")
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")              # a server's name, as typed: its key's part, lower case
@@ -54,6 +61,9 @@ TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")         # a tool's name, or it
 TITLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.'/_-]{0,79}$")   # a title a brief may carry, or it is not offered
 ARG_WORD = re.compile(r"^[a-z][a-z0-9_]{0,31}$")          # an argument's name a step may carry
 ENUM_WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")   # a choice a brief may name; any other enum reads TEXT
+# a tool's purpose the line carries: its description's first sentence,
+# PURPOSE_WORDS words at most, in this shape or none
+PURPOSE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.'/_:+#%-]{0,99}$")
 TRUST_SUFFIX = "_TRUST"
 # the pin a trust by hand takes (spark mcp trust NAME on): the program's
 # sha256 and each tool's flag then -- r reads, d may destroy, - neither
@@ -131,7 +141,12 @@ ELICIT_PER_MINUTE = 6       # and in a minute, over every call
 ELICIT_MESSAGE_MAX = 300    # characters of its question shown
 STRING_MAX = 4096           # a string argument with no maxLength of its own
 ARRAY_MAX = 32              # an array argument's items, with no maxItems of its own
-BRIEF_MAX = 1500            # characters of tool lines a brief carries
+BRIEF_MAX = 1500            # characters of tool lines a brief carries (do's; the line's is line_block, budgeted)
+PURPOSE_WORDS = 10          # words of a description's first sentence a purpose keeps
+VALUE_MAX = 80              # characters of one value, or of its label, the values file keeps
+VALUES_MAX = 48             # values one argument keeps: past it, none (the person's words name one)
+ENUM_INLINE = 4             # a choice list this long rides inline, KEY=a|b; a longer one rides as values
+CHILDREN_MAX = 8            # rows resources read below a server's own, at most, for its values
 SHOW_MAX = 300              # characters of a server's error or refusal shown
 
 USAGE = """spark mcp -- the MCP servers spark may start, and their tools
@@ -428,12 +443,13 @@ class Tool:
     title, the input schema, and what its annotations mean here (`hints`,
     as said; `read_only` and `destructive`, the spec's defaults where it
     says nothing)."""
-    __slots__ = ("server", "name", "title", "schema", "read_only", "destructive", "trusted", "weak")
+    __slots__ = ("server", "name", "title", "schema", "read_only", "destructive", "trusted", "weak", "purpose")
 
-    def __init__(self, server, name, title, schema, read_only, destructive, trusted):
+    def __init__(self, server, name, title, schema, read_only, destructive, trusted, purpose=""):
         self.server, self.name, self.title, self.schema = server, name, title, schema
         self.read_only, self.destructive, self.trusted = read_only, destructive, trusted
         self.weak = ""      # why its flags are not believed, when the pin says they weakened
+        self.purpose = purpose      # its description's first words (purpose()), never the description
 
     def needs_yes(self):
         """The typed yes: every tool of a server not trusted; a trusted
@@ -498,7 +514,22 @@ def tool_of(server, d, trusted):
         return None
     read_only = ann.get("readOnlyHint") is True                 # the spec's default: false
     destructive = not read_only and ann.get("destructiveHint") is not False   # the spec's default: true
-    return Tool(server, name, title, schema, read_only, destructive, trusted)
+    return Tool(server, name, title, schema, read_only, destructive, trusted, purpose(d.get("description")))
+
+
+def purpose(desc):
+    """A tool's purpose as the line carries it: the first sentence of its
+    description, scrubbed, its parentheses out, PURPOSE_WORDS words at
+    most -- '' when it is no string or not PURPOSE's shape. The rest of
+    the description never rides."""
+    if not isinstance(desc, str):
+        return ""
+    s = " ".join(scrub(desc[:2000]).split())
+    first = re.split(r"(?<=[.;!?])\s", s, maxsplit=1)[0].rstrip(".;!?")
+    first = re.sub(r"\s*\([^)]*\)", "", first)
+    words = first.split()
+    out = " ".join(words[:PURPOSE_WORDS]) + (" ..." if len(words) > PURPOSE_WORDS else "")
+    return out if PURPOSE.match(out) else ""
 
 
 class Server:
@@ -973,6 +1004,124 @@ def rows_gate(tool, args, rows):
     return "%s names nothing %s lists now" % (tool.name, tool.server), []
 
 
+# ------------------------------------------------------- the line's values
+# A value a row names is written for the line only when it is a name a
+# person says. Digits alone (a window's number, a level), a run of 16
+# hex digits (a receipt) and a uuid are a state or an id: they change
+# while the values file stands, so they never ride. A named line each.
+VOLATILE = (
+    re.compile(r"^[0-9]+$"),                 # a number: an id or a level, never a name
+    re.compile(r"[0-9a-fA-F]{16}"),          # an id or a receipt: a hash, a token
+    re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"),   # a uuid: a reminder's, an event's
+)
+
+
+def _value_text(v):
+    """A string value fit for the values file: scrubbed, one line,
+    VALUE_MAX at most, else ''."""
+    if not isinstance(v, str):
+        return ""
+    v = " ".join(scrub(v).split())
+    return v if 0 < len(v) <= VALUE_MAX else ""
+
+
+def _label(row):
+    """What a row says its value is: its group (a palette's dark or
+    light, a wallpaper's drawings). Never its words, which say what its
+    call does ("remove NAME") or the state ("NAME · idle"), and never its
+    sign: that is the state too."""
+    g = row.get("group")
+    return _value_text(g) if isinstance(g, str) else ""
+
+
+def server_values(srv, tools):
+    """{(tool, arg): [(value, label)]} for the required arguments of
+    `tools`, from what the server says of itself: a choice list longer
+    than ENUM_INLINE in its schema, and the calls its rows resource
+    names, with its rows' children below that resource's own URI
+    (CHILDREN_MAX at most, one level). A schema's choices are the whole
+    list (none past ENUM_INLINE: they ride inline). A row's group labels
+    the value of a call of one argument (_label). resources/list and resources/read
+    alone, never tools/call. A read that fails ends the reading and keeps
+    what was read. A credential and an argument a row asks for are never
+    a value, nor is any of a call that asks for a credential (a network
+    around, not saved), nor a VOLATILE one. An argument past VALUES_MAX
+    values keeps none."""
+    want, closed = {}, set()
+    for t in tools:
+        props = t.schema.get("properties") or {}
+        for k in required(t.schema):
+            p = props.get(k)
+            if not isinstance(p, dict) or secret(k, p):
+                continue
+            want[(t.name, k)] = {}
+            enum = p.get("enum") if isinstance(p.get("enum"), list) else []
+            if enum:
+                # the schema's choices are the values: a short list rides
+                # inline (KEY=a|b), a longer one here, the rows' words
+                # labelling them and never adding to them
+                closed.add((t.name, k))
+                if len(enum) <= ENUM_INLINE:
+                    del want[(t.name, k)]
+                    continue
+            for v in enum:
+                v = _value_text(v)
+                if v:
+                    want[(t.name, k)].setdefault(v, "")
+
+    def take(d):
+        rows = d.get("rows") if isinstance(d, dict) and isinstance(d.get("rows"), list) else []
+        kids = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if isinstance(row.get("children"), str):
+                kids.append(row["children"])
+            more = row.get("more") if isinstance(row.get("more"), list) else []
+            for c in [row.get("tool")] + more:
+                if not (isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("arguments"), dict)):
+                    continue
+                ask = c.get("ask") if isinstance(c.get("ask"), list) else []
+                if any(secret(a) for a in ask):
+                    # a call that still asks for a credential reaches a place
+                    # this machine holds none for, a network around and not
+                    # saved: a neighbor's name, so none of its values rides
+                    continue
+                for k, v in c["arguments"].items():
+                    got = want.get((c["name"], k))
+                    v = _value_text(v)
+                    if got is None or k in ask or not v or any(r.search(v) for r in VOLATILE):
+                        continue
+                    if (c["name"], k) in closed and v not in got:
+                        continue
+                    # a row's group labels the value of a call of one
+                    # argument alone
+                    lab = _label(row) if len(c["arguments"]) == 1 else ""
+                    if not got.get(v):
+                        got[v] = lab
+        return kids
+    if want:
+        try:
+            base = [uri for uri, name, _title in srv.resources() if name == "rows"]
+            todo, seen, kids = [(u, 0) for u in base], set(), 0
+            while todo:
+                uri, depth = todo.pop(0)
+                if uri in seen or (depth and kids >= CHILDREN_MAX):
+                    continue
+                seen.add(uri)
+                kids += depth
+                try:
+                    d = json.loads(srv.read(uri))
+                except (ValueError, RecursionError):
+                    continue
+                for k in take(d):
+                    if not depth and any(k.startswith(b + "/") for b in base):
+                        todo.append((k, 1))
+        except Refused:
+            pass
+    return {key: list(got.items()) for key, got in want.items() if 0 < len(got) <= VALUES_MAX}
+
+
 def words_args(tool, words):
     """KEY=VALUE words as the tool's arguments, each value typed by its
     schema: a number, yes|no, a comma list, else text. ValueError says
@@ -1206,31 +1355,51 @@ def tool_line(t):
     """One line of TOOLS_FILE: server, tool, flags (r reads only, y asks
     the typed yes), the required arguments as KEY=KIND, the title."""
     flags = ("t" if t.trusted else "") + ("r" if t.read_only and t.trusted else "") + ("y" if t.needs_yes() else "")
-    req = " ".join("%s=%s" % (k, kd) for k, kd, r in t.args() if r)
-    return "\t".join((t.server, t.name, flags or "-", req or "-", t.title or "-"))
+    # a choice list longer than a line keeps (a desktop's palettes) is
+    # TEXT on disk, so tool_lines keeps the tool; its words ride as the
+    # argument's values (VALUES_FILE). Before v1.113 the tool was dropped
+    req = ["%s=%s" % (k, kd) if _ARG.match("%s=%s" % (k, kd)) else "%s=TEXT" % k for k, kd, r in t.args() if r]
+    if len(" ".join(req)) > 200:
+        req = [a if "|" not in a or a.endswith("=yes|no") else a.split("=", 1)[0] + "=TEXT" for a in req]
+    return "\t".join((t.server, t.name, flags or "-", " ".join(req) or "-", t.title or "-"))
+
+
+def value_lines(t, vals):
+    """The VALUES_FILE lines of one listed tool of a trusted server: its
+    purpose, `server<TAB>tool<TAB>.<TAB>purpose`, then each value of its
+    arguments, `server<TAB>tool<TAB>arg<TAB>value<TAB>label` (label -
+    when the row said none). A server not trusted writes none."""
+    if not t.trusted:
+        return []
+    out = ["\t".join((t.server, t.name, ".", t.purpose))] if t.purpose else []
+    for (tool, k), got in vals.items():
+        if tool == t.name:
+            out += ["\t".join((t.server, t.name, k, v, lab or "-")) for v, lab in got]
+    return out
 
 
 _ARG = re.compile(r"^[a-z][a-z0-9_]{0,31}=(?:N|TEXT|yes\|no|A,B|[A-Za-z0-9_.|-]{1,120})$")
 _LINE = re.compile(r"^([a-z][a-z0-9_]{0,31})\t([a-z][a-z0-9_]{0,63})\t(t?r?y?|-)\t([^\t]{1,200})\t([^\t]{1,80})$")
 
 
-def tool_lines(path=None):
+def tool_lines(path=None, on_list=True):
     """[(server, tool, flags, args, title)] from TOOLS_FILE, read line by
-    line, never sourced: a line of another shape is dropped, and so is a
-    server no longer on the list."""
+    line, never sourced: a line of another shape is dropped (a stamp line
+    among them), and so is a server no longer on the list. on_list False
+    keeps every server: the bench's file names no server of this machine."""
     try:
         with open(path or TOOLS_FILE, encoding="utf-8", errors="replace") as f:
             raw = f.read(64 * 1024).splitlines()
     except OSError:
         return []
     try:
-        on = {s.name for s in specs() if not s.problem}
+        on = {s.name for s in specs() if not s.problem} if on_list else None
     except (SystemExit, Refused):
         return []
     out = []
     for line in raw:
         m = _LINE.match(line)
-        if not m or m.group(1) not in on:
+        if not m or (on is not None and m.group(1) not in on):
             continue
         server, tool, flags, args, title = m.groups()
         if title != "-" and not TITLE.match(title):
@@ -1253,11 +1422,162 @@ def write_tools(lines):
     os.replace(tmp, TOOLS_FILE)
 
 
+_PURPOSE_LINE = re.compile(r"^([a-z][a-z0-9_]{0,31})\t([a-z][a-z0-9_]{0,63})\t\.\t([^\t]{1,100})$")
+_VALUE_LINE = re.compile(r"^([a-z][a-z0-9_]{0,31})\t([a-z][a-z0-9_]{0,63})\t([a-z][a-z0-9_]{0,31})"
+                         r"\t([^\t]{1,%d})\t([^\t]{1,%d})$" % (VALUE_MAX, VALUE_MAX))
+
+
+def tool_values(path=None, on_list=True):
+    """({(server, tool): purpose}, {(server, tool, arg): [(value, label)]})
+    from VALUES_FILE, read line by line, never sourced: a line of another
+    shape, or whose text is not printable as it stands, is dropped, and
+    so is a server no longer on the list (on_list False keeps them, as
+    tool_lines does)."""
+    purposes, values = {}, {}
+    try:
+        with open(path or VALUES_FILE, encoding="utf-8", errors="replace") as f:
+            raw = f.read(256 * 1024).splitlines()
+    except OSError:
+        return purposes, values
+    try:
+        on = {s.name for s in specs() if not s.problem} if on_list else None
+    except (SystemExit, Refused):
+        return {}, {}
+    for line in raw:
+        m = _PURPOSE_LINE.match(line)
+        if m and (on is None or m.group(1) in on) and PURPOSE.match(m.group(3)):
+            purposes[(m.group(1), m.group(2))] = m.group(3)
+            continue
+        m = _VALUE_LINE.match(line)
+        if not m or (on is not None and m.group(1) not in on):
+            continue
+        server, tool, arg, v, lab = m.groups()
+        if scrub(v) != v or scrub(lab) != lab:
+            continue
+        values.setdefault((server, tool, arg), []).append((v, "" if lab == "-" else lab))
+    return purposes, values
+
+
+def write_values(lines):
+    """VALUES_FILE written whole, 0600, through a temp file renamed."""
+    from . import state_dir
+    state_dir()
+    tmp = VALUES_FILE + ".tmp"
+    fd = vault.open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        for line in lines:
+            f.write(line + "\n")
+    os.replace(tmp, VALUES_FILE)
+
+
+# A stamp line follows a server's tools: what the server was when they
+# were listed, its program's sha256, its words and its trust, hashed. Its
+# shape is no tool line's, so tool_lines drops it, and it starts with the
+# server's name, so _merge_tools replaces it with the tools. A server's
+# program that changes (a desktop updated, more tools) makes it stale.
+_STAMP = re.compile(r"^([a-z][a-z0-9_]{0,31})\t#\t([0-9a-f]{16})$")
+
+
+def stamp(sp, shas=None):
+    """One server's stamp as it is now, '' when its program cannot be
+    read. `shas` caches a program's sha256 over one pass of the list."""
+    shas = {} if shas is None else shas
+    prog = sp.argv[0] if sp.argv else ""
+    if prog not in shas:
+        shas[prog] = program_sha(prog) if prog else ""
+    if not shas[prog]:
+        return ""
+    words = [shas[prog]] + list(sp.argv) + ["t" if sp.trusted else "-"]
+    return hashlib.sha256("\0".join(words).encode()).hexdigest()[:16]
+
+
+def stamp_lines(sp):
+    s = stamp(sp)
+    return ["%s\t#\t%s" % (sp.name, s)] if s else []
+
+
+def stale(all_specs=None):
+    """[Spec] on the list whose tools were listed before the server last
+    changed: no stamp line for it in TOOLS_FILE, or not its stamp now. A
+    server spark would refuse to start is never stale: nothing lists it."""
+    try:
+        all_specs = specs() if all_specs is None else all_specs
+    except (SystemExit, Refused):
+        return []
+    seen = {}
+    try:
+        with open(TOOLS_FILE, encoding="utf-8", errors="replace") as f:
+            for line in f.read(64 * 1024).splitlines():
+                m = _STAMP.match(line)
+                if m:
+                    seen[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    shas = {}
+    return [sp for sp in all_specs if not sp.problem and seen.get(sp.name, "") != stamp(sp, shas)]
+
+
+def refresh(old=None, deadline=5.0):
+    """Each server stale() names listed again, one at a time, until
+    `deadline` seconds have passed: its lines in TOOLS_FILE replaced, its
+    stamp with them, and its purposes in VALUES_FILE. The timer runs it,
+    outside the person's session, where a desktop's provider may see no
+    screen: an argument whose values come back none keeps the ones a
+    listing in the session wrote. The rest wait for the next run. The
+    names listed."""
+    end = time.monotonic() + deadline
+    done = []
+    for sp in (stale() if old is None else old):
+        if time.monotonic() >= end:
+            break
+        _lines, tl, vl = _list_one(sp, False)
+        _merge_tools(sp.name, tl)
+        _merge_values(sp.name, vl, keep=True)
+        done.append(sp.name)
+    return done
+
+
+_BENCH_SAID = []
+
+
+def _bench_dir():
+    """The directory SPARK_LINE_BENCH_MCP names, under SPARK_LINE_BENCH=1
+    alone: a desktop's mcp-tools and mcp-values, carried by a measured
+    run in place of this machine's. Said on stderr, once. '' when unset."""
+    d = os.environ.get("SPARK_LINE_BENCH_MCP", "")
+    if d and not _BENCH_SAID:
+        _BENCH_SAID.append(d)
+        sys.stderr.write("spark: SPARK_LINE_BENCH_MCP=%s -- a measuring seam: the line carries that "
+                         "desktop's tools, not this machine's\n" % d)
+    return d
+
+
+def listed():
+    """The tool lines the prompt line reads: TOOLS_FILE's. Under
+    SPARK_LINE_BENCH=1 the bench's own (_bench_dir), every server in it,
+    or none when it names none: a measured run carries the tools it
+    measures, never this machine's."""
+    if os.environ.get("SPARK_LINE_BENCH") != "1":
+        return tool_lines()
+    d = _bench_dir()
+    return tool_lines(os.path.join(d, "mcp-tools"), on_list=False) if d else []
+
+
+def listed_values():
+    """tool_values() as the line reads it, the bench's under its seam."""
+    if os.environ.get("SPARK_LINE_BENCH") != "1":
+        return tool_values()
+    d = _bench_dir()
+    return tool_values(os.path.join(d, "mcp-values"), on_list=False) if d else ({}, {})
+
+
 def brief_tools():
-    """The tool lines a shell brief carries (persona.prefix): '' when no
-    tool is listed, or under SPARK_LINE_BENCH (a measured run grounds in
-    its own snapshot). Names, the required arguments and the titles --
-    never a description -- BRIEF_MAX characters at most, whole lines."""
+    """The tool lines a shell brief carries (persona.prefix, spark do's
+    and the answer's): '' when no tool is listed, or under
+    SPARK_LINE_BENCH (a measured run grounds in its own snapshot). Names,
+    the required arguments and the titles -- never a description --
+    BRIEF_MAX characters at most, whole lines. The prompt line carries
+    line_block instead."""
     if os.environ.get("SPARK_LINE_BENCH") == "1":
         return ""
     lines = tool_lines()
@@ -1276,6 +1596,135 @@ def brief_tools():
             "KEY=VALUE for each argument: " + "; ".join(parts) + ".")
 
 
+# The prompt line's tool block (#166): every listed tool, one server a
+# line, with its arguments, its purpose and its values. The head says how
+# a step is written; a lower level says less, for a small slot
+# (persona.line_budget cuts the values first, then the purposes).
+BLOCK_HEAD = ("MCP tools on this machine: a step that one of them does is a spark mcp call line, spark mcp "
+              "call SERVER TOOL KEY=VALUE for each argument (quote a value with spaces). One server a line: "
+              "each tool with its arguments")
+BLOCK_HEADS = (BLOCK_HEAD + " and its purpose, then the values its arguments take, with what each one is.",
+               BLOCK_HEAD + " and its purpose.",
+               BLOCK_HEAD + ".")
+
+
+def _arg_form(a):
+    """One required argument as the block writes it: KEY=KEY for text and
+    for a choice list too long to ride inline (its words are its
+    values), else as the tools file holds it (KEY=N, KEY=yes|no, KEY=a|b)."""
+    k, _eq, kd = a.partition("=")
+    if kd == "TEXT" or (kd != "yes|no" and kd.count("|") >= ENUM_INLINE):
+        return "%s=%s" % (k, k.upper())
+    return a
+
+
+def _said_values(sv):
+    """One server's values as the block says them, from [((tool, arg),
+    [(value, label)])]: the lists of one argument name that share a value
+    are one list (a device the tools connect, disconnect and remove), and
+    lists of two names that hold the same values are one (screen/other).
+    A list keeps its name where it is the name's only one, else `tool
+    arg`. Labels say something only where a list holds two or more
+    (dark and light): else they are left out."""
+    groups = []                              # [[names {arg}, tools [(tool, arg)], {value: label}]]
+    for key, got in sv:
+        tool, k = key
+        new = [{k}, [key], {}]
+        for v, lab in got:
+            new[2].setdefault(v, lab)
+        for g in [g for g in groups if k in g[0] and set(g[2]) & set(new[2])]:
+            groups.remove(g)
+            new[1] = g[1] + new[1]
+            new[2] = dict(g[2], **{v: lab or g[2].get(v, "") for v, lab in new[2].items()})
+        groups.append(new)
+    merged = []
+    for g in sorted(groups, key=lambda g: sv.index(next(x for x in sv if x[0] == g[1][0]))):
+        twin = next((m for m in merged if set(m[2]) == set(g[2])), None)
+        if twin is not None:
+            twin[0] |= g[0]
+            twin[1] += g[1]
+        else:
+            merged.append(g)
+    order = {}                               # each tool and value where it first came
+    for i, (key, got) in enumerate(sv):
+        order.setdefault(key, i)
+        for j, (v, _l) in enumerate(got):
+            order.setdefault(("=", v), (i, j))
+    said = []
+    for names, keys, vals in merged:
+        keys = sorted(keys, key=order.get)
+        vals = {v: vals[v] for v in sorted(vals, key=lambda v: order[("=", v)])}
+        alone = all(sum(1 for m in merged if n in m[0]) == 1 for n in names)
+        key = "/".join(sorted(names)) if alone else "%s %s" % ("/".join(dict.fromkeys(t for t, _k in keys)),
+                                                               "/".join(sorted(names)))
+        plain = len(set(vals.values()) - {""}) < 2
+        said.append("%s: %s" % (key, ", ".join(v if plain or not lab else "%s (%s)" % (v, lab) for v, lab in vals.items())))
+    return said
+
+
+def line_block(level=0, cap=0):
+    """The prompt line's tool block, from listed() and listed_values():
+    every tool, one server a line, each with its required arguments
+    (_arg_form); from a trusted server its purpose (its title when it
+    gave none) and, after its tools, the values its arguments take,
+    labelled as its rows group them (_said_values). `level` 1 leaves the
+    values out, 2 the purposes too. `cap` > 0: a server's line that would
+    pass that many characters is left out. '' with no tool listed. Never
+    a description, a credential or a state."""
+    lines = listed()
+    if not lines:
+        return ""
+    purposes, values = listed_values() if level < 2 else ({}, {})
+    groups, vals = {}, {}
+    for server, tool, flags, args, title in lines:
+        trusted = "t" in flags
+        call = " ".join([tool] + [_arg_form(a) for a in args.split(" ")]) if args else tool
+        why = (purposes.get((server, tool)) or title) if trusted and level < 2 else ""
+        groups.setdefault(server, []).append(call + (" (%s)" % why if why else ""))
+        if trusted and level < 1:
+            for a in args.split(" ") if args else []:
+                k = a.split("=", 1)[0]
+                got = values.get((server, tool, k))
+                if got:
+                    vals.setdefault(server, []).append(((tool, k), got))
+    out = [BLOCK_HEADS[level]]
+    used = len(out[0])
+    for server, calls in groups.items():
+        line = "%s: %s." % (server, "; ".join(calls))
+        if vals.get(server):
+            line += " Values -- " + "; ".join(_said_values(vals[server])) + "."
+        if cap and used + 1 + len(line) > cap:
+            continue
+        out.append(line)
+        used += 1 + len(line)
+    return "\n".join(out)
+
+
+def as_call(command, verbs=None):
+    """`command` as a spark mcp call line when its first word is the exact
+    name of a tool listed() gives, of one server alone, and no program
+    here answers to that word: `out_mute` becomes `spark mcp call out
+    out_mute`, the words after it kept as they came. With `verbs`, the
+    words spark takes first, so does `spark out_mute` where that word is
+    none of them. Anything else comes back as it was. The prompt line
+    rewrites before its judge and its danger checks, so both read the
+    call (#166)."""
+    import shutil
+    c = (command or "").strip()
+    w = c.split(None, 1)
+    if len(w) == 2 and w[0] == "spark":
+        tail = w[1].split(None, 1)
+        if verbs is None or not TOOL_NAME.match(tail[0]) or tail[0] in verbs:
+            return command
+        c, w = w[1], tail
+    elif not w or not TOOL_NAME.match(w[0]) or shutil.which(w[0]):
+        return command
+    servers = {srv for srv, t, _f, _a, _ti in listed() if t == w[0]}
+    if len(servers) != 1:
+        return command
+    return "spark mcp call %s %s" % (servers.pop(), c)
+
+
 # a call line wrapped in a shell word that runs the next word -- `timeout 5`,
 # `command`, `nice`, `env K=V`, `nohup`, `time`, `exec` -- is the same line
 CALL_WORDS = re.compile(r"(?:^|[;&|(`{\n]\s*|\b(?:then|do|else|exec|nohup|time|command)\s+"
@@ -1285,11 +1734,12 @@ CALL_WORDS = re.compile(r"(?:^|[;&|(`{\n]\s*|\b(?:then|do|else|exec|nohup|time|c
 
 def line_danger(command):
     """True when a line runs a tool that asks the typed yes, by the tools
-    `spark mcp` last listed -- or a tool it has not listed at all."""
+    `spark mcp` last listed (the bench's, under its seam) -- or a tool it
+    has not listed at all."""
     hits = CALL_WORDS.findall(command or "")
     if not hits:
         return False
-    flags = {(s, t): f for s, t, f, _a, _ti in tool_lines()}
+    flags = {(s, t): f for s, t, f, _a, _ti in listed()}
     return any("y" in flags.get(h, "y") for h in hits)
 
 
@@ -1318,18 +1768,22 @@ def _refuse(why, rc=2):
 
 
 def _list_one(sp, verbose):
-    """The lines for one server, and its tool lines for TOOLS_FILE."""
+    """The lines for one server, its tool lines for TOOLS_FILE, its stamp
+    line last, and its lines for VALUES_FILE (a trusted server's alone).
+    A server that would not list is stamped too, so a broken one is not
+    started again until it changes."""
     head = "%-10s %-12s %s" % (sp.name, "trusted" if sp.trusted else "not trusted", home_short(" ".join(sp.argv)))
     if verbose:
         head += "\n  %s" % sp.why
     if sp.problem:
-        return [head, "  ! %s" % sp.problem], []
+        return [head, "  ! %s" % sp.problem], [], []
     try:
         with Server(sp).initialize() as srv:
             tools, dropped = srv.tools()
             res = srv.resources() if verbose else []
+            vals = server_values(srv, tools) if sp.trusted else {}
     except Refused as e:
-        return [head, "  ! %s" % e.hint], []
+        return [head, "  ! %s" % e.hint], stamp_lines(sp), []
     lines = [head]
     for t in tools:
         req = " ".join("%s=%s" % (k, kd) for k, kd, r in t.args() if r)
@@ -1342,7 +1796,7 @@ def _list_one(sp, verbose):
                      % (dropped, "" if dropped == 1 else "s"))
     for uri, name, title in res:
         lines.append(("  resource %-21s %s" % (uri, title or name)).rstrip())
-    return lines, [tool_line(t) for t in tools]
+    return lines, [tool_line(t) for t in tools] + stamp_lines(sp), [v for t in tools for v in value_lines(t, vals)]
 
 
 def cmd_list(name=None):
@@ -1352,20 +1806,24 @@ def cmd_list(name=None):
             sp = spec(name)
         except Refused as e:
             return _refuse(e.hint)
-        lines, tl = _list_one(sp, True)
+        lines, tl, vl = _list_one(sp, True)
         _merge_tools(sp.name, tl)
+        _merge_values(sp.name, vl)
         page("\n".join(lines))
         return 0
     if not all_specs:
         say("mcp      no server on the list -- spark mcp add NAME PATH [WORDS]")
         write_tools([])
+        write_values([])
         return 0
-    out, tl = [], []
+    out, tl, vl = [], [], []
     for sp in all_specs:
-        lines, t = _list_one(sp, False)
+        lines, t, v = _list_one(sp, False)
         out.extend(lines)
         tl.extend(t)
+        vl.extend(v)
     write_tools(tl)
+    write_values(vl)
     page("\n".join(out))
     return 0
 
@@ -1382,6 +1840,31 @@ def _merge_tools(server, lines):
         write_tools(others + list(lines))
     except OSError:
         log_exc("mcp tools file")
+
+
+def _merge_values(server, lines, keep=False):
+    """VALUES_FILE with `server`'s lines replaced by `lines`. `keep` (the
+    timer's refresh): an argument of a tool still listed (in TOOLS_FILE
+    now) that the new lines give no value keeps its old ones."""
+    mine, others = [], []
+    try:
+        with open(VALUES_FILE, encoding="utf-8", errors="replace") as f:
+            for l in f:
+                (mine if l.startswith(server + "\t") else others).append(l.rstrip("\n"))
+    except OSError:
+        pass
+    lines = list(lines)
+    if keep:
+        have = {tuple(l.split("\t")[1:3]) for l in lines}
+        tools = {t for srv, t, _f, _a, _ti in tool_lines() if srv == server}
+        for l in mine:
+            p = l.split("\t")
+            if len(p) == 5 and p[1] in tools and (p[1], p[2]) not in have:
+                lines.append(l)
+    try:
+        write_values(others + lines)
+    except OSError:
+        log_exc("mcp values file")
 
 
 def _key(name):
@@ -1428,8 +1911,9 @@ def cmd_add(words):
         return _refuse("%s is on the list already -- spark mcp rm %s first" % (name, name))
     _write(**{_key(name): '"%s"' % " ".join(argv)})
     sp = spec(name)
-    lines, tl = _list_one(sp, False)
+    lines, tl, vl = _list_one(sp, False)
     _merge_tools(name, tl)
+    _merge_values(name, vl)
     say("* %s is on the list, %s" % (name, sp.why))
     page("\n".join(lines))
     return 0
@@ -1444,6 +1928,7 @@ def cmd_rm(words):
         return _refuse(e.hint)
     _write(**{_key(words[0]): None, _key(words[0]) + TRUST_SUFFIX: None})
     _merge_tools(words[0], [])
+    _merge_values(words[0], [])
     say("* %s is off the list" % words[0])
     return 0
 
@@ -1474,8 +1959,9 @@ def cmd_trust(words):
             return 1
         _write(**{_key(sp.name) + TRUST_SUFFIX: "yes", _key(sp.name) + PIN_SUFFIX: pin_value(program_sha(sp.argv[0]), tools)})
     sp = spec(words[0])
-    lines, tl = _list_one(sp, False)
+    lines, tl, vl = _list_one(sp, False)
     _merge_tools(sp.name, tl)
+    _merge_values(sp.name, vl)
     say("* %s is %s" % (sp.name, sp.why))
     return 0
 

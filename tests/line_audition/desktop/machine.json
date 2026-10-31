@@ -1,0 +1,9 @@
+{
+ "about": "The line audition's desktop machine: what the prompt line reads of a Void desktop in place of the machine the audition runs on, with made-up names. apps, folders, services and network are the picture's system part (SPARK_LINE_BENCH_MACHINE). programs are on the run's PATH beside the void snapshot's tools, and absent are taken off it: a desktop's own, and what its cases say is not installed. The grader takes programs for installed, their options unchecked.",
+ "apps": [["aerc", "pm"], ["btop", "pm"], ["firefox", "pm"], ["foot", "pm"], ["micro", "pm"], ["mpv", "pm"], ["pyradio", "pm"]],
+ "folders": ["documents", "downloads", "music", "notes", "pictures", "projects", "videos"],
+ "services": ["acpid", "bluetoothd", "chronyd", "cupsd", "dbus", "dhcpcd", "greetd", "seatd", "socklog-unix", "sshd", "udevd", "wpa_supplicant"],
+ "network": [["enp2s0", "wired"], ["wlp3s0", "wifi"]],
+ "programs": ["aerc", "bluetoothctl", "btop", "firefox", "foot", "gio", "grim", "lpstat", "micro", "mpv", "notify-send", "pyradio", "slurp", "spark-shell", "swaymsg", "tmux", "udisksctl", "wl-copy", "wl-paste", "wpa_cli", "wpctl"],
+ "absent": ["htop", "rg", "wget"]
+}

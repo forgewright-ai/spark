@@ -400,7 +400,9 @@ def main():
         argv = json.load(open(home + "/spawned.json"))
         ok("--api-key-file" in argv and tok in argv and "--api-key" not in argv, "server got --api-key-file, never the value", argv)
         ok("--no-webui" in argv and "--no-slots" in argv and "--host" in argv and "0.0.0.0" not in argv, "no webui, no slots, one address", argv)
-        ok("--cache-ram" in argv and argv[argv.index("--cache-ram") + 1] == "0", "no prompt cache in RAM (--cache-ram 0)", argv)
+        cram = argv[argv.index("--cache-ram") + 1] if "--cache-ram" in argv else None
+        ok(cram in ("0", "2048") and ("--swa-full" in argv) == (cram != "0"),
+           "a prompt cache in RAM by the machine's memory: --cache-ram 0, or 2048 with --swa-full", argv)
         ok(get(furl + "/api/health") == 200 and os.path.isfile(state + "/forge.pid"),
            "serve on starts the page too, beside the engine", out + err)
         ok(kept() == "SPARK_SERVICE=auto SPARK_FORGE=on", "serve on keeps both: SPARK_SERVICE=auto and SPARK_FORGE=on", kept())
@@ -527,6 +529,9 @@ def main():
         ok("reasoning-budget = 0" in spark_sec, "spark preset: a thinking budget of 0", ini)
         ok("reasoning" not in ember_sec and "ctx-size = 8192" in ember_sec, "ember preset: no reasoning line, SPARK_CTX", ini)
         ok("cache-ram = 0" in spark_sec and "cache-ram = 0" in ember_sec, "both presets: no prompt cache in RAM", ini)
+        argv = json.load(open(home + "/spawned.json"))
+        ok(argv[argv.index("--cache-ram") + 1] == "0" and "--swa-full" not in argv,
+           "the router keeps no prompt in RAM: the memory is the second model's", argv)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=renv)
         ok(rc == 0 and out.strip() == furl + "\tQwen_Qwen3.5-2B-Q4_K_M\tforge", "brain names the spark role's file stem", out)
         rc, out, err = spark("serve", "off", extra=renv)
@@ -545,6 +550,16 @@ def main():
            "single form serves the first in the list that fits", argv)
         ok("--alias" in argv and argv[argv.index("--alias") + 1] == "spark,google_gemma-4-E4B-it-Q4_K_M", "aliased spark + file stem", argv)
         ok(not os.path.lexists(router + "/ember.gguf"), "stale ember link removed")
+        ok(argv[argv.index("--cache-ram") + 1] == "0" and "--swa-full" not in argv,
+           "one model under 24 GB: no prompt cache in RAM (--cache-ram 0, no --swa-full)", argv)
+        spark("serve", "off", extra=nenv)
+        bigenv = dict(nenv, SPARK_MEM_TOTAL_GB="32")
+        rc, out, err = spark("serve", "on", extra=bigenv)
+        argv = json.load(open(home + "/spawned.json"))
+        ok(rc == 0 and argv[argv.index("--cache-ram") + 1] == "2048" and "--swa-full" in argv,
+           "one model on 32 GB: a 2 GiB prompt cache in RAM and the whole sliding window (#166)", argv)
+        spark("serve", "off", extra=bigenv)
+        rc, out, err = spark("serve", "on", extra=nenv)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=nenv)
         ok(rc == 0 and out.strip() == furl + "\tgoogle_gemma-4-E4B-it-Q4_K_M\tforge", "brain still names the file stem", out)
         spark("serve", "off", extra=nenv)

@@ -305,6 +305,18 @@ answers. `selftest` fails when one is reworded, added or dropped.
 `run --split dev` leaves them out, `--split held` runs them
 alone, and the report prints their score on a line of its own.
 
+The `desktop` group holds 227 wants of a desktop, asked as Void with
+the desktop fixture, `tests/line_audition/desktop`. Its `mcp-tools`
+and `mcp-values` are a desktop's MCP tools, their purposes and values,
+as `spark mcp` writes them, with made-up names. Its `machine.json` is
+the machine picture's system part, and the programs the run's PATH
+holds beside Void's snapshot. 75 of the wants are held out, kept the
+same way and hashed apart. A want names the `spark mcp call` it must
+make (`tool`), and `also` the other targets as right as its own. They
+come from a set made for #166, its items with no private data alone.
+The report gives them two lines of their own, and the bar never
+reads them.
+
 `run --os OS --model NAME` sends each case through the real `spark
 line`. The OS comes from spark's own seams, so one Linux speaks as
 another family too. macOS runs on a Mac.
@@ -362,7 +374,7 @@ The production bar, before a release tag that changes the line:
 - flag honesty 100 %: every painted option is in its manual, or the
   hint names it
 
-A run sets 3 seams, honoured only with `SPARK_LINE_BENCH=1` and never
+A run sets 5 seams, honoured only with `SPARK_LINE_BENCH=1` and never
 on a person's line. `SPARK_LINE_KNOW` is the arm.
 `SPARK_KNOWLEDGE_SNAPSHOT=FILE` is the store the line grounds and judges
 in: that OS's snapshot, so a Void machine grounds a debian question in
@@ -371,8 +383,13 @@ snapshot lacks is not installed there, and the line's judge says so as
 it does on a real machine. When it is set, `spark line` prints one
 line on stderr naming it, so it never passes silently. `run` warns
 when no turn did. `SPARK_LINE_BENCH_HISTORY=FILE` is a `??` pair's
-first turn, as the history a bench turn otherwise lacks. All 3 are for
-measuring only.
+first turn, as the history a bench turn otherwise lacks.
+`SPARK_LINE_BENCH_MACHINE=FILE` is the machine picture's system part.
+It is an empty one for an OS case and the fixture's for a desktop
+case, so the picture is never the machine's the audition runs on. A
+case's session is set too: a text console, or a foot terminal on sway.
+`SPARK_LINE_BENCH_MCP=DIR` is the desktop's tools and values. All 5
+are for measuring only.
 
 `tests/use_cases.py` is the use-case audition.
 `tests/use_cases/cases.json` holds 85 tasks people bring to spark, for

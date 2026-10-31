@@ -271,6 +271,19 @@ ASKING_AGAIN = "no answer came -- asking again"      # the hint row, while the s
 HINT_LOST = "the reply was cut before its hint -- read the command before Enter"
 
 
+def _called(command):
+    """A cmd reply's command whose first word is a listed MCP tool's exact
+    name, as the spark mcp call line it means (mcp.as_call): the line's
+    tool block lists tools by name, and a model writes `out_mute` alone,
+    or `spark out_mute` where the word is no verb of spark's tree.
+    Done where the command is read, before the judge and the danger
+    checks, so persona.tool_danger reads the call (#166)."""
+    if not isinstance(command, str) or not command.strip():
+        return command
+    from . import grounding, mcp
+    return mcp.as_call(command, grounding.spark_tree().verbs)
+
+
 def _nudged(messages):
     """The retry's messages: `messages` with LINE_RETRY_NUDGE on a line of
     its own after the last user message. A new list; nothing before that
@@ -328,6 +341,8 @@ def _line_ask(s, text, on_delta=None, context="", again=None):
         reply = json.loads(raw)
         if not isinstance(reply, dict):
             raise ValueError
+        if reply.get("kind") == "cmd" and isinstance(reply.get("command"), str):
+            reply["command"] = _called(reply["command"])
     except ValueError:
         if s.timings.get("finish") == "length":
             # the cap ended the JSON before it closed: said as chat_json
@@ -362,6 +377,8 @@ class _Fields:
 
     def _close(self, value, out):
         if self.key not in self.fields:
+            if self.key == "command" and self.fields.get("kind") == "cmd":
+                value = _called(value)
             self.fields[self.key] = value
             out.append((self.key, value))
         self.state, self.buf = "next", ""

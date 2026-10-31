@@ -384,9 +384,12 @@ spark mcp call notes add_note text=milk
   destroy less, `spark check` says so and the typed `yes` is back
   until you run `spark mcp trust NAME on` again.
 - The prompt line, `spark do` and `/do` in a chat know the tools
-  `spark mcp` listed last. A tool step is a `spark mcp call` line: you
-  read it before `Enter`, as any other step. Inside `--sandbox` a tool
-  step does not run, because a tool acts outside the copy.
+  `spark mcp` listed last. The prompt line knows every one, and from a
+  trusted server the values each takes, read from the server's own
+  list. A tool step is a `spark mcp call` line: you read it before
+  `Enter`, as any other step. Inside `--sandbox` a tool step does not
+  run, because a tool acts outside the copy. When a server's program
+  changes, `spark check` lists it again within five minutes.
 - `spark mcp read NAME` lists a server's resources, and `spark mcp read
   NAME URI --watch` shows one again each time it changes.
 - `spark mcp rm NAME` takes a server off the list.
@@ -396,10 +399,10 @@ spark mcp call notes add_note text=milk
 
 A server runs with no shell, in your home, with a short list of
 environment variables. It talks to spark over its stdin and stdout
-alone, never the network. A tool's description never goes to the model:
-only its name, its arguments and its title. Each call is a record in
-the audit trail, its names and a digest of its arguments: `spark serve
---audit`.
+alone, never the network. A tool's description never goes to the
+model, but for its first words from a trusted server: the tool's
+purpose on the prompt line. Each call is a record in the audit trail,
+its names and a digest of its arguments: `spark serve --audit`.
 
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`

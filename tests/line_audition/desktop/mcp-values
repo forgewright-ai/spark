@@ -1,0 +1,232 @@
+# what mcp.server_values reads from those providers (mcp.value_lines): each tool's purpose,
+# then the values of its arguments with their labels, from rows of the providers' own shape
+# with made-up names: no machine's devices, files or networks
+lan	lan_address	.	Set a fixed IPv4 address with prefix and gateway through ...
+lan	lan_auto	.	Use an automatic IPv4 address through the active native manager
+lan	lan_auto	device	enp2s0	-
+lan	lan_dns	.	Set IPv4 DNS servers, or auto for the native default
+lan	lan_dns	device	enp2s0	-
+lan	lan_dns	servers	auto	-
+lan	lan_restore	.	Restore the native IPv4 settings from a network undo receipt, ...
+wifi	wifi_connect	.	Connect to a network around, or a saved one
+wifi	wifi_connect	name	cafe-guest	-
+wifi	wifi_connect	name	lab-5g	-
+wifi	wifi_disconnect	.	Leave the network in use
+wifi	wifi_forget	.	Forget a saved network and its password
+wifi	wifi_address	.	Set a fixed IPv4 address with prefix and gateway through ...
+wifi	wifi_auto	.	Use an automatic IPv4 address through the active native manager
+wifi	wifi_auto	device	wlp3s0	-
+wifi	wifi_dns	.	Set IPv4 DNS servers, or auto for the native default
+wifi	wifi_dns	device	wlp3s0	-
+wifi	wifi_dns	servers	auto	-
+wifi	wifi_restore	.	Restore the native IPv4 settings from a network undo receipt, ...
+wifi	wifi_setup	.	Install and enable the native network manager only when none ...
+wifi	wifi_hidden	.	Join a hidden network by its exact name
+bt	bt_connect	.	Connect a paired device
+bt	bt_connect	name	Headphones	-
+bt	bt_disconnect	.	Disconnect a device
+bt	bt_disconnect	name	Soundbar	-
+bt	bt_pair	.	Pair a new device and connect it
+bt	bt_pair	name	Speaker	-
+bt	bt_remove	.	Remove a paired device and its saved trust
+bt	bt_remove	name	Headphones	-
+bt	bt_remove	name	Soundbar	-
+bt	bt_scan	.	Look for new devices nearby
+bt	bt_power	.	Turn Bluetooth on or off
+out	out_use	.	Play the sound on another output
+out	out_use	name	HD-Audio Generic Digital Stereo (HDMI)	-
+out	out_level	.	Set the volume, 0 to 100
+out	out_adjust	.	Change the volume by delta percentage points from its fresh ...
+out	out_mute	.	Mute the sound
+out	out_unmute	.	Unmute the sound
+mic	mic_use	.	Listen on another microphone
+mic	mic_level	.	Set the microphone level, 0 to 100
+mic	mic_adjust	.	Change the microphone level by delta percentage points from its ...
+mic	mic_mute	.	Mute the microphone
+mic	mic_unmute	.	Unmute the microphone
+clock	clock_format	.	Show a 12 or 24 hour clock on the bar, ...
+clock	clock_week	.	Start the Calendar week on Sunday or Monday
+clock	clock_zone	.	Change the machine time zone through its native settings
+theme	theme_palette	.	Use a palette everywhere, a saved theme, a look from ...
+theme	theme_palette	name	catppuccin-latte	light
+theme	theme_palette	name	catppuccin-mocha	dark
+theme	theme_palette	name	dracula	-
+theme	theme_palette	name	everforest-dark	dark
+theme	theme_palette	name	everforest-light	light
+theme	theme_palette	name	gruvbox-dark	dark
+theme	theme_palette	name	gruvbox-light	light
+theme	theme_palette	name	none	-
+theme	theme_palette	name	nord	dark
+theme	theme_palette	name	one-light	light
+theme	theme_palette	name	rose-pine	dark
+theme	theme_palette	name	rose-pine-dawn	light
+theme	theme_palette	name	selenized-dark	dark
+theme	theme_palette	name	selenized-light	light
+theme	theme_palette	name	solarized-light	light
+theme	theme_palette	name	tokyonight-day	light
+theme	theme_palette	name	tokyonight-night	dark
+theme	theme_save	.	Keep the look in use under a name: the palette, ...
+theme	theme_delete	.	Delete a saved theme
+theme	theme_back	.	The look before this one
+theme	theme_text	.	The text one size bigger or smaller, on every surface
+theme	theme_transparency	.	The windows more or less transparent
+theme	theme_alpha	.	How solid the windows are, 0 to 1
+theme	theme_wallpaper	.	The wallpaper: one of the drawings, or default
+theme	theme_wallpaper	name	arches	drawings
+theme	theme_wallpaper	name	contours	drawings
+theme	theme_wallpaper	name	embers	drawings
+theme	theme_wallpaper	name	fields	drawings
+theme	theme_wallpaper	name	fjord	drawings
+theme	theme_wallpaper	name	flight	drawings
+theme	theme_wallpaper	name	forest	drawings
+theme	theme_wallpaper	name	grove	drawings
+theme	theme_wallpaper	name	hills	drawings
+theme	theme_wallpaper	name	kites	drawings
+theme	theme_wallpaper	name	meadow	drawings
+theme	theme_wallpaper	name	morning	drawings
+theme	theme_wallpaper	name	ripples	drawings
+theme	theme_wallpaper	name	shore	drawings
+theme	theme_wallpaper	name	skyline	drawings
+theme	theme_wallpaper	name	sunset	drawings
+theme	theme_wallpaper	name	default	-
+theme	theme_wallpaper_color	.	A plain color as the wallpaper: a name or #rrggbb
+theme	theme_wallpaper_picture	.	A picture of yours as the wallpaper
+theme	theme_picture	.	A theme from a picture of yours: its colors as ...
+theme	theme_words	.	One look for one request: the hue of the ground, ...
+theme	theme_words	hue	red	-
+theme	theme_words	hue	orange	-
+theme	theme_words	hue	yellow	-
+theme	theme_words	hue	green	-
+theme	theme_words	hue	teal	-
+theme	theme_words	hue	blue	-
+theme	theme_words	hue	violet	-
+theme	theme_words	hue	pink	-
+theme	theme_words	hue	grey	-
+theme	theme_words	accent	red	-
+theme	theme_words	accent	orange	-
+theme	theme_words	accent	yellow	-
+theme	theme_words	accent	green	-
+theme	theme_words	accent	teal	-
+theme	theme_words	accent	blue	-
+theme	theme_words	accent	violet	-
+theme	theme_words	accent	pink	-
+theme	theme_words	accent	grey	-
+theme	theme_words	accent	same	-
+window	window_split	.	New windows side by side
+window	window_tabs	.	New windows in tabs
+window	window_stacked	.	New windows stacked
+window	window_focus	.	Put one open window in front
+window	window_close	.	Close one open window by its native container ID from ...
+window	window_capture	.	A picture of the screen, or of an area you ...
+display	display_idle	.	Show the idle screen after N idle minutes
+display	display_lock	.	Lock the screen and turn the display off after N ...
+display	display_saver	.	What the idle screen shows: the clock alone, or an ...
+display	display_brightness	.	Set the screen brightness, 1 to 100, or up or ...
+display	display_scale	.	Set the scale on one connected screen
+display	display_scale	screen	DP-3	-
+display	display_scale	screen	HDMI-A-1	-
+display	display_scale	scale	0.75	-
+display	display_scale	scale	1.25	-
+display	display_scale	scale	1.5	-
+display	display_scale	scale	1.75	-
+display	display_mode	.	Set one of the resolutions offered by the connected screen
+display	display_mode	screen	DP-3	-
+display	display_mode	screen	HDMI-A-1	-
+display	display_mode	mode	1920x1200@60Hz	-
+display	display_mode	mode	1920x1080@60Hz	-
+display	display_mode	mode	1280x800@60Hz	-
+display	display_mode	mode	1600x900@60Hz	-
+display	display_mode	mode	1280x720@60Hz	-
+display	display_mode	mode	1024x768@60Hz	-
+display	display_position	.	Place a connected screen at absolute layout coordinates
+display	display_place	.	Place a connected screen beside another active screen
+display	display_place	screen	DP-3	-
+display	display_place	screen	HDMI-A-1	-
+display	display_place	other	HDMI-A-1	-
+display	display_place	other	DP-3	-
+display	display_transform	.	Turn a connected screen: normal, or 90, 180 or 270 ...
+display	display_transform	screen	DP-3	-
+display	display_transform	screen	HDMI-A-1	-
+display	display_on	.	Enable a connected screen now and at the next login
+display	display_off	.	Disable a connected screen now and at the next login
+display	display_off	screen	DP-3	-
+display	display_off	screen	HDMI-A-1	-
+keyboard	keyboard_use	.	Type in another of the keyboard layouts
+keyboard	keyboard_use	name	br	-
+keyboard	keyboard_next	.	Go to the next keyboard layout
+keyboard	keyboard_repeat_delay	.	Milliseconds before a held key repeats, 100 to 2000
+keyboard	keyboard_repeat_rate	.	Key repeats per second, 0 to 100
+keyboard	keyboard_caps	.	Use Caps Lock as itself, Control or Escape
+notes	notes_new	.	Open a blank note in the editor for the person ...
+notes	notes_open	.	Only open a note in the editor
+notes	notes_open	name	todo.md	recent
+notes	notes_open	name	groceries.md	recent
+notes	notes_add	.	Create a new note: text is the literal heading, never ...
+notes	notes_append	.	Append a bullet to an existing note
+notes	notes_find	.	Which notes say these words, and the line that does
+reminders	reminders_add	.	Save a reminder at a local time to come
+reminders	reminders_done	.	Put aside one due or future reminder by its UID ...
+reminders	reminders_snooze	.	Move one reminder, identified by its UID from the row, ...
+reminders	reminders_restore	.	Bring back a reminder marked done in the last 30 ...
+reminders	reminders_delete	.	Delete one reminder by its UID from the row: the ...
+bar	bar_on	.	Show the bar at the top of the screen
+bar	bar_off	.	Hide the bar
+layout	layout_open	.	Open a saved layout
+layout	layout_open	name	writing	-
+layout	layout_new	.	Open the apps for a task, picked by spark
+layout	layout_save	.	Save what is open on this workspace as a layout
+layout	layout_add	.	Open an app spark also suggested for the last layout
+layout	layout_delete	.	Delete a saved layout
+layout	layout_rename	.	Give a saved layout a new name
+layout	layout_back	.	The layout before this one, opened again
+apps	apps_open	.	Open an app on this workspace
+apps	apps_open	name	aerc	-
+apps	apps_open	name	btop	-
+apps	apps_open	name	firefox	-
+apps	apps_open	name	foot	-
+apps	apps_open	name	micro	-
+apps	apps_open	name	mpv	-
+apps	apps_open	name	pyradio	-
+apps	apps_terminal	.	Open a terminal window
+about	about_open	.	The version, the keys, the licence and the address
+undo	undo_all	.	Take the last thing done back
+files	files_browse	.	Open a folder in the system file manager, for anything ...
+files	files_browse	path	~/documents	-
+files	files_browse	path	~/downloads	-
+files	files_browse	path	~/music	-
+files	files_browse	path	~/notes	-
+files	files_browse	path	~/pictures	-
+files	files_browse	path	~/videos	-
+files	files_open	.	Open a file with the app that opens its kind
+files	files_show	.	The first lines of a text file
+files	files_attach	.	A text file to ask spark about, with the next ...
+files	files_reveal	.	Show a file or folder in the system file manager, ...
+files	files_rename	.	Give a file or folder a new name, in its ...
+files	files_move	.	Move a file or folder into another folder
+files	files_copy	.	Copy a file or folder into another folder
+files	files_trash	.	Put a file or folder in the trash: the delete ...
+files	files_restore	.	Bring a file or folder back from the trash to ...
+files	files_new_folder	.	Make a folder inside the folder path names, with the ...
+files	files_new_text	.	Make an empty text file inside the folder path names, ...
+files	files_find	.	Which files and folders under your home and your drives ...
+files	files_say	.	Which text files under your home and your drives hold ...
+notifications	notifications_do_not_disturb	.	Keep notifications out of sight, or show them again
+notifications	notifications_dismiss	.	Dismiss the notifications on the screen
+notifications	notifications_restore	.	Show the last notification again
+storage	storage_mount	.	Mount a drive that is plugged in
+storage	storage_unmount	.	Unmount a drive
+storage	storage_open	.	Open a drive in the file manager, mounted first when ...
+storage	storage_eject	.	Unmount every part of a drive and power it off, ...
+power	power_lock	.	Lock the screen
+power	power_suspend	.	Lock the screen and suspend the machine
+power	power_logout	.	Log out: every window closes
+power	power_restart	.	Restart the machine
+power	power_shutdown	.	Shut the machine down
+printers	printers_default	.	Choose a configured native printer as the default
+printers	printers_pause	.	Pause the configured print queue
+printers	printers_pause	name	office-laser	-
+printers	printers_resume	.	Enable the configured print queue
+printers	printers_cancel	.	Cancel one pending job owned by the current user
+pointer	pointer_tap	.	Enable or disable tap to click on touchpads
+pointer	pointer_scroll	.	Set natural scrolling for mouse and touchpad
+pointer	pointer_speed	.	Set mouse and touchpad acceleration, -1 to 1

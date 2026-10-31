@@ -230,8 +230,10 @@ for it, and no verb carries the word.
   (`engine.SV_WAIT`): a big model takes longer than sv's own 7 seconds
   to unload. On runit the prompt line's prefix names `sv` and `ip`
   (`persona.runit_lines`). It names `svlogtail`, which reads the logs,
-  only where that program is installed. It never names `svlogd`, which
-  writes them. One line there says how runit enables a service of the
+  only where that program is installed. Then it says the program
+  follows the log and takes no option (`persona.SVLOGTAIL`): a small
+  model wrote `svlogtail -f`. It never names `svlogd`, which writes
+  them. One line there says how runit enables a service of the
   system (`persona.RUNIT_BOOT`): a link in `/var/service`, which `ls`
   lists.
   The engine pin is a glibc build, so Void's musl flavour refuses at
@@ -641,7 +643,11 @@ State is `~/.local/state/spark/`, 0700:
 - `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
   models dir, written by `spark serve`.
 - `mcp-tools` 0600: the tools `spark mcp` last listed, one line a tool
-  (contract 16), read by the prompt line's prefix and by `spark do`.
+  and a stamp line a server (contract 16), read by the prompt line's
+  prefix and by `spark do`.
+- `mcp-values` 0600: each tool's purpose and its arguments' values, as
+  a trusted server's list and rows said them (contract 16). The prompt
+  line's prefix alone reads it.
 - `line-seen` 0600, on a client: where its last line turn landed, and
   the `FORGE`'s newest thread and its turns then
   (`forge.LINE_SEEN`). A client's `??` reads it.
@@ -1008,7 +1014,52 @@ and may change freely.
    refused. It asks for the user's own words and names as written, and
    for the help's own word (`NAME`, `URL`) where the user gave no
    value. It
-   says spark keeps the last answer and the facts it was told. An
+   says spark keeps the last answer and the facts it was told. Its
+   last sentence is one rule. A check or an action on this machine
+   (reach a host, download, remove, install, record, look up a
+   setting) is always kind=cmd with the command that does it. It is
+   never words, even when the facts above already hold the answer.
+   With the machine picture, a small model had answered "download
+   URL" and "remove the packages nothing needs" in words.
+   The line's prefix (`persona.prefix`, `line`) knows the machine it
+   runs on (#166). Its first line says what the session is, from the
+   environment alone (`persona.session`). That is the terminal
+   (`TERM_PROGRAM`, else `TERM`: `persona.TERMS`) and the desktop
+   (`XDG_CURRENT_DESKTOP`, else a socket: `persona.COMPOSITORS`). It
+   is Wayland or X11, or a text console or an ssh login with no
+   graphical display. The other shell modes take that sentence too,
+   where "Keyboard only, no GUI" stood. After spark's own commands
+   comes the machine picture (`persona.machine_picture`). It names the
+   apps from their desktop entries, and how each came: the folder its
+   entry is in (`persona.APP_DIRS`). It says which of `persona.KNOWN`,
+   the programs a question reaches for most, are not installed. It
+   names the home folders and the services the init
+   starts: `/var/service`, systemd's `.wants` folders, launchd's
+   agents. It names the network interfaces by kind. Nothing is run to
+   read it, and nothing in it is a state: no window, no level, no
+   value in use. So the prefix is the same bytes until the machine
+   changes. Of 348 wrong answers read one by one, four in five had
+   lacked a fact. Then every MCP tool rides (`mcp.line_block`,
+   contract 16). Under `SPARK_LINE_BENCH=1` the picture's system part
+   is the JSON file `SPARK_LINE_BENCH_MACHINE` names. The tools are the
+   directory `SPARK_LINE_BENCH_MCP` names, or none. So the line
+   audition's picture is never the machine's that runs it. With no
+   file a bench turn reads this machine: `spark bench --line` measures
+   the person's own line. The request fits the line's slot
+   (`persona.line_slot`). That is `engine.SPARK_LINE_CTX` where a chat
+   model is served beside it, else `wire.ctx`. The system message gets
+   the slot less `persona.LINE_ROOM` (1000) cells, at
+   `persona.LINE_CHARS_PER_TOKEN` (3.3) characters a cell
+   (`persona.line_tools`). So the words, a Reference block, a re-ask
+   and the reply still fit. The tool block gives way first: its
+   values, then its purposes, then whole servers from the end. A cmd
+   reply may start with a listed tool's exact name, of one server
+   alone, and no program here may answer to it. Then it is that tool's
+   call: `out_mute` is `spark mcp call out out_mute`, the words after
+   it kept (`cli._called`, `mcp.as_call`). So is `spark out_mute`,
+   where the word is no verb of spark's own. The command is rewritten
+   where it is read, before the judge and the danger checks, so
+   `persona.tool_danger` reads the call. An
    answer in words may name one of spark's own commands: `spark VERB`
    with a verb of the tree, never inside a noun phrase
    (`cli._own_named`). Or it may tell the user which program to run
@@ -2523,7 +2574,10 @@ and may change freely.
     and its input schema is an object whose property names match
     `mcp.ARG_WORD`. Every string a server hands on passes `mcp.scrub`:
     `text.printable`, then `mcp.ZERO_WIDTH`, a named line each. A tool's
-    description never rides a request, a brief or a record. Trust. A
+    description never rides a request, a brief or a record, but for its
+    first sentence. That is a trusted server's tool's purpose on the
+    prompt line (`mcp.purpose`): `mcp.PURPOSE_WORDS` (10) words at most,
+    its parentheses out, in `mcp.PURPOSE`'s shape. Trust. A
     tool's annotations are believed only from a trusted server. That is
     `mcp.TRUSTED_CHAIN`, spark's own programs, a named line each. A
     program counts when its name, the link resolved, is one of them. It
@@ -2577,6 +2631,31 @@ and may change freely.
     writes `mcp-tools` in the state dir, 0600: one line a tool,
     `server<TAB>tool<TAB>flags<TAB>arguments<TAB>title`. The flags are
     `t`, trusted, `r`, read-only and believed, and `y`, the typed `yes`.
+    A choice list too long for a line is `TEXT` there, so its tool is
+    never dropped. A stamp line, `server<TAB>#<TAB>STAMP`, follows each
+    server's tools: its program's sha256, its words and its trust,
+    hashed (`mcp.stamp`). A server whose stamp is not its own now is
+    stale (`mcp.stale`): its program changed since, as a desktop's
+    update brings new tools. The timer's check lists a stale server
+    again within a 5-second slice (`mcp.refresh`). A person's check
+    says so, with `spark mcp` as the remedy, and starts no server.
+    `spark mcp` writes `mcp-values` too, 0600, from a trusted server
+    alone (`mcp.server_values`). One line is a tool's purpose,
+    `server<TAB>tool<TAB>.<TAB>purpose`. One is each value its required
+    arguments take, `server<TAB>tool<TAB>arg<TAB>value<TAB>label`. A
+    value is a choice list's words past `mcp.ENUM_INLINE` (4). Or it is
+    the argument of a call its rows resource names, or a child below
+    that resource's own URI, `mcp.CHILDREN_MAX` (8) at most. The
+    reading is resources/list and resources/read, never tools/call. A
+    row's group labels the value of a call of one argument: a
+    palette's dark or light. Never a row's words or its sign: they say
+    a state. Never a credential, an argument a row asks for, or
+    `mcp.VOLATILE`. That is digits alone, a run of 16 hex digits or a
+    uuid: an id or a level that moves while the file stands. An
+    argument past `mcp.VALUES_MAX` (48) values keeps none. The timer's
+    refresh runs outside the person's session, where a desktop's
+    provider may see no screen. So an argument it reads no value for
+    keeps the ones the last listing wrote.
     `spark mcp NAME` is one server, with its optional arguments and its
     resources. `spark mcp call NAME TOOL [KEY=VALUE ...]` is one call,
     each value typed by the schema: a number, `yes` or `no`, a comma
@@ -2586,13 +2665,24 @@ and may change freely.
     lists the resources or reads one. `--watch` subscribes and reads it
     again on each `notifications/resources/updated`, until `Ctrl-C`. The
     prompt line never starts a server or talks to one (contract 4).
-    `persona.prefix` carries `mcp.brief_tools()`: the tools file, read
-    line by line and never sourced. Each line is held to its shape
-    (`mcp._LINE`, `mcp._ARG`) and dropped when its server is off the
-    list. The names, the required arguments and the titles of trusted
-    servers ride as `spark mcp call` lines, `BRIEF_MAX` (1500)
-    characters at most, and none under `SPARK_LINE_BENCH=1`. With no
-    tools file the prefix is byte for byte what it was. A `spark mcp
+    The line's prefix carries `mcp.line_block()`: the tools file and
+    the values file, read line by line and never sourced. Each line is
+    held to its shape (`mcp._LINE`, `mcp._ARG`, `mcp._PURPOSE_LINE`,
+    `mcp._VALUE_LINE`), and dropped when its server is off the list.
+    One line is a server. Each tool comes with its required arguments:
+    `KEY=N`, `KEY=a|b`, and `KEY=KEY` for text or a long choice list.
+    From a trusted server comes its purpose (its title when it gave
+    none), then `Values --` and its arguments' values. A name's lists
+    that share a value are one (`mcp._said_values`). Two names that
+    hold the same values are one: `screen/other`. A label rides only
+    where a list holds two. A server not trusted rides its tools'
+    names and arguments alone. Under `SPARK_LINE_BENCH=1` the block is
+    the directory `SPARK_LINE_BENCH_MCP` names, or none. The other
+    shell modes carry `mcp.brief_tools()` as before. That is the names,
+    the required arguments and the titles of trusted servers as `spark
+    mcp call` lines. It is `BRIEF_MAX` (1500) characters at most, and
+    none under `SPARK_LINE_BENCH=1`. With no tools file each prefix is
+    byte for byte what it was. A `spark mcp
     call` line whose tool asks the yes, or is not listed, is a danger
     line (`persona.tool_danger`) at the prompt and in `spark do`. `spark
     do` runs a step that is one `spark mcp call` line of plain words
@@ -2629,7 +2719,8 @@ and may change freely.
     1 when no model answers, 2 the usage. The turn record is numbers:
     kind `steps`, `tools`, `steps`, `refused`, `chars` and `ms`.
     `persona.SENDS` names what leaves: the steps row, the line's tool
-    lines and a tool's result in do. The `mcp` check row reads the list
+    block and machine picture, do's tool lines and a tool's result in
+    do. The `mcp` check row reads the list
     and never starts a server. It is na with no server, and a warn when
     others may write `mcp.env`, a line is not `KEY=value`, or a program
     is one spark would refuse to start.

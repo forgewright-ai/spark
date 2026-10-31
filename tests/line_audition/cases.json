@@ -1,5 +1,5 @@
 {
- "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match: a pattern of the text, such as an option or a path), not_head (commands that must not run: each a regex held whole against every head word the command would run, a wrapper such as sudo included, so a path like /var/service or a word inside a quoted pattern is no hit; in an answer in words it is looked for as a word; a hit reports under the rule must_not), must (regexes the command or answer must all match: what a right answer cannot leave out), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), then (the follow-up of a `??` pair), split (held: a held-out case), why_review (why a review changed the case). The spark cases held-01 to held-24 are held out, frozen on 2026-10-04: never reword one, drop one or add to them, and never tune the prompt or the knowledge on their answers. `run --split dev` leaves them out and the report prints their score on a line of its own; a held question that turns out wrong stays, and a better one goes among the other cases under a new id. oses holds what a run needs to speak as each OS, and what a snapshot job installs first. A spark case with split \"more\" is a second phrasing added in v1.87 to tune on: reported on its own line, never part of the first report's 34.",
+ "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match: a pattern of the text, such as an option or a path), not_head (commands that must not run: each a regex held whole against every head word the command would run, a wrapper such as sudo included, so a path like /var/service or a word inside a quoted pattern is no hit; in an answer in words it is looked for as a word; a hit reports under the rule must_not), must (regexes the command or answer must all match: what a right answer cannot leave out), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), then (the follow-up of a `??` pair), split (held: a held-out case), why_review (why a review changed the case). The spark cases held-01 to held-24 are held out, frozen on 2026-10-04: never reword one, drop one or add to them, and never tune the prompt or the knowledge on their answers. `run --split dev` leaves them out and the report prints their score on a line of its own; a held question that turns out wrong stays, and a better one goes among the other cases under a new id. oses holds what a run needs to speak as each OS, and what a snapshot job installs first. A spark case with split \"more\" is a second phrasing added in v1.87 to tune on: reported on its own line, never part of the first report's 34. The desktop group holds the wants of a desktop, asked on Void with the desktop fixture (tests/line_audition/desktop: its MCP tools, their values and its machine picture): tool (the `spark mcp call SERVER TOOL` pairs a right answer calls, one of them) and also (other targets that are as right, each in a case's own shape: the case passes when its own target or one of them does). Its held-out cases, split held, were held out where they were written and are frozen the same way.",
  "oses": {
   "debian": {
    "id": "debian",
@@ -8346,6 +8346,4486 @@
     ],
     "danger": null,
     "split": "held"
+   }
+  ],
+  "desktop": [
+   {
+    "id": "desk-01",
+    "topic": "desktop",
+    "words": "mute the sound",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_mute"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "must": []
+   },
+   {
+    "id": "desk-02",
+    "topic": "desktop",
+    "words": "set the volume to 40",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_level"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "must": [
+     "\\blevel=40\\b"
+    ]
+   },
+   {
+    "id": "desk-03",
+    "topic": "desktop",
+    "words": "close the firefox window",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_close"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": true,
+    "must": [
+     "(?i)firefox"
+    ]
+   },
+   {
+    "id": "desk-04",
+    "topic": "desktop",
+    "words": "mute the microphone",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_mute"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "must": []
+   },
+   {
+    "id": "desk-05",
+    "topic": "desktop",
+    "words": "turn bluetooth off",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bt bt_power"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "must": [
+     "\\bstate=off\\b"
+    ]
+   },
+   {
+    "id": "desk-06",
+    "topic": "desktop",
+    "words": "make the text bigger",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_text"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "must": [
+     "\\bsize=bigger\\b"
+    ]
+   },
+   {
+    "id": "desk-07",
+    "topic": "desktop",
+    "words": "lock the screen",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_lock"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": null,
+    "must": []
+   },
+   {
+    "id": "desk-08",
+    "topic": "desktop",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-install",
+     "dnf",
+     "zypper"
+    ],
+    "must_not": [],
+    "not_head": [
+     "spark"
+    ],
+    "danger": null,
+    "must": []
+   },
+   {
+    "id": "desk-09",
+    "topic": "desktop",
+    "words": "show my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname"
+    ],
+    "must_not": [],
+    "not_head": [
+     "spark",
+     "ifconfig"
+    ],
+    "danger": false,
+    "must": []
+   },
+   {
+    "id": "desk-held-01",
+    "topic": "desktop",
+    "words": "turn the sound back on",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_unmute"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "split": "held",
+    "must": []
+   },
+   {
+    "id": "desk-held-02",
+    "topic": "desktop",
+    "words": "switch to the next keyboard layout",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_next"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": false,
+    "split": "held",
+    "must": []
+   },
+   {
+    "id": "desk-held-03",
+    "topic": "desktop",
+    "words": "put the computer to sleep",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_suspend"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pkill",
+     "killall"
+    ],
+    "danger": null,
+    "split": "held",
+    "must": []
+   },
+   {
+    "id": "nc-out-01",
+    "topic": "sound-out",
+    "words": "mute",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_mute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-02",
+    "topic": "sound-out",
+    "words": "unmute",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_unmute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-out-03",
+    "topic": "sound-out",
+    "words": "silence the speakers",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_mute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-04",
+    "topic": "sound-out",
+    "words": "I can't hear anything, turn the sound back on please",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_unmute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-05",
+    "topic": "sound-out",
+    "words": "volume 30",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_level"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?30(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-out-06",
+    "topic": "sound-out",
+    "words": "louder",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?(?:\\+?(?:[1-9]|1[0-9]|20)(?![0-9]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-07",
+    "topic": "sound-out",
+    "words": "a bit quieter please",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?(?:-(?:[1-9]|1[0-9]|20)(?![0-9]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-out-08",
+    "topic": "sound-out",
+    "words": "turn the volume down 15",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?\\-15(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-09",
+    "topic": "sound-out",
+    "words": "turn the volume to 15",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_level"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?15(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-10",
+    "topic": "sound-out",
+    "words": "voluem up",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?(?:\\+?(?:[1-9]|1[0-9]|20)(?![0-9]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-12",
+    "topic": "sound-out",
+    "words": "aumenta o volume",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?(?:\\+?(?:[1-9]|1[0-9]|20)(?![0-9]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-out-13",
+    "topic": "sound-out",
+    "words": "turn the sound up to 80, not the brightness",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "out out_level"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?80(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-mic-01",
+    "topic": "mic",
+    "words": "mute the mic",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_mute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-mic-02",
+    "topic": "mic",
+    "words": "unmute me, I'm on a call",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_unmute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-mic-03",
+    "topic": "mic",
+    "words": "unmte the mic",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_unmute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-mic-04",
+    "topic": "mic",
+    "words": "mic level 70",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_level"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?70(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-mic-05",
+    "topic": "mic",
+    "words": "people say they can barely hear me, raise my mic a little",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_adjust"
+    ],
+    "must": [
+     "\\bdelta=['\\\"]?(?:\\+?(?:[1-9]|1[0-9]|20)(?![0-9]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-mic-06",
+    "topic": "mic",
+    "words": "desliga o microfone",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "mic mic_mute"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-mic-08",
+    "topic": "mic",
+    "words": "do I even have a microphone plugged in?",
+    "kind": "cmd",
+    "head_any": [
+     "wpctl",
+     "pactl",
+     "arecord"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+mic\\b"
+      ]
+     },
+     {
+      "kind": "answer",
+      "answer_any": [
+       "(?i)no (microphone|source|input)"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-disp-01",
+    "topic": "display",
+    "words": "brightness 70",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_brightness"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?70(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-02",
+    "topic": "display",
+    "words": "dim the screen",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_brightness"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?down(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-disp-03",
+    "topic": "display",
+    "words": "brightnes 50",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_brightness"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?50(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-04",
+    "topic": "display",
+    "words": "it's too dark in here, could you brighten the display a bit?",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_brightness"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?up(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-05",
+    "topic": "display",
+    "words": "brilho no máximo",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_brightness"
+    ],
+    "must": [
+     "\\blevel=['\\\"]?100(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-disp-06",
+    "topic": "display",
+    "words": "screensaver starfield",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_saver"
+    ],
+    "must": [
+     "\\bname=['\\\"]?starfield(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-07",
+    "topic": "display",
+    "words": "show the idle screen after 5 minutes",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_idle"
+    ],
+    "must": [
+     "\\bminutes=['\\\"]?5(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-08",
+    "topic": "display",
+    "words": "lock the screen after 15 idle minutes",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_lock"
+    ],
+    "must": [
+     "\\bminutes=['\\\"]?15(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-disp-09",
+    "topic": "display",
+    "words": "stop locking the screen on its own",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_lock"
+    ],
+    "must": [
+     "\\bminutes=['\\\"]?0(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-10",
+    "topic": "display",
+    "words": "change DP-3 screen orientation 90 degrees.",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_transform"
+    ],
+    "must": [
+     "\\bscreen=['\\\"]?DP\\-3(?=['\\\"]|\\s|$)",
+     "\\btransform=['\\\"]?90(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xrandr",
+     "wlr-randr"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "swaymsg"
+      ],
+      "must": [
+       "\\boutput\\s+['\\\"]?DP-3['\\\"]?\\s+transform\\s+90\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-disp-13",
+    "topic": "display",
+    "words": "set the resolution to 1920x1080 with xrandr",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)wayland|sway|xrandr (is not|isn't|does not|doesn't)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xrandr"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "display display_mode"
+      ],
+      "must": [
+       "\\bscreen=['\\\"]?HDMI\\-A\\-1(?=['\\\"]|\\s|$)",
+       "\\bmode=['\\\"]?(?:1920x1080(@60(\\.0+)?Hz)?)"
+      ]
+     },
+     {
+      "kind": "cmd",
+      "head_any": [
+       "swaymsg"
+      ],
+      "must": [
+       "\\boutput\\s+\\S+\\s+(mode|resolution|res)\\s+1920x1080"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-disp-16",
+    "topic": "display",
+    "words": "position DP-3 at x -1920 y 0",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "display display_position"
+    ],
+    "must": [
+     "\\bscreen=['\\\"]?DP\\-3(?=['\\\"]|\\s|$)",
+     "\\bx=['\\\"]?\\-1920(?![0-9.])",
+     "\\by=['\\\"]?0(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-disp-19",
+    "topic": "display",
+    "words": "what resolution are my screens running at?",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "get_outputs"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xrandr",
+     "wlr-randr"
+    ],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+display\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-pow-01",
+    "topic": "power",
+    "words": "lock",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_lock"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-pow-02",
+    "topic": "power",
+    "words": "lock the screen now, I'm stepping out",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_lock"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-pow-03",
+    "topic": "power",
+    "words": "bloqueia a tela",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_lock"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-pow-04",
+    "topic": "power",
+    "words": "sleep",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_suspend"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-pow-05",
+    "topic": "power",
+    "words": "suspend",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_suspend"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "loginctl"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "zzz",
+       "sudo"
+      ],
+      "must": [
+       "\\bzzz\\b"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-pow-06",
+    "topic": "power",
+    "words": "log me out",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_logout"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-pow-07",
+    "topic": "power",
+    "words": "reboot please",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_restart"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl"
+    ],
+    "danger": true,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "sudo",
+       "reboot"
+      ],
+      "must": [
+       "\\breboot\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-pow-08",
+    "topic": "power",
+    "words": "shutdwon now",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_shutdown"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl"
+    ],
+    "danger": true,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "sudo",
+       "poweroff",
+       "shutdown"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-pow-09",
+    "topic": "power",
+    "words": "desliga o computador",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "power power_shutdown"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-bt-01",
+    "topic": "bluetooth",
+    "words": "blutooth off",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bt bt_power"
+    ],
+    "must": [
+     "\\bstate=['\\\"]?off(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-bt-02",
+    "topic": "bluetooth",
+    "words": "look for bluetooth devices nearby",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bt bt_scan"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-bt-08",
+    "topic": "bluetooth",
+    "words": "is bluetooth on?",
+    "kind": "cmd",
+    "head_any": [
+     "bluetoothctl"
+    ],
+    "must": [
+     "\\bshow\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+bt\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-net-01",
+    "topic": "network",
+    "words": "connect to the wifi cafe-guest",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_connect"
+    ],
+    "must": [
+     "\\bname=['\\\"]?cafe\\-guest(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-02",
+    "topic": "network",
+    "words": "get off the wifi",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_disconnect"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-net-03",
+    "topic": "network",
+    "words": "forget the network cafe-guest",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_forget"
+    ],
+    "must": [
+     "\\bname=['\\\"]?cafe\\-guest(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-net-04",
+    "topic": "network",
+    "words": "join the hidden network lab-5g, it has no password",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_hidden"
+    ],
+    "must": [
+     "\\bname=['\\\"]?lab\\-5g(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [
+     "password=['\\\"]?[^'\\\" ]+"
+    ],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-05",
+    "topic": "network",
+    "words": "set up wifi on this machine",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_setup"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "nc-net-06",
+    "topic": "network",
+    "words": "use 1.1.1.1 as the dns on the wifi",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_dns"
+    ],
+    "must": [
+     "\\bdevice=['\\\"]?wlp3s0(?=['\\\"]|\\s|$)",
+     "\\bservers=['\\\"]?1\\.1\\.1\\.1(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-07",
+    "topic": "network",
+    "words": "wifi back to automatic ip",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_auto"
+    ],
+    "must": [
+     "\\bdevice=['\\\"]?wlp3s0(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-09",
+    "topic": "network",
+    "words": "conecta no wifi cafe-guest",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "wifi wifi_connect"
+    ],
+    "must": [
+     "\\bname=['\\\"]?cafe\\-guest(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-11",
+    "topic": "network",
+    "words": "wired dns 9.9.9.9",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "lan lan_dns"
+    ],
+    "must": [
+     "\\bdevice=['\\\"]?enp2s0(?=['\\\"]|\\s|$)",
+     "\\bservers=['\\\"]?9\\.9\\.9\\.9(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-net-12",
+    "topic": "network",
+    "words": "put the ethernet back on dhcp",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "lan lan_auto"
+    ],
+    "must": [
+     "\\bdevice=['\\\"]?enp2s0(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-net-13",
+    "topic": "network",
+    "words": "undo that network change",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "undo undo_all"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "lan lan_restore"
+      ],
+      "must": [
+       "\\breceipt=['\\\"]?(?:\\S+)"
+      ]
+     },
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "wifi wifi_restore"
+      ],
+      "must": [
+       "\\breceipt=['\\\"]?(?:\\S+)"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-net-14",
+    "topic": "network",
+    "words": "scan for wifi networks",
+    "kind": "cmd",
+    "head_any": [
+     "iw",
+     "wpa_cli",
+     "sudo"
+    ],
+    "must": [
+     "\\bscan"
+    ],
+    "must_not": [],
+    "not_head": [
+     "nmcli",
+     "iwctl"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+wifi\\b"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-win-01",
+    "topic": "window",
+    "words": "windows side by side",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_split"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-win-02",
+    "topic": "window",
+    "words": "put new windows in tabs",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_tabs"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-win-03",
+    "topic": "window",
+    "words": "stack the windows",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_stacked"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-win-04",
+    "topic": "window",
+    "words": "close the terminal window",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_close"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\d+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-win-05",
+    "topic": "window",
+    "words": "bring the terminal to the front",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_focus"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\d+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-win-06",
+    "topic": "window",
+    "words": "take a screenshot",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_capture"
+    ],
+    "must": [
+     "\\bwhat=['\\\"]?screen(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "scrot",
+     "import",
+     "gnome-screenshot",
+     "xwd"
+    ],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "grim"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-win-07",
+    "topic": "window",
+    "words": "screenshot of a region",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_capture"
+    ],
+    "must": [
+     "\\bwhat=['\\\"]?area(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "scrot",
+     "import"
+    ],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "grim"
+      ],
+      "must": [
+       "slurp"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-win-08",
+    "topic": "window",
+    "words": "fecha essa janela",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "window window_close"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\d+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "swaymsg"
+      ],
+      "must": [
+       "\\bkill\\b"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-win-09",
+    "topic": "window",
+    "words": "fullscreen this window",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "\\bfullscreen\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-win-10",
+    "topic": "window",
+    "words": "kill firefox, it froze",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must": [
+     "(?i)firefox|\\d+"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-win-11",
+    "topic": "window",
+    "words": "split the tmux pane side by side",
+    "kind": "cmd",
+    "head_any": [
+     "tmux"
+    ],
+    "must": [
+     "split-window"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ws-01",
+    "topic": "workspace",
+    "words": "create workspace 2 with no window open please.",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "\\bworkspace\\s+(number\\s+)?2\\b"
+    ],
+    "must_not": [
+     "\\bexec\\b"
+    ],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ws-02",
+    "topic": "workspace",
+    "words": "vai pro workspace 2",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "\\bworkspace\\s+(number\\s+)?2\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ws-03",
+    "topic": "workspace",
+    "words": "move this window to workspace 3",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "\\bmove\\s+(container\\s+|window\\s+)?(to\\s+)?workspace\\s+(number\\s+)?3\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ws-04",
+    "topic": "workspace",
+    "words": "open firefox on workspace 2",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "\\bworkspace\\s+(number\\s+)?2\\b",
+     "\\bfirefox\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xdg-open"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-ws-07",
+    "topic": "workspace",
+    "words": "which workspace am I on?",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg"
+    ],
+    "must": [
+     "get_workspaces"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-lay-02",
+    "topic": "layout",
+    "words": "layout --help",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "--help|(^|\\s)-h\\b|\\bhelp\\b"
+    ],
+    "must_not": [
+     "layout_new",
+     "layout_save"
+    ],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "answer",
+      "answer_any": [
+       "spark-shell layout"
+      ]
+     },
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+layout\\b"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-lay-06",
+    "topic": "layout",
+    "words": "what layouts do I have?",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\bspark-shell\\s+layout\\s*($|[;|&])"
+    ],
+    "must_not": [
+     "layout_new"
+    ],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+layout\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-lay-07",
+    "topic": "layout",
+    "words": "layout list",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\bspark-shell\\s+layout\\s*($|[;|&])"
+    ],
+    "must_not": [
+     "layout_new"
+    ],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+layout\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-lay-08",
+    "topic": "layout",
+    "words": "open the apps I need to write my book",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "layout layout_new"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?(?i:['\"]?[^=]*(writ|book))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-lay-09",
+    "topic": "layout",
+    "words": "save this layout as webdev",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "layout layout_save"
+    ],
+    "must": [
+     "\\bname=['\\\"]?webdev(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-lay-10",
+    "topic": "layout",
+    "words": "layuot back",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "layout layout_back"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-lay-11",
+    "topic": "layout",
+    "words": "also open mpv, the one you suggested",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "layout layout_add"
+    ],
+    "must": [
+     "\\bname=['\\\"]?mpv(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-01",
+    "topic": "theme",
+    "words": "change theme to everforest light",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?everforest\\-light(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-02",
+    "topic": "theme",
+    "words": "theme none",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?none(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-03",
+    "topic": "theme",
+    "words": "rose pine dawn please",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?rose\\-pine\\-dawn(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-04",
+    "topic": "theme",
+    "words": "gruvbox",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:gruvbox-(dark|light))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-05",
+    "topic": "theme",
+    "words": "catpuccin latte",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?catppuccin\\-latte(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-06",
+    "topic": "theme",
+    "words": "solarized dark",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)solarized-light|no (such )?(palette|theme)|not (one of|available|a palette)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "theme theme_words"
+      ],
+      "must": [
+       "\\bhue=['\\\"]?(?:teal|blue)",
+       "\\baccent=['\\\"]?(?:\\w+)",
+       "\\bwarmth=['\\\"]?(?:warm|neutral|cool)",
+       "\\bcontrast=['\\\"]?(?:soft|normal|high)",
+       "\\blight=['\\\"]?dark(?=['\\\"]|\\s|$)"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-thm-07",
+    "topic": "theme",
+    "words": "tema nord",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_palette"
+    ],
+    "must": [
+     "\\bname=['\\\"]?nord(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-08",
+    "topic": "theme",
+    "words": "go back to the theme I had before",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_back"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-09",
+    "topic": "theme",
+    "words": "save this look as evening",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_save"
+    ],
+    "must": [
+     "\\bname=['\\\"]?evening(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-10",
+    "topic": "theme",
+    "words": "save this look as evening",
+    "then": "actually, delete it",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_delete"
+    ],
+    "must": [
+     "\\bname=['\\\"]?evening(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-thm-11",
+    "topic": "theme",
+    "words": "bigger text everywhere",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_text"
+    ],
+    "must": [
+     "\\bsize=['\\\"]?bigger(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-12",
+    "topic": "theme",
+    "words": "make the windows more see-through",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_transparency"
+    ],
+    "must": [
+     "\\bamount=['\\\"]?more(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-13",
+    "topic": "theme",
+    "words": "make the windows solid",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_alpha"
+    ],
+    "must": [
+     "\\bvalue=['\\\"]?(?:1(\\.0+)?(?![0-9.]))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-14",
+    "topic": "theme",
+    "words": "wallpaper fjord",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_wallpaper"
+    ],
+    "must": [
+     "\\bname=['\\\"]?fjord(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-15",
+    "topic": "theme",
+    "words": "a plain navy wallpaper",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_wallpaper_color"
+    ],
+    "must": [
+     "\\bcolor=['\\\"]?navy(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-18",
+    "topic": "theme",
+    "words": "a warm green theme, dark, with orange accents",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_words"
+    ],
+    "must": [
+     "\\bhue=['\\\"]?green(?=['\\\"]|\\s|$)",
+     "\\baccent=['\\\"]?orange(?=['\\\"]|\\s|$)",
+     "\\bwarmth=['\\\"]?warm(?=['\\\"]|\\s|$)",
+     "\\bcontrast=['\\\"]?(?:soft|normal|high)",
+     "\\blight=['\\\"]?dark(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-19",
+    "topic": "theme",
+    "words": "make it look like the brazilian flag",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "theme theme_words"
+    ],
+    "must": [
+     "\\bhue=['\\\"]?green(?=['\\\"]|\\s|$)",
+     "\\baccent=['\\\"]?yellow(?=['\\\"]|\\s|$)",
+     "\\bwarmth=['\\\"]?(?:warm|neutral|cool)",
+     "\\bcontrast=['\\\"]?(?:soft|normal|high)",
+     "\\blight=['\\\"]?(?:dark|light)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-thm-20",
+    "topic": "theme",
+    "words": "theme list",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\btheme\\s+list\\b"
+    ],
+    "must_not": [
+     "theme_words",
+     "theme_palette"
+    ],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+(read\\s+)?theme\\b"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-thm-21",
+    "topic": "theme",
+    "words": "spark-shell theme everforest-dark",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\btheme\\s+everforest-dark\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "theme theme_palette"
+      ],
+      "must": [
+       "\\bname=['\\\"]?everforest\\-dark(?=['\\\"]|\\s|$)"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-note-01",
+    "topic": "notes",
+    "words": "new note",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notes notes_new"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-note-05",
+    "topic": "notes",
+    "words": "which notes mention micro?",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notes notes_find"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?micro(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-cal-01",
+    "topic": "calendar",
+    "words": "remind me tomorrow at 9 to call the dentist",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_add"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?(?i:['\"]?[^=]*tomorrow[^=]*9[^=]*dentist|['\"]?[^=]*dentist[^=]*tomorrow[^=]*9)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-cal-02",
+    "topic": "calendar",
+    "words": "remind me to pay the rent",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_add"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?(?i:['\"]?(remind me to )?pay the rent['\"]?(\\s|$))"
+    ],
+    "must_not": [
+     "\\b\\d{1,2}(:\\d\\d|\\s?(am|pm|h))\\b",
+     "(?i)tomorrow|today"
+    ],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-cal-03",
+    "topic": "calendar",
+    "words": "snooze that reminder",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_snooze"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-cal-04",
+    "topic": "calendar",
+    "words": "I called the dentist, mark it done",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_done"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-cal-05",
+    "topic": "calendar",
+    "words": "delete the gym reminder",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_delete"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-cal-06",
+    "topic": "calendar",
+    "words": "bring back the reminder I marked done",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_restore"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-cal-07",
+    "topic": "calendar",
+    "words": "me lembra amanhã às 8 de levar o lixo",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "reminders reminders_add"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?(?i:['\"]?[^=]*lixo)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-cal-08",
+    "topic": "calendar",
+    "words": "start the calendar week on monday",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "clock clock_week"
+    ],
+    "must": [
+     "\\bday=['\\\"]?monday(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-cal-09",
+    "topic": "calendar",
+    "words": "what's on my calendar this week?",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\breminders\\b"
+    ],
+    "must_not": [
+     "reminders_add"
+    ],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "mcp"
+      ],
+      "must": [
+       "\\bmcp\\s+read\\s+reminders\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-clk-01",
+    "topic": "clock",
+    "words": "24 hour clock",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "clock clock_format"
+    ],
+    "must": [
+     "\\bformat=['\\\"]?24(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-clk-02",
+    "topic": "clock",
+    "words": "relógio de 12 horas",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "clock clock_format"
+    ],
+    "must": [
+     "\\bformat=['\\\"]?12(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-clk-03",
+    "topic": "clock",
+    "words": "I moved to New York, fix the clock",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "clock clock_zone"
+    ],
+    "must": [
+     "\\bzone=['\\\"]?America/New_York(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-clk-04",
+    "topic": "clock",
+    "words": "what time is it in Recife?",
+    "kind": "cmd",
+    "head_any": [
+     "date",
+     "env"
+    ],
+    "must": [
+     "America/Recife"
+    ],
+    "must_not": [
+     "clock_zone"
+    ],
+    "not_head": [
+     "timedatectl"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-file-02",
+    "topic": "files",
+    "words": "remove poem.txt",
+    "kind": "cmd",
+    "head_any": [
+     "rm"
+    ],
+    "must": [
+     "\\bpoem\\.txt\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "files files_trash"
+      ],
+      "must": [
+       "\\bpath=['\\\"]?(?:['\"]?[^ ]*poem\\.txt)"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-file-05",
+    "topic": "files",
+    "words": "which text files mention spark-shell?",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "files files_say"
+    ],
+    "must": [
+     "\\bwords=['\\\"]?spark\\-shell(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "grep",
+       "rg"
+      ],
+      "must": [
+       "spark-shell"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-app-01",
+    "topic": "apps",
+    "words": "abra o firefox",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?firefox(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xdg-open"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-app-02",
+    "topic": "apps",
+    "words": "open firefox",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?firefox(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xdg-open"
+    ],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "swaymsg",
+       "firefox",
+       "setsid",
+       "nohup"
+      ],
+      "must": [
+       "\\bfirefox\\b"
+      ],
+      "must_not": [
+       "^\\s*firefox\\s*$"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-app-04",
+    "topic": "apps",
+    "words": "check my email",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?aerc(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "aerc"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-app-05",
+    "topic": "apps",
+    "words": "open a terminal",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_terminal"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "foot",
+       "swaymsg",
+       "footclient"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-app-06",
+    "topic": "apps",
+    "words": "opne mpv",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?mpv(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-app-07",
+    "topic": "apps",
+    "words": "open the system monitor",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "apps apps_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?btop(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [
+     "htop"
+    ],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "btop"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-app-08",
+    "topic": "apps",
+    "words": "open firefox fullscreen",
+    "kind": "cmd",
+    "head_any": [
+     "swaymsg",
+     "firefox"
+    ],
+    "must": [
+     "\\bfirefox\\b",
+     "(?i)fullscreen|kiosk"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xdg-open"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-app-09",
+    "topic": "apps",
+    "words": "abre o youtube no firefox",
+    "kind": "cmd",
+    "head_any": [
+     "firefox",
+     "swaymsg"
+    ],
+    "must": [
+     "youtube\\.com"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xdg-open"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-app-10",
+    "topic": "apps",
+    "words": "access internet page duckduckgo.com",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "firefox",
+     "swaymsg"
+    ],
+    "must": [
+     "https?://(www\\.)?duckduckgo\\.com"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-bar-01",
+    "topic": "bar",
+    "words": "status bar --off",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bar bar_off"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-bar-02",
+    "topic": "bar",
+    "words": "show the bar again",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bar bar_on"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-bar-03",
+    "topic": "bar",
+    "words": "esconde a barra",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bar bar_off"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-bar-04",
+    "topic": "bar",
+    "words": "turn off the top bar, not the screen",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "bar bar_off"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-kbd-01",
+    "topic": "keyboard",
+    "words": "switch the keyboard to brazilian",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_use"
+    ],
+    "must": [
+     "\\bname=['\\\"]?br(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-kbd-02",
+    "topic": "keyboard",
+    "words": "teclado americano",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_use"
+    ],
+    "must": [
+     "\\bname=['\\\"]?us(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-kbd-03",
+    "topic": "keyboard",
+    "words": "toggle the keyboard layout",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_next"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-kbd-04",
+    "topic": "keyboard",
+    "words": "make caps lock an escape key",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_caps"
+    ],
+    "must": [
+     "\\bkey=['\\\"]?escape(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-kbd-05",
+    "topic": "keyboard",
+    "words": "key repeat delay 250 ms",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_repeat_delay"
+    ],
+    "must": [
+     "\\bvalue=['\\\"]?250(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-kbd-06",
+    "topic": "keyboard",
+    "words": "turn off key repeat",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "keyboard keyboard_repeat_rate"
+    ],
+    "must": [
+     "\\bvalue=['\\\"]?0(?![0-9.])"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ptr-01",
+    "topic": "pointer",
+    "words": "enable tap to click",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "pointer pointer_tap"
+    ],
+    "must": [
+     "\\bstate=['\\\"]?on(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ptr-02",
+    "topic": "pointer",
+    "words": "the mouse is way too fast, slow it down",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "pointer pointer_speed"
+    ],
+    "must": [
+     "\\bvalue=['\\\"]?(?:-(0?\\.\\d+|1(\\.0+)?))"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ptr-03",
+    "topic": "pointer",
+    "words": "desativa a rolagem natural",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "pointer pointer_scroll"
+    ],
+    "must": [
+     "\\bstate=['\\\"]?off(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ntf-01",
+    "topic": "notifications",
+    "words": "let the notifications through again",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notifications notifications_do_not_disturb"
+    ],
+    "must": [
+     "\\bstate=['\\\"]?off(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ntf-02",
+    "topic": "notifications",
+    "words": "clear the notifications",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notifications notifications_dismiss"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ntf-03",
+    "topic": "notifications",
+    "words": "what was that notification?",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notifications notifications_restore"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ntf-04",
+    "topic": "notifications",
+    "words": "modo não perturbe",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "notifications notifications_do_not_disturb"
+    ],
+    "must": [
+     "\\bstate=['\\\"]?on(?=['\\\"]|\\s|$)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ntf-05",
+    "topic": "notifications",
+    "words": "send me a desktop notification saying the build is done",
+    "kind": "cmd",
+    "head_any": [
+     "notify-send"
+    ],
+    "must": [
+     "(?i)build is done"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-stor-01",
+    "topic": "storage",
+    "words": "mount my usb stick",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "storage storage_mount"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-stor-02",
+    "topic": "storage",
+    "words": "eject the usb drive",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "storage storage_eject"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-stor-03",
+    "topic": "storage",
+    "words": "open the pendrive",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "storage storage_open"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-stor-04",
+    "topic": "storage",
+    "words": "unmount the usb stick but keep it powered",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "storage storage_unmount"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-stor-05",
+    "topic": "storage",
+    "words": "ejetar o pendrive",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "storage storage_eject"
+    ],
+    "must": [
+     "\\bname=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-stor-06",
+    "topic": "storage",
+    "words": "how much space is left on my disk?",
+    "kind": "cmd",
+    "head_any": [
+     "df",
+     "duf"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-prn-04",
+    "topic": "printers",
+    "words": "cancel my print job",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "printers printers_cancel"
+    ],
+    "must": [
+     "\\bjob=['\\\"]?(?:\\S+)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-undo-01",
+    "topic": "about-undo",
+    "words": "about",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "about about_open"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-undo-02",
+    "topic": "about-undo",
+    "words": "what are the desktop's keyboard shortcuts?",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\bdesktop\\s+keys\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "about about_open"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-undo-03",
+    "topic": "about-undo",
+    "words": "oops, take that back",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "undo undo_all"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-undo-04",
+    "topic": "about-undo",
+    "words": "desfaz isso",
+    "kind": "cmd",
+    "spark_verb": [
+     "mcp"
+    ],
+    "tool": [
+     "undo undo_all"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-undo-05",
+    "topic": "about-undo",
+    "words": "undo my changes to README.md",
+    "kind": "cmd",
+    "head_any": [
+     "git"
+    ],
+    "must": [
+     "\\b(restore|checkout)\\b",
+     "README\\.md"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "nc-media-01",
+    "topic": "media",
+    "words": "stop music, please",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall"
+    ],
+    "must": [
+     "pyradio|mpv"
+    ],
+    "must_not": [],
+    "not_head": [
+     "playerctl",
+     "mpc"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "spark_verb": [
+       "mcp"
+      ],
+      "tool": [
+       "out out_mute"
+      ]
+     },
+     {
+      "kind": "answer",
+      "answer_any": [
+       "(?i)which|player|pyradio|mpv"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-pkg-01",
+    "topic": "packages",
+    "words": "install neovim",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "\\bxbps-install\\b",
+     "\\bneovim\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": true
+   },
+   {
+    "id": "nc-pkg-02",
+    "topic": "packages",
+    "words": "check for updates",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "(^|\\s)-[A-Za-z]*n[A-Za-z]*\\b|--dry-run"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark"
+      ],
+      "spark_verb": [
+       "update"
+      ],
+      "must": [
+       "--dry-run"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-pkg-03",
+    "topic": "packages",
+    "words": "update the whole system",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "(^|\\s)-[A-Za-z]*u[A-Za-z]*\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": true
+   },
+   {
+    "id": "nc-pkg-04",
+    "topic": "packages",
+    "words": "check if I have this packages installed: curl bash tar xz gtk+3 alsa-lib",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query",
+     "for"
+    ],
+    "must": [
+     "curl",
+     "alsa-lib",
+     "gtk\\+3"
+    ],
+    "must_not": [
+     "xbps-query\\s+(-l\\s+)?[\\w+.-]+[,;]\\s*\\w"
+    ],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-pkg-07",
+    "topic": "packages",
+    "words": "open htop",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "\\bhtop\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": null,
+    "also": [
+     {
+      "kind": "answer",
+      "answer_any": [
+       "(?i)not installed|btop"
+      ]
+     }
+    ],
+    "split": "held"
+   },
+   {
+    "id": "nc-pkg-08",
+    "topic": "packages",
+    "words": "instala o fastfetch",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "\\bfastfetch\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "dpkg",
+     "pacman",
+     "dnf",
+     "yum",
+     "zypper",
+     "brew",
+     "snap",
+     "flatpak"
+    ],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "nc-pkg-09",
+    "topic": "packages",
+    "words": "download https://example.com/a.iso with wget",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install",
+     "sudo"
+    ],
+    "must": [
+     "\\bwget\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "curl"
+      ],
+      "must": [
+       "example\\.com/a\\.iso"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-svc-01",
+    "topic": "services",
+    "words": "can you list all my runit services?",
+    "kind": "cmd",
+    "head_any": [
+     "ls",
+     "sv",
+     "sudo"
+    ],
+    "must": [
+     "/var/service"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service"
+    ],
+    "danger": null
+   },
+   {
+    "id": "nc-svc-02",
+    "topic": "services",
+    "words": "list my services without sudo",
+    "kind": "cmd",
+    "head_any": [
+     "ls"
+    ],
+    "must": [
+     "/var/service"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-svc-03",
+    "topic": "services",
+    "words": "stop the printing service",
+    "kind": "cmd",
+    "head_any": [
+     "sv",
+     "sudo"
+    ],
+    "must": [
+     "\\bsv\\s+(stop|down|d)\\b",
+     "\\bcupsd\\b"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service"
+    ],
+    "danger": true
+   },
+   {
+    "id": "nc-svc-04",
+    "topic": "services",
+    "words": "reinicia o serviço do ssh",
+    "kind": "cmd",
+    "head_any": [
+     "sv",
+     "sudo"
+    ],
+    "must": [
+     "\\bsv\\s+(restart|t)\\b",
+     "sshd"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service"
+    ],
+    "danger": true
+   },
+   {
+    "id": "nc-svc-05",
+    "topic": "services",
+    "words": "restart the bluetooth service",
+    "kind": "cmd",
+    "head_any": [
+     "sv",
+     "sudo"
+    ],
+    "must": [
+     "\\bsv\\s+(restart|t)\\b",
+     "bluetoothd"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service"
+    ],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "nc-svc-06",
+    "topic": "services",
+    "words": "the wifi is stuck, restart its service",
+    "kind": "cmd",
+    "head_any": [
+     "sv",
+     "sudo"
+    ],
+    "must": [
+     "\\bsv\\s+(restart|t)\\b",
+     "wpa_supplicant"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "service",
+     "journalctl",
+     "rc-service",
+     "nmcli"
+    ],
+    "danger": true
+   },
+   {
+    "id": "nc-sys-01",
+    "topic": "system",
+    "words": "list what is using my memory?",
+    "kind": "cmd",
+    "head_any": [
+     "ps"
+    ],
+    "must_not": [],
+    "not_head": [
+     "btop",
+     "htop",
+     "top"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-sys-02",
+    "topic": "system",
+    "words": "Using linux shell, list what is eating RAM now?",
+    "then": "I don't want to use btop",
+    "kind": "cmd",
+    "head_any": [
+     "ps"
+    ],
+    "must_not": [],
+    "not_head": [
+     "btop",
+     "htop",
+     "top"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-sys-03",
+    "topic": "system",
+    "words": "investigate why llama.cpp is using up my RAM memory even when idle",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "pgrep",
+     "pmap",
+     "grep",
+     "cat",
+     "free",
+     "awk"
+    ],
+    "must_not": [
+     "^\\s*top\\s*$"
+    ],
+    "not_head": [
+     "btop",
+     "htop"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-sys-04",
+    "topic": "system",
+    "words": "top 10 memory hogs, not btop",
+    "kind": "cmd",
+    "head_any": [
+     "ps"
+    ],
+    "must": [
+     "\\b(head|-n\\s*1?0)\\b|10"
+    ],
+    "must_not": [],
+    "not_head": [
+     "btop",
+     "htop"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-sys-05",
+    "topic": "system",
+    "words": "quanta memória livre eu tenho?",
+    "kind": "cmd",
+    "head_any": [
+     "free",
+     "cat",
+     "vmstat"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-sys-06",
+    "topic": "system",
+    "words": "From home folder, how do I find the largest folder?",
+    "kind": "cmd",
+    "head_any": [
+     "du"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "answer",
+      "answer_any": [
+       "\\bdu\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-sys-07",
+    "topic": "system",
+    "words": "write a list of background services using memory, make human readable at list.txt",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "sv",
+     "ls"
+    ],
+    "must": [
+     ">\\s*list\\.txt|tee\\s+list\\.txt"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-sys-08",
+    "topic": "system",
+    "words": "create a file with a small poem, call it poem.txt",
+    "kind": "cmd",
+    "head_any": [
+     "cat",
+     "printf",
+     "echo",
+     "tee"
+    ],
+    "must": [
+     "poem\\.txt"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-netsh-01",
+    "topic": "network-shell",
+    "words": "what's my ip?",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname"
+    ],
+    "must_not": [],
+    "not_head": [
+     "ifconfig",
+     "sudo"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-netsh-02",
+    "topic": "network-shell",
+    "words": "ping the router",
+    "kind": "cmd",
+    "head_any": [
+     "ping"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-netsh-03",
+    "topic": "network-shell",
+    "words": "a internet tá funcionando?",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-git-01",
+    "topic": "git",
+    "words": "what changed in this repo?",
+    "kind": "cmd",
+    "head_any": [
+     "git"
+    ],
+    "must": [
+     "\\b(status|diff)\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-git-02",
+    "topic": "git",
+    "words": "show the last 5 commits",
+    "kind": "cmd",
+    "head_any": [
+     "git"
+    ],
+    "must": [
+     "\\blog\\b",
+     "-5\\b|-n\\s*5\\b|--max-count[= ]5"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-git-03",
+    "topic": "git",
+    "words": "desfaz as mudanças no README.md",
+    "kind": "cmd",
+    "head_any": [
+     "git"
+    ],
+    "must": [
+     "\\b(restore|checkout)\\b",
+     "README\\.md"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": true
+   },
+   {
+    "id": "nc-tmux-01",
+    "topic": "tmux",
+    "words": "How do I devide a tmux session in two pane?",
+    "kind": "cmd",
+    "head_any": [
+     "tmux"
+    ],
+    "must": [
+     "split-window"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "also": [
+     {
+      "kind": "answer",
+      "answer_any": [
+       "split-window|Ctrl-b|C-b|prefix"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-tmux-02",
+    "topic": "tmux",
+    "words": "new tmux window",
+    "kind": "cmd",
+    "head_any": [
+     "tmux"
+    ],
+    "must": [
+     "new-window"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-01",
+    "topic": "spark",
+    "words": "spark status",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "status"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-02",
+    "topic": "spark",
+    "words": "spark voice on",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "voice"
+    ],
+    "must": [
+     "\\bvoice\\s+on\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-04",
+    "topic": "spark",
+    "words": "what is spark current model?",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "status",
+     "model"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-05",
+    "topic": "spark",
+    "words": "spark seems broken, what's wrong with it?",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "check",
+     "status"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-06",
+    "topic": "spark",
+    "words": "upgrade spark to the newest release",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "update"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-07",
+    "topic": "spark",
+    "words": "update spark-shell",
+    "kind": "cmd",
+    "head_any": [
+     "spark-shell"
+    ],
+    "must": [
+     "\\bupdate\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-08",
+    "topic": "spark",
+    "words": "list my old chats",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "history"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-09",
+    "topic": "spark",
+    "words": "what tools can you use?",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "mcp"
+    ],
+    "must_not": [
+     "\\bmcp\\s+call\\b"
+    ],
+    "not_head": [],
+    "danger": null,
+    "also": [
+     {
+      "kind": "answer",
+      "answer_any": [
+       "(?i)sound|volume|theme|layout|window|bluetooth"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-spark-11",
+    "topic": "spark",
+    "words": "esquece tudo que você lembra",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "must": [
+     "\\bmemory\\s+clear\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-12",
+    "topic": "spark",
+    "words": "como entro na página do spark pelo celular?",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must": [
+     "--login"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-13",
+    "topic": "spark",
+    "words": "spark look off",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "look"
+    ],
+    "must": [
+     "\\blook\\s+off\\b"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-14",
+    "topic": "spark",
+    "words": "which keys did spark add to my shell?",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "keys"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-spark-15",
+    "topic": "spark",
+    "words": "desliga o spark no prompt",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "off"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-16",
+    "topic": "spark",
+    "words": "spar ver",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver",
+     "version",
+     "--version"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null
+   },
+   {
+    "id": "nc-spark-17",
+    "topic": "spark",
+    "words": "give the box a personality",
+    "kind": "cmd",
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "awaken",
+     "soul"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "nc-ans-01",
+    "topic": "answer",
+    "words": "In few words, what is the biggest difference between Runit and Systemd?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)runit"
+    ],
+    "must_not": [],
+    "not_head": [
+     "systemctl"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-02",
+    "topic": "answer",
+    "words": "why doesn't xrandr work here?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)wayland|sway"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xrandr"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ans-03",
+    "topic": "answer",
+    "words": "what does xbps-install -Su do?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)sync|updat|upgrad"
+    ],
+    "must_not": [],
+    "not_head": [
+     "xbps-install",
+     "sudo"
+    ],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-04",
+    "topic": "answer",
+    "words": "write a small poem about rain",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)rain"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-05",
+    "topic": "answer",
+    "words": "Quem foi Ariano Suassuna?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)escritor|dramaturgo|compadecida|writer"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ans-06",
+    "topic": "answer",
+    "words": "check if installed",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)what|which"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-07",
+    "topic": "answer",
+    "words": "how do I lock the screen from the keyboard?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)super\\s*\\+?\\s*(escape|esc)"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": null,
+    "also": [
+     {
+      "kind": "cmd",
+      "head_any": [
+       "spark-shell"
+      ],
+      "must": [
+       "\\bdesktop\\s+keys\\b"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nc-ans-08",
+    "topic": "answer",
+    "words": "what's the difference between suspend and shutdown?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)memory|ram|power"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ans-09",
+    "topic": "answer",
+    "words": "Does vi has softwrap or wordwrap?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)wrap"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "nc-ans-10",
+    "topic": "answer",
+    "words": "o que é wayland?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)wayland"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-11",
+    "topic": "answer",
+    "words": "thanks",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)\\w"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "nc-ans-12",
+    "topic": "answer",
+    "words": "what does mute do to the microphone?",
+    "kind": "answer",
+    "answer_any": [
+     "(?i)\\w"
+    ],
+    "must_not": [],
+    "not_head": [],
+    "danger": false
+   },
+   {
+    "id": "desk-fault-01",
+    "topic": "system",
+    "words": "which time zone is set here",
+    "kind": "cmd",
+    "head_any": [
+     "date",
+     "readlink",
+     "ls",
+     "cat"
+    ],
+    "must_not": [],
+    "not_head": [
+     "timedatectl"
+    ],
+    "danger": false
+   },
+   {
+    "id": "desk-fault-02",
+    "topic": "logs",
+    "words": "show the system log and keep following it",
+    "kind": "cmd",
+    "head_any": [
+     "svlogtail",
+     "tail"
+    ],
+    "must_not": [
+     "\\bsvlogtail\\s+-"
+    ],
+    "not_head": [
+     "systemctl",
+     "journalctl"
+    ],
+    "danger": null
+   },
+   {
+    "id": "desk-fault-03",
+    "topic": "network",
+    "words": "download https://example.org/notes.pdf",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null
+   },
+   {
+    "id": "desk-fault-04",
+    "topic": "packages",
+    "words": "clean out the packages no other package needs",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-remove"
+    ],
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "dnf"
+    ],
+    "danger": true
    }
   ]
  }

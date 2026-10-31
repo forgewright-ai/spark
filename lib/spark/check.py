@@ -666,7 +666,7 @@ def row_serve(ctx):
         if argv is None:
             return ok(where)
         cache = engine.host_cache(argv)
-        if cache == "0" or (cache and "--cache-ram" in ctx.cfg.extra_args):
+        if cache == engine.host_cache_budget(ctx.cfg) or (cache and "--cache-ram" in ctx.cfg.extra_args):
             return ok(where)
         return warn(where + ", started with old settings",
                     "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
@@ -1368,10 +1368,13 @@ def row_sends(ctx):
 @row("NONFUNCTIONAL")
 def row_mcp(ctx):
     """contract 16: the MCP servers spark may start -- the list's lines
-    and their programs, read and never started (a check starts no
-    server). A list others may write, a program spark would refuse to
-    start, or a trust by hand whose pin no longer holds, is a warn; no
-    list is na."""
+    and their programs, read. A check a person typed starts no server.
+    A list others may write, a program spark would refuse to start, or a
+    trust by hand whose pin no longer holds, is a warn; no list is na. A
+    server whose program changed since its tools were listed (mcp.stale:
+    a desktop updated) is listed again by the timer's run alone, within
+    a 5-second slice, as the knowledge row refreshes its index; what is
+    still stale is a warn, and spark mcp lists every server again."""
     from . import mcp
     if not os.path.isfile(mcp.MCP_ENV):
         return na("no MCP server on the list")
@@ -1394,6 +1397,13 @@ def row_mcp(ctx):
     loose = [s for s in specs if s.why.startswith("not trusted:")]
     if loose:
         return warn("%s: %s" % (loose[0].name, loose[0].why.split(" -- ")[0]), "spark mcp trust %s on" % loose[0].name)
+    old = mcp.stale(specs)
+    if old and ctx.unattended:
+        mcp.refresh(old, deadline=5)
+        old = mcp.stale()
+    if old:
+        what = old[0].name if len(old) == 1 else "%d servers" % len(old)
+        return warn("%s changed since %s tools were listed" % (what, "its" if len(old) == 1 else "their"), "spark mcp")
     trusted = sum(1 for s in specs if s.trusted)
     return ok("%d server%s on the list, %d trusted" % (len(specs), "" if len(specs) == 1 else "s", trusted))
 
@@ -2345,6 +2355,12 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     with open(os.path.join(home, ".config", "spark", "mcp.env"), "w") as f:
         f.write('MCP_SERVER_FIXTURE="%s"\n' % ("/bin/sh" if good else "fixture-server"))
     os.chmod(os.path.join(home, ".config", "spark", "mcp.env"), 0o600)
+    if good:                    # its tools listed since the program last changed: its stamp, no tool
+        from . import mcp
+        sp = mcp.specs(os.path.join(home, ".config", "spark", "mcp.env"))[0]
+        os.makedirs(os.path.join(home, ".local", "state", "spark"), exist_ok=True)
+        with open(os.path.join(home, ".local", "state", "spark", "mcp-tools"), "w") as f:
+            f.write("".join(l + "\n" for l in mcp.stamp_lines(sp)))
     if good:                    # the bad fixture has no word list (allowed) and a loose site.env (not)
         with open(os.path.join(home, ".config", "spark", "privacy-terms"), "w") as f:
             f.write("# fixture word list\nfixtureword\n")

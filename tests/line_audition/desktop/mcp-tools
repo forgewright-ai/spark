@@ -1,0 +1,124 @@
+# a desktop's MCP tools as spark mcp lists them (mcp.tool_line): spark-shell v0.113's
+# providers, 122 tools, all of a trusted server. The line audition's desktop cases carry it
+lan	lan_address	t	device=TEXT address=TEXT gateway=TEXT	lan address DEVICE
+lan	lan_auto	t	device=TEXT	lan auto DEVICE
+lan	lan_dns	t	device=TEXT servers=TEXT	lan dns DEVICE
+lan	lan_restore	t	receipt=TEXT	lan restore RECEIPT
+wifi	wifi_connect	t	name=TEXT	wifi connect NAME
+wifi	wifi_disconnect	t	-	wifi disconnect
+wifi	wifi_forget	ty	name=TEXT	wifi forget NAME
+wifi	wifi_address	t	device=TEXT address=TEXT gateway=TEXT	wifi address DEVICE
+wifi	wifi_auto	t	device=TEXT	wifi auto DEVICE
+wifi	wifi_dns	t	device=TEXT servers=TEXT	wifi dns DEVICE
+wifi	wifi_restore	t	receipt=TEXT	wifi restore RECEIPT
+wifi	wifi_setup	ty	-	wifi setup
+wifi	wifi_hidden	t	name=TEXT	wifi hidden NAME
+bt	bt_connect	t	name=TEXT	bt connect NAME
+bt	bt_disconnect	t	name=TEXT	bt disconnect NAME
+bt	bt_pair	t	name=TEXT	bt pair NAME
+bt	bt_remove	ty	name=TEXT	bt remove NAME
+bt	bt_scan	t	-	bt scan
+bt	bt_power	t	state=on|off	bt power STATE
+out	out_use	t	name=TEXT	out use NAME
+out	out_level	t	level=N	out level N
+out	out_adjust	t	delta=N	out adjust DELTA
+out	out_mute	t	-	out mute
+out	out_unmute	t	-	out unmute
+mic	mic_use	t	name=TEXT	mic use NAME
+mic	mic_level	t	level=N	mic level N
+mic	mic_adjust	t	delta=N	mic adjust DELTA
+mic	mic_mute	t	-	mic mute
+mic	mic_unmute	t	-	mic unmute
+clock	clock_format	t	format=12|24	clock format
+clock	clock_week	t	day=sunday|monday	first weekday
+clock	clock_zone	t	zone=TEXT	time zone
+theme	theme_palette	t	name=TEXT	theme NAME
+theme	theme_save	t	name=TEXT	theme save NAME
+theme	theme_delete	ty	name=TEXT	theme delete NAME
+theme	theme_back	t	-	theme back
+theme	theme_text	t	size=bigger|smaller	theme text SIZE
+theme	theme_transparency	t	amount=more|less	theme transparency AMOUNT
+theme	theme_alpha	t	value=N	theme alpha N
+theme	theme_wallpaper	t	name=TEXT	theme wallpaper NAME
+theme	theme_wallpaper_color	t	color=TEXT	theme wallpaper color COLOR
+theme	theme_wallpaper_picture	t	path=TEXT	theme wallpaper picture PATH
+theme	theme_picture	t	path=TEXT	theme picture PATH
+theme	theme_words	t	hue=red|orange|yellow|green|teal|blue|violet|pink|grey accent=red|orange|yellow|green|teal|blue|violet|pink|grey|same warmth=warm|neutral|cool contrast=soft|normal|high light=dark|light	theme words HUE
+window	window_split	t	-	window split
+window	window_tabs	t	-	window tabs
+window	window_stacked	t	-	window stacked
+window	window_focus	t	name=TEXT	window focus NAME
+window	window_close	ty	name=TEXT	window close NAME
+window	window_capture	t	what=screen|area	window capture WHAT
+display	display_idle	t	minutes=N	display idle N
+display	display_lock	t	minutes=N	display lock N
+display	display_saver	t	name=clock|spark|starfield|drift	display saver NAME
+display	display_brightness	t	level=up|down|10|20|30|40|50|60|70|80|90|100	display brightness N
+display	display_scale	t	screen=TEXT scale=TEXT	screen scale
+display	display_mode	t	screen=TEXT mode=TEXT	screen mode
+display	display_position	t	screen=TEXT x=N y=N	screen position
+display	display_place	t	screen=TEXT side=left-of|right-of|above|below other=TEXT	screen arrangement
+display	display_transform	t	screen=TEXT transform=normal|90|180|270	screen orientation
+display	display_on	t	screen=TEXT	screen on
+display	display_off	t	screen=TEXT	screen off
+keyboard	keyboard_use	t	name=TEXT	keyboard use NAME
+keyboard	keyboard_next	t	-	keyboard next
+keyboard	keyboard_repeat_delay	t	value=N	keyboard repeat-delay N
+keyboard	keyboard_repeat_rate	t	value=N	keyboard repeat-rate N
+keyboard	keyboard_caps	t	key=caps|control|escape	keyboard caps KEY
+notes	notes_new	t	-	notes new
+notes	notes_open	t	name=TEXT	notes open NAME
+notes	notes_add	t	text=TEXT	notes add TEXT
+notes	notes_append	t	name=TEXT text=TEXT	notes append NAME
+notes	notes_find	tr	words=TEXT	notes find WORDS
+reminders	reminders_add	t	words=TEXT	reminders add WORDS
+reminders	reminders_done	t	name=TEXT	reminders done NAME
+reminders	reminders_snooze	t	name=TEXT	reminders snooze NAME
+reminders	reminders_restore	t	name=TEXT	reminders restore NAME
+reminders	reminders_delete	t	name=TEXT	reminders delete NAME
+bar	bar_on	t	-	bar on
+bar	bar_off	t	-	bar off
+layout	layout_open	t	name=TEXT	layout open NAME
+layout	layout_new	t	words=TEXT	layout new WORDS
+layout	layout_save	t	name=TEXT	layout save NAME
+layout	layout_add	t	name=TEXT	layout add NAME
+layout	layout_delete	ty	name=TEXT	layout delete NAME
+layout	layout_rename	t	name=TEXT to=TEXT	layout rename NAME
+layout	layout_back	t	-	layout back
+apps	apps_open	t	name=TEXT	apps open NAME
+apps	apps_terminal	t	-	apps terminal
+about	about_open	tr	-	about
+undo	undo_all	t	-	undo
+files	files_browse	t	path=TEXT	files browse PATH
+files	files_open	t	path=TEXT	files open PATH
+files	files_show	tr	path=TEXT	files show PATH
+files	files_attach	tr	path=TEXT	files attach PATH
+files	files_reveal	t	path=TEXT	files reveal PATH
+files	files_rename	t	path=TEXT name=TEXT	files rename PATH
+files	files_move	t	path=TEXT to=TEXT	files move PATH
+files	files_copy	t	path=TEXT to=TEXT	files copy PATH
+files	files_trash	t	path=TEXT	files trash PATH
+files	files_restore	t	path=TEXT	files restore PATH
+files	files_new_folder	t	path=TEXT name=TEXT	files new-folder PATH
+files	files_new_text	t	path=TEXT name=TEXT	files new-text PATH
+files	files_find	tr	words=TEXT	files find WORDS
+files	files_say	tr	words=TEXT	files say WORDS
+notifications	notifications_do_not_disturb	t	state=on|off	notifications do-not-disturb STATE
+notifications	notifications_dismiss	t	-	notifications dismiss
+notifications	notifications_restore	t	-	notifications restore
+storage	storage_mount	t	name=TEXT	storage mount NAME
+storage	storage_unmount	t	name=TEXT	storage unmount NAME
+storage	storage_open	t	name=TEXT	storage open NAME
+storage	storage_eject	t	name=TEXT	storage eject NAME
+power	power_lock	t	-	power lock
+power	power_suspend	t	-	power suspend
+power	power_logout	ty	-	power logout
+power	power_restart	ty	-	power restart
+power	power_shutdown	ty	-	power shutdown
+printers	printers_default	t	name=TEXT	printers default NAME
+printers	printers_pause	t	name=TEXT	printers pause NAME
+printers	printers_resume	t	name=TEXT	printers resume NAME
+printers	printers_cancel	ty	job=TEXT	printers cancel JOB
+pointer	pointer_tap	t	state=on|off	pointer tap STATE
+pointer	pointer_scroll	t	state=on|off	pointer scroll STATE
+pointer	pointer_speed	t	value=N	pointer speed N

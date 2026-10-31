@@ -319,6 +319,32 @@ def model_stem(path):
     return os.path.basename(path).replace(".gguf", "")
 
 
+# the prompt cache in host RAM (#166). The line's prompt carries the
+# machine, about 7,000 tokens, and one slot means any other prompt (the
+# launcher's steps, a chat) replaces it: a 26B read it again whole in
+# 17 s. With memory to spare llama-server keeps the replaced prompts in
+# host RAM up to a budget and brings one back by its prefix; --swa-full
+# makes a sliding-window model's cache whole, without which the kept
+# prompt cannot be cut back to its prefix and is read again anyway.
+# Measured on a 32 GB box (16 of them the iGPU's): 1.8 GB for the whole
+# window, 0.6 GB for three kept prompts, and the line's reply after a
+# steps call in 2.1 s. Below CACHE_RAM_MIN_GB nothing is kept, as v1.7
+# decided (a 12B on a 16 GB box climbed to 90 % RAM in a day), nor with
+# an ember: the memory is the second model's.
+CACHE_RAM_MIB = 2048
+CACHE_RAM_MIN_GB = 24
+
+
+def host_cache_budget(cfg):
+    """The prompt cache in host RAM spark gives llama-server, in MiB as
+    llama-server takes it: CACHE_RAM_MIB on a machine of CACHE_RAM_MIN_GB
+    or more serving one model, "0" (off) otherwise."""
+    from . import mem_total_gb
+    if roles(cfg)["ember"] or mem_total_gb() < CACHE_RAM_MIN_GB:
+        return "0"
+    return str(CACHE_RAM_MIB)
+
+
 def server_cmd(cfg, host):
     """The llama-server argv. With an ember: the router (one process, one
     port; a child per model on demand, presets.ini giving each its args;
@@ -326,11 +352,10 @@ def server_cmd(cfg, host):
     server as v0.3, aliased spark and by its file stem, so `model: spark`
     (or anything) is accepted and /v1/models still names the file."""
     files = roles(cfg)
-    # no prompt cache in RAM: llama-server would keep every replaced
-    # prompt's KV state in host memory up to 8 GiB by default, more than a
-    # small box has (a 12B on a 16 GB APU reached 90 % RAM in a day); the
-    # slots already hold the recent prompts on the GPU. SPARK_EXTRA_ARGS
-    # comes last and may set a budget (--cache-ram N, MiB).
+    # the prompt cache in RAM is host_cache_budget's: off unless the
+    # machine has the memory (llama-server's own default, 8 GiB, is more
+    # than a small box has). SPARK_EXTRA_ARGS comes last and may set a
+    # budget of its own (--cache-ram N, MiB).
     # --offline: no fetch of anything, whatever a flag or a variable
     # says (the pinned build knows it; nothing spark serves is remote).
     # -np 1: one slot, the whole context one request's. Left to itself
@@ -338,7 +363,9 @@ def server_cmd(cfg, host):
     # them, so two 4k prompts fill it and a third purges a slot's warm
     # prefix (#157); the page runs one generation at a time anyway. The
     # room itself is SPARK_CTX, set by hand
-    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0", "--offline", "-np", "1"]
+    cache = host_cache_budget(cfg)
+    common = (["--host", host, "--port", str(cfg.port), "--cache-ram", cache]
+              + (["--swa-full"] if cache != "0" else []) + ["--offline", "-np", "1"])
     if files["ember"]:
         d, ini = write_router(cfg)
         return ([engine_bin(cfg), "--models-dir", d, "--models-preset", ini, "--models-max", "2"] + common

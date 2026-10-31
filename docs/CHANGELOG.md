@@ -1,5 +1,71 @@
 # Changelog
 
+## v1.113
+
+- The prompt line knows the machine it runs on (#166). Its prompt said
+  "Keyboard only, no GUI" on a sway desktop, so a small model answered
+  that nothing could reach the windows. Its first line says now what
+  the session is, read from the environment: the terminal, the desktop
+  and Wayland or X11, or a text console or an ssh login. A picture of
+  the machine follows spark's own commands. It names the apps and how
+  each came, which common programs are not installed, the home
+  folders, the services that start at boot and the network
+  interfaces by kind. Nothing is run to read it and nothing in it is a
+  state, so the prompt is the same bytes and its cache holds.
+- The prompt line carries every MCP tool, one server a line, with its
+  arguments. From a trusted server it carries the first words of each
+  tool's description and the values its arguments take, as the
+  server's own rows name them. `spark mcp` writes those to
+  `mcp-values` when it lists a server; the line reads files and starts
+  no server. A window's number, a level or the value in use never
+  rides. Until now it carried 25 of a desktop's 122 tools, cut at
+  1,500 characters. `spark do` and the other shell modes keep that
+  list.
+- On a slot of 4,096 cells, a machine that serves a chat model too,
+  the tool block gives way so the reply keeps its room: its values
+  first, then its purposes, then whole servers from the end.
+- A Wi-Fi network around that is not saved never rides: a call that
+  still asks for a password reaches a place the machine holds none
+  for, so its name is a neighbor's.
+- After a request of the launcher's the line waited 17 s: the engine
+  has one slot, and each prompt pushed the other out. On a machine of
+  24 GB or more serving one model, the engine keeps a replaced prompt
+  in RAM now (`--cache-ram 2048` with `--swa-full`), and the line
+  answers in 2.1 s after one. On the box it costs about 2.8 GB of RAM:
+  1.8 GB for the whole window cache, and the kept prompts, 0.6 GB
+  after three, 2 GB at most. Below 24 GB, or with a second chat model,
+  nothing changes. The check's engine row knows the rule.
+- The tool list no longer goes stale. Each server's tools carry a
+  stamp of its program. When the program changes, a desktop's update,
+  the timer's check lists that server again; a check you run says so,
+  with `spark mcp` as the remedy.
+- The line's brief ends on one rule: a check or an action on this
+  machine is a command, never words, even when the picture holds the
+  answer. "Download URL" and "remove the packages nothing needs" had
+  come back in words.
+- A reply that is a listed tool's bare name, such as `out_mute` or
+  `spark out_mute`, is its `spark mcp call` line now, before the judge
+  and the danger checks read it.
+- Fixed on Void: the line answered `timedatectl`, which runit does not
+  have; the picture says it is not installed. It answered `svlogtail
+  -f`, which the script answers with its usage; the prompt says
+  svlogtail follows the log and takes no option.
+- The line audition asks a desktop's 227 wants as Void, 75 of them
+  held out, with a desktop of made-up names: its tools, their values
+  and its machine picture. They come from a set made for this, its
+  items with no private data alone. In every run the picture is the
+  OS snapshot's, never the machine's the audition runs on. The report
+  keeps the bar to the OS's cases and spark's.
+- Measured on the Linux machine with gemma4-26b-a4b, against v1.112:
+  the owner's 43 requests 26 right (20), the new set's held-out part
+  62 % (42 %) and its tuned part 68 % (34 %). The line audition, a
+  report: Void 56 of 60 (57), spark's held-out 24 of 24 (21), the
+  desktop's wants 71 % tuned and 64 % held out. A warm reply takes 2.8
+  s at the median (2.9 s). #166's bar, 29 requests and 72 %, is not met
+  yet: the rest needs what the prompt does not carry here, a state
+  such as the window open or the output in use, and the desktop's own
+  facts.
+
 ## v1.112
 
 - The engine serves one slot: `-np 1` on every server command and

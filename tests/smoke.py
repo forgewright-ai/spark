@@ -789,6 +789,11 @@ def answer_json(messages):
         return {"kind": "cmd", "command": "find . -name '*.tmp' -delete", "hint": "Delete every .tmp file below here", "danger": True}
     if "rm-plain" in user:      # the model forgets to flag it; the regex must
         return {"kind": "cmd", "command": "rm -rf build", "hint": "Remove the build directory", "danger": False}
+    if "baretool" in user:      # #166: a listed tool's name alone, the words after it its arguments
+        bare = {"mute": "out_mute", "restart": "power_restart", "level": "out_level level=40", "shell": "ls -la",
+                "spark": "spark theme_back", "verb": "spark status"}
+        word = next((w for w in bare if "baretool-" + w in user), "mute")
+        return {"kind": "cmd", "command": bare[word], "hint": "does it", "danger": False}
     if "prooftest" in user:
         return {"kind": "cmd", "command": "mkdir -p pdir", "hint": "makes the dir",
                 "danger": False, "proof": "test -d pdir"}
@@ -2176,6 +2181,99 @@ def line_knowledge_cases(t, spark, home):
     t.ok(lines == ["answer", "4"] and lines2 == ["answer", "2"],
          "line knowledge: SPARK_LINE_BENCH_HISTORY rides a bench ?? turn as its history (user and assistant only)",
          repr((lines, lines2)))
+
+
+def line_machine_cases(t, spark, home):
+    """#166: the line knows the machine it runs on. Its prefix holds the
+    session as the environment says it, the machine picture and every
+    MCP tool with its purpose and values, the same bytes each time; the
+    tool block gives way to a small slot, its values first; and a reply
+    that is a listed tool's bare name becomes its call before the judge
+    and the danger checks. The desktop is the line audition's fixture,
+    through the measuring seams."""
+    from spark import config as _config, persona as _pers, mcp as _mcp
+    desk = os.path.join(REPO, "tests", "line_audition", "desktop")
+    seams = {"SPARK_LINE_BENCH": "1", "SPARK_LINE_BENCH_MCP": desk,
+             "SPARK_LINE_BENCH_MACHINE": os.path.join(desk, "machine.json")}
+    shown = {k: os.environ.get(k) for k in seams}
+
+    class _Linux:
+        system = staticmethod(lambda: "Linux")
+        machine = staticmethod(lambda: "x86_64")
+    saved = _pers.platform
+    try:
+        os.environ.update(seams)
+        _pers.platform = _Linux
+        cfg = _config.load()
+        desktop = {"WAYLAND_DISPLAY": "wayland-1", "XDG_CURRENT_DESKTOP": "sway", "TERM": "foot"}
+        said = [_pers.session(e) for e in (desktop, {"WAYLAND_DISPLAY": "wayland-1", "SWAYSOCK": "/run/sway.sock",
+                                                     "TERM": "xterm-kitty", "TMUX": "/tmp/tmux"},
+                                           {"DISPLAY": ":0", "TERM": "alacritty"}, {"TERM": "linux"},
+                                           {"SSH_CONNECTION": "192.0.2.7 50000 192.0.2.8 22", "TERM": "foot",
+                                            "WAYLAND_DISPLAY": "wayland-1"})]
+        env0 = dict(os.environ)
+        for k in ("TERM_PROGRAM", "DISPLAY", "SSH_CONNECTION", "SSH_TTY", "TMUX", "XDG_CURRENT_DESKTOP"):
+            os.environ.pop(k, None)
+        os.environ.update(desktop)
+        line_a, line_b = _pers.prefix(cfg, "bash", line=True), _pers.prefix(cfg, "bash", line=True)
+        small = _pers.prefix(cfg, "bash", line=True, slot=4096)
+        do_pfx = _pers.prefix(cfg, "bash")
+        os.environ.clear()
+        os.environ.update(env0)
+    finally:
+        _pers.platform = saved
+        for k, v in shown.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    t.ok(said == ["The prompt is in the foot terminal on a sway desktop (Wayland, not X11).",
+                  "The prompt is in the kitty terminal inside tmux on a sway desktop (Wayland, not X11).",
+                  "The prompt is in the Alacritty terminal on an X11 desktop.",
+                  "The prompt is a text console, with no graphical display.",
+                  "The prompt is an ssh login, with no graphical display."],
+         "line, #166: the session is what the environment says -- a terminal on a compositor, Wayland or X11, "
+         "a console, an ssh login", repr(said))
+    tools = _mcp.tool_lines(os.path.join(desk, "mcp-tools"), on_list=False)
+    order = [line_a.find(w) for w in ("You are spark", "This machine, its names",
+                                      "- Home folders: ~/documents", "MCP tools on this machine",
+                                      "Never invent flags or paths.")]
+    t.ok(line_a == line_b and "Keyboard only" not in line_a and "foot terminal on a sway desktop (Wayland, not X11)." in line_a
+         and order == sorted(order) and -1 not in order and all(" %s" % tl[1] in line_a for tl in tools)
+         and "Values -- " in line_a and "(dark)" in line_a and "- Network: wired enp2s0, Wi-Fi wlp3s0." in line_a
+         and "- Services (" in line_a and " 42" not in line_a.split("MCP tools on this machine", 1)[1],
+         "line, #166: the line's prefix is the session, the picture, then every tool with its purpose and "
+         "values, and no window's number -- the same bytes twice", line_a[:300])
+    t.ok("This machine, its names" not in do_pfx and "Values -- " not in do_pfx and "foot terminal on a sway" in do_pfx,
+         "line, #166: the other shell modes keep their brief, the session aside", do_pfx[:200])
+    fits = int((4096 - _pers.LINE_ROOM) * _pers.LINE_CHARS_PER_TOKEN)
+    t.ok(len(line_a) + 2 + len(_pers.MODE_LINE) <= int((8192 - _pers.LINE_ROOM) * _pers.LINE_CHARS_PER_TOKEN)
+         and len(small) + 2 + len(_pers.MODE_LINE) <= fits and "Values -- " not in small
+         and "This machine, its names" in small and "MCP tools on this machine" in small,
+         "line, #166: a slot of 4096 cells leaves the reply its room: the tool block gives its values first",
+         "%d %d of %d" % (len(line_a), len(small), fits))
+    t.ok(_pers.MODE_LINE.endswith("A check or an action on this machine (reach a host, download, remove, install, "
+                                  "record, look up a setting) is always kind=cmd with the command that does it, never "
+                                  "words, even when the facts above already hold the answer."),
+         "line, #166: the brief ends on the one rule: a check or an action is a command, never words")
+    # the rewrite, through the real line: the bench's tools, the stub's
+    # bare names
+    bench = dict(seams, SPARK_LINE_KNOW="judge")
+    got = {}
+    for word in ("mute", "restart", "level", "shell", "spark", "verb"):
+        n0 = len(STATE.setdefault("bodies", []))
+        rc, out, _err = spark("line", stdin="? baretool-%s" % word, extra=bench)
+        got[word] = (rc, out.splitlines()[:1], STATE["bodies"][n0:])
+    sysmsg = got["mute"][2][0]["messages"][0]["content"] if got["mute"][2] else ""
+    t.ok(got["mute"][:2] == (0, ["cmd\tspark mcp call out out_mute"])
+         and got["restart"][:2] == (0, ["danger\tspark mcp call power power_restart"])
+         and got["level"][:2] == (0, ["cmd\tspark mcp call out out_level level=40"])
+         and got["shell"][:2] == (0, ["cmd\tls -la"]) and "out: out_use name=NAME" in sysmsg
+         and got["spark"][:2] == (0, ["cmd\tspark mcp call theme theme_back"])
+         and got["verb"][:2] == (0, ["cmd\tspark status"]),
+         "line, #166: a listed tool's bare name is its call, `spark TOOL` too, its danger the tool's own; a shell "
+         "command and a verb of spark's stay",
+         repr({k: v[:2] for k, v in got.items()}))
 
 
 def redirect_cases(t):
@@ -6861,14 +6959,16 @@ def own_mark_cases(t, url):
 
     # Void's own words: the two lines the prefix carries on runit, pure
     _with, _without = _pers.runit_lines(True), _pers.runit_lines(False)
-    t.ok(_with == ["System tools: sv, svlogtail, ip.", _pers.RUNIT_BOOT]
+    t.ok(_with == ["System tools: sv, svlogtail, ip.", _pers.RUNIT_BOOT, _pers.SVLOGTAIL]
          and _without == ["System tools: sv, ip.", _pers.RUNIT_BOOT]
+         and "no option" in _pers.SVLOGTAIL and "follows" in _pers.SVLOGTAIL
          and _pers.RUNIT_BOOT == ("On this machine a service of the system (sshd, nginx) runs at every boot once it is "
                                   "linked: ln -s /etc/sv/NAME /var/service/ -- ls /var/service lists the linked ones, "
                                   "and sv up NAME starts one now and never enables it.")
          and "svlogd" not in " ".join(_with + _without) and (_pers.RUNIT_BOOT + _with[0]).isascii(),
          "prefix, runit: System tools names svlogtail only where it is installed and never svlogd; one line says "
-         "a service is enabled by its link in /var/service", repr((_with, _without)))
+         "a service is enabled by its link in /var/service, and one that svlogtail follows with no option",
+         repr((_with, _without)))
 
     # ... and the prefix itself on runit, on any OS: persona's platform and
     # shutil stand in, and the init is pinned through its seam
@@ -8007,6 +8107,7 @@ def main():
         t.ok(rc == 0 and lines[0] == "cmd\tfrobnicate -h" and lines[1].startswith("frobnicate: not on this machine -- "),
              "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
         line_knowledge_cases(t, spark, home)
+        line_machine_cases(t, spark, home)
         redirect_cases(t)
         engine_wire_cases(t, spark, home, url)
         empty_answer_cases(t, spark, home, url, env)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # line_audition.py -- the prompt line, judged by outcomes. Plain words a
 # person types after `? ` go through the real `spark line` (contract 4)
-# for six OSes (debian, arch, void, fedora, opensuse, macos) and for spark
-# itself, and a
+# for six OSes (debian, arch, void, fedora, opensuse, macos), for spark
+# itself and for a desktop's wants (asked as Void), and a
 # mechanical grader decides each answer: line 1 is contract 4's shape,
 # the head command exists on that OS, every option it passes appears in
 # that OS's own help, the case's must-nots hold, no command the case
@@ -15,7 +15,7 @@
 #   python3 tests/line_audition.py run --os void --model NAME [--url URL]
 #                                      [--arm off|judge|full] [--role spark|ember]
 #                                      [--out FILE] [--split dev|held|all]
-#                                      [--subject tools|spark] [--case ID] [-v]
+#                                      [--subject tools|spark|desktop] [--case ID] [-v]
 #   python3 tests/line_audition.py recall --os OS [--k 3] [--split dev|held|all] [-v]
 #   python3 tests/line_audition.py collect [--os OS] --out help-OS.json
 #   python3 tests/line_audition.py report [--split dev|held|all] FILE...
@@ -70,6 +70,14 @@
 #                                    (--role): the chat model measured on
 #                                    the line with the line's own prompt,
 #                                    the person's config unchanged
+#   SPARK_LINE_BENCH_MACHINE=FILE    the machine picture's system part
+#                                    (persona.machine_facts): an empty one
+#                                    for an OS case, the desktop's for a
+#                                    desktop case, never the machine's
+#   SPARK_LINE_BENCH_MCP=DIR         a desktop's mcp-tools and mcp-values,
+#                                    the line's tool block: the desktop
+#                                    cases carry DESKTOP_DIR's, the others
+#                                    none
 
 import json
 import math
@@ -93,6 +101,13 @@ sys.path.insert(0, LIB)
 
 OSES = ("debian", "arch", "void", "fedora", "opensuse", "macos")
 SUBJECTS = ("tools", "spark")
+# the desktop's wants (#166): asked with a desktop's tools, values and
+# machine picture (DESKTOP_DIR), as DESKTOP_OS alone -- its shell answers
+# are Void's. A subject of its own, so the tools and spark core columns
+# and the bar read what they always read
+DESKTOP = "desktop"
+DESKTOP_DIR = os.path.join(DATA, "desktop")
+DESKTOP_OS = "void"
 ARMS = ("off", "judge", "full")
 ROLES = ("spark", "ember")         # --role: which model answers the line (SPARK_LINE_ROLE)
 HELP_MAX = 4096          # the human-readable part of a snapshot entry
@@ -101,11 +116,16 @@ LINES_MAX = 60           # option lines an entry keeps, each its first sentence
 SENTENCE_MAX = 100       # characters of one what, synopsis or option sentence
 SYNOPSIS_MAX = 3         # synopsis lines an entry keeps
 CASE_KEYS = {"id", "words", "kind", "head_any", "must_not", "not_head", "must", "danger", "spark_verb",
-             "answer_any", "topic", "then", "why_review", "split"}
+             "answer_any", "topic", "then", "why_review", "split", "tool", "also"}
+# what a case's own target is, the fields an `also` target replaces
+TARGET_KEYS = ("kind", "head_any", "spark_verb", "tool", "must", "answer_any")
 SPLITS = ("dev", "held", "all")    # --split: the cases to tune on, the frozen ones, or both
 # the held-out questions' ids and words, hashed (held_sha): they are
 # frozen, and the selftest fails when one is reworded, added or dropped
 HELD_N, HELD_SHA = 24, "cc5a0ed2e52347ca"
+# the desktop's held-out wants, hashed apart, so the 24 above stay
+# provably the frozen ones
+DESKTOP_HELD_N, DESKTOP_HELD_SHA = 75, "90b11b142ba1d65d"
 # the line's own words for a reply the model left empty (wire.THOUGHT_OUT
 # starts with them; the selftest holds the two equal)
 NO_ANSWER = "the model gave no answer"
@@ -192,19 +212,24 @@ def is_held(case):
     return (case or {}).get("split") == "held"
 
 
-def held_sha(data):
-    """(count, hash) of the held-out cases' ids and words, in file order."""
+def held_sha(data, desktop=False):
+    """(count, hash) of the held-out cases' ids and words, in file order:
+    the OS and spark cases', or the desktop's alone."""
     import hashlib
-    held = [c for k in data["cases"] for c in data["cases"][k] if is_held(c)]
+    held = [c for k in data["cases"] for c in data["cases"][k] if is_held(c) and (k == DESKTOP) == desktop]
     text = "\n".join("%s\t%s" % (c["id"], c["words"]) for c in held)
     return len(held), hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
-def cases_for(data, os_name, subject=None, only=None, split="all"):
-    """[(subject, case)] for one OS: its own tools, then spark core.
-    `split` dev leaves the held-out cases out, held keeps them alone."""
+def cases_for(data, os_name, subject=None, only=None, split="all", desktop=False):
+    """[(subject, case)] for one OS: its own tools, then spark core, then
+    with `desktop` (a run's) on DESKTOP_OS the desktop's wants. `split`
+    dev leaves the held-out cases out, held keeps them alone."""
     out = []
-    for subj, key in (("tools", os_name), ("spark", "spark")):
+    groups = (("tools", os_name), ("spark", "spark"))
+    if desktop and os_name == DESKTOP_OS:
+        groups += ((DESKTOP, DESKTOP),)
+    for subj, key in groups:
         if subject and subject != subj:
             continue
         for c in data["cases"].get(key, ()):
@@ -876,6 +901,8 @@ def stage_rules(head, args, snap, builtins):
     entry = snap.get("tools", {}).get(base)
     if not entry or not entry.get("exists"):
         return False, True, "%s: not on %s" % (base, snap.get("os", "?"))
+    if entry.get("unchecked"):
+        return True, True, ""                  # a desktop's program: no help of it to hold options to
     bad = bad_options(base, args, entry)
     if bad:
         return True, False, "%s: %s not in its help" % (base, " ".join(bad))
@@ -954,8 +981,26 @@ def grade(case, stdout, snap, tree, builtins, rc=None):
     """[(rule, ok, detail)] for one answer. Every rule is mechanical.
     `rc` is the reply's exit code, None when a record kept none. The
     rules come in a fixed order, a newer rule after the older ones
-    (`must`, then `answered`, last), so the first failing rule of an old
-    answer is the one it always was."""
+    (`must`, then `answered`, then `tool`, last), so the first failing
+    rule of an old answer is the one it always was. A case with `also`
+    passes when its own target or one of those does (each in a case's
+    own shape, TARGET_KEYS, with a must_not of its own beside the
+    case's): the rules are the first passing target's, else its own
+    target's."""
+    rules = _rules(case, stdout, snap, tree, builtins, rc)
+    if not all(r[1] for r in rules):
+        base = {k: v for k, v in case.items() if k not in TARGET_KEYS + ("also",)}
+        for alt in case.get("also", ()):
+            # an also's must_not holds beside the case's own
+            alt = dict(alt, must_not=list(base.get("must_not", ())) + list(alt.get("must_not", ())))
+            other = _rules(dict(base, **alt), stdout, snap, tree, builtins, rc)
+            if all(r[1] for r in other):
+                return other
+    return rules
+
+
+def _rules(case, stdout, snap, tree, builtins, rc=None):
+    """grade's rules for one target."""
     kind, command, text, _proof = parse_reply(stdout)
     rules = []
     shape = kind in ("cmd", "danger") and bool(command.strip()) or kind == "answer" and bool(text.strip())
@@ -970,7 +1015,49 @@ def grade(case, stdout, snap, tree, builtins, rc=None):
         # a reply cut after line 1 keeps its command and exits 1, its
         # line 2 the reason: line 1 alone is no answer
         rules.append(("answered", rc == 0, "" if rc == 0 else "exit %d: %s" % (rc, text[:60])))
+    if shape and case.get("tool"):
+        # a desktop's want: the command calls one of the case's MCP tools,
+        # `spark mcp call SERVER TOOL`, read from its stages; any other
+        # tool, or none, is the wrong pick
+        called = mcp_calls(command) if kind in ("cmd", "danger") else []
+        ok = any(c in case["tool"] for c in called)
+        rules.append(("tool", ok, "" if ok else "calls %s, wanted %s"
+                      % (", ".join(called) or "no tool", " | ".join(case["tool"]))))
     return rules
+
+
+def mcp_calls(command):
+    """["SERVER TOOL"] for each `spark mcp call SERVER TOOL` stage a
+    command runs, [] when it cannot be read."""
+    try:
+        runs = [pair for st in split_stages(command) for pair in unwrap(st)]
+    except ValueError:
+        return []
+    return ["%s %s" % (a[2], a[3]) for h, a in runs
+            if h.rsplit("/", 1)[-1] == "spark" and len(a) >= 4 and a[:2] == ["mcp", "call"]]
+
+
+def desktop_snap(snap, machine=None):
+    """The snapshot a desktop case is graded on: DESKTOP_OS's, its
+    `absent` programs not installed, its `programs` installed with their
+    options unchecked (no help of theirs is in a snapshot)."""
+    m = machine if machine is not None else desktop_machine()
+    tools = dict((snap or {}).get("tools", {}))
+    for t in m.get("absent", ()):
+        tools[t] = {"exists": False, "path": ""}
+    for t in m.get("programs", ()):
+        if not (tools.get(t) or {}).get("exists"):
+            tools[t] = {"exists": True, "unchecked": True}
+    return dict(snap or {}, tools=tools)
+
+
+def desktop_machine():
+    """DESKTOP_DIR's machine.json, {} when it does not read."""
+    try:
+        with open(os.path.join(DESKTOP_DIR, "machine.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 def _graded(case, kind, command, text, snap, tree, builtins):
@@ -1251,16 +1338,30 @@ class SnapshotStore(_Base):
 
 
 # ------------------------------------------------------------ run
-def persona_env(os_name, snap, data, scratch, url):
+# what the machine's own session says through the environment, taken off
+# a run's: the prompt's session sentence is the run's (persona.session)
+SESSION_VARS = ("DISPLAY", "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "SWAYSOCK",
+                "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET", "TERM_PROGRAM", "SSH_CONNECTION", "SSH_TTY",
+                "SSH_CLIENT", "TMUX")
+# a desktop case's session: a foot terminal on sway
+DESKTOP_SESSION = {"WAYLAND_DISPLAY": "wayland-1", "XDG_CURRENT_DESKTOP": "sway", "TERM": "foot"}
+
+
+def persona_env(os_name, snap, data, scratch, url, desktop=False):
     """The environment one `spark line` runs in to speak as os_name: the
     seams spark already reads, and a PATH that is one directory of stubs
     ALONE -- a stub for every tool the snapshot says that OS has, and its
     package manager. So what the prompt says is installed (the package
-    manager, the preferred tools) and what the head-word guard finds are
-    that OS's, never this machine's: fd, rg or micro on the machine the
-    audition runs on reach no prompt. The harness needs nothing from
-    PATH: it starts python (sys.executable) and bin/spark by their
-    absolute paths. A stub does nothing and exits 127.
+    manager, the preferred tools, the picture's here and not here) and
+    what the head-word guard finds are that OS's, never this machine's:
+    fd, rg or micro on the machine the audition runs on reach no prompt.
+    The harness needs nothing from PATH: it starts python
+    (sys.executable) and bin/spark by their absolute paths. A stub does
+    nothing and exits 127. The machine picture's system part is an empty
+    file (SPARK_LINE_BENCH_MACHINE), and the session a text console:
+    nothing of this machine's own session rides. `desktop`: a desktop
+    case's, DESKTOP_DIR's tools, picture and programs (desktop_snap's
+    PATH), in a foot terminal on sway.
 
     Two facts of this machine that spark reads through PATH are pinned
     first, with the real PATH: its name (on a Mac config asks scutil for
@@ -1270,13 +1371,17 @@ def persona_env(os_name, snap, data, scratch, url):
     env = dict(os.environ)
     env["SPARK_LINE_BENCH"] = "1"          # the turn's numbers, marked bench; no thread
     for k in ("SPARK_EXPLAIN_CMD", "SPARK_EXPLAIN_RC", "SPARK_HINT_ROW", "SPARK_DEBUG",
-              "SPARK_LINE_KNOW", "SPARK_KNOWLEDGE_SNAPSHOT", "SPARK_LINE_BENCH_HISTORY", "SPARK_LINE_ROLE"):
+              "SPARK_LINE_KNOW", "SPARK_KNOWLEDGE_SNAPSHOT", "SPARK_LINE_BENCH_HISTORY", "SPARK_LINE_ROLE",
+              "SPARK_LINE_BENCH_MACHINE", "SPARK_LINE_BENCH_MCP") + SESSION_VARS:
         env.pop(k, None)
+    env["TERM"] = "xterm-256color"
     env["SITE_NAME"] = config.load().name
     if ASCII:
         env["SPARK_ASCII"] = "1"
-    stubs = os.path.join(scratch, "bin")
+    stubs = os.path.join(scratch, "bin-desktop" if desktop else "bin")
     os.makedirs(stubs, exist_ok=True)
+    if desktop:
+        snap = desktop_snap(snap)
     have = [t for t, e in (snap or {}).get("tools", {}).items() if e.get("exists")]
     if not have:
         have = [h for c in data["cases"].get(os_name, ()) for h in c.get("head_any", ())]
@@ -1287,6 +1392,14 @@ def persona_env(os_name, snap, data, scratch, url):
             f.write("#!/bin/sh\n# line_audition: a stub, so this OS's tool is on PATH; it does nothing\nexit 127\n")
         os.chmod(p, 0o755)
     env["PATH"] = stubs
+    if desktop:
+        env.update(DESKTOP_SESSION, SPARK_LINE_BENCH_MCP=DESKTOP_DIR,
+                   SPARK_LINE_BENCH_MACHINE=os.path.join(DESKTOP_DIR, "machine.json"))
+    else:
+        blank = os.path.join(scratch, "machine.json")
+        with open(blank, "w", encoding="utf-8") as f:
+            f.write("{}\n")
+        env["SPARK_LINE_BENCH_MACHINE"] = blank
     if os_name != "macos":
         o = data["oses"][os_name]
         rel = os.path.join(scratch, "os-release")
@@ -1306,7 +1419,7 @@ def persona_env(os_name, snap, data, scratch, url):
 
 PREFIX_PROBE = ("import sys; sys.path.insert(0, sys.argv[1])\n"
                 "from spark import config, persona\n"
-                "print(persona.prefix(config.load(), 'bash'))\n")
+                "print(persona.prefix(config.load(), 'bash', line=True))\n")
 
 
 def preferred_named(prefix):
@@ -1317,12 +1430,16 @@ def preferred_named(prefix):
     return []
 
 
-def check_prefix(os_name, data, env, snap=None):
+def check_prefix(os_name, data, env, snap=None, desktop=False):
     """The prompt spark will send, checked before any case: python starts
     with the run's PATH, the prompt names this OS's package manager and
     init, and its Preferred line names the preferred tools the snapshot
     says this OS has -- those and no other: a tool of the machine the
-    audition runs on must not be in it. Returns (ok, prefix, why)."""
+    audition runs on must not be in it. The picture's Not installed line
+    names none of the snapshot's tools; a desktop's prompt carries its
+    tools, an OS case's none. Returns (ok, prefix, why)."""
+    if desktop:
+        snap = desktop_snap(snap)
     p = subprocess.run([sys.executable, "-c", PREFIX_PROBE, LIB], env=env, capture_output=True, text=True)
     prefix = p.stdout
     if p.returncode != 0 or not prefix.strip():
@@ -1347,6 +1464,13 @@ def check_prefix(os_name, data, env, snap=None):
         lost = [t for t in persona.PREFERRED if t in here and t not in named]
         if lost:
             return False, prefix, "the prompt does not prefer %s, which %s's snapshot has" % (", ".join(lost), os_name)
+        gone = next((l for l in prefix.splitlines() if l.startswith("- Not installed here: ")), "")
+        extra = [t.strip() for t in gone[len("- Not installed here: "):].rstrip(".").split(",") if t.strip() in here]
+        if extra:
+            return False, prefix, "the picture says %s is not installed, which %s's snapshot has" % (", ".join(extra), os_name)
+    if ("MCP tools on this machine" in prefix) != desktop:
+        return False, prefix, ("the prompt carries no desktop tools" if desktop else
+                               "the prompt carries MCP tools of this machine")
     return True, prefix, ""
 
 
@@ -1458,12 +1582,14 @@ def cmd_run(args):
             verbose = True
         else:
             die("run takes --os OS --model NAME [--url URL] [--arm off|judge|full] [--role spark|ember] "
-                "[--out FILE] [--split dev|held|all] [--subject tools|spark] [--case ID] "
+                "[--out FILE] [--split dev|held|all] [--subject tools|spark|desktop] [--case ID] "
                 "[--store snapshot|local] [-v]")
     if os_name not in OSES or not model:
         die("run: say --os (one of %s) and --model NAME (the label the report groups by)" % ", ".join(OSES))
-    if subject and subject not in SUBJECTS:
-        die("run: --subject is tools or spark")
+    if subject and subject not in SUBJECTS + (DESKTOP,):
+        die("run: --subject is tools, spark or desktop")
+    if subject == DESKTOP and os_name != DESKTOP_OS:
+        die("run: the desktop's wants are asked as %s" % DESKTOP_OS)
     if split not in SPLITS:
         die("run: --split is dev (the held-out cases left out), held (those alone) or all")
     if arm and arm not in ARMS:
@@ -1491,27 +1617,34 @@ def cmd_run(args):
     scratch = tempfile.mkdtemp(prefix="line-audition-")
     started = time.strftime("%Y-%m-%d %H:%M:%S")       # before the first case, not when the file is written
     try:
-        env = persona_env(os_name, snap, data, scratch, url)
-        if arm:
-            env["SPARK_LINE_KNOW"] = arm
-        if role:
-            env["SPARK_LINE_ROLE"] = role
-        if snap and store == "snapshot":
-            # the store the line grounds and judges in: this OS's, built
-            # once here so no turn pays for the build (--store local: the
-            # machine's own index instead, the OS it runs on; the grade
-            # still reads the snapshot, the independent referee)
-            env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=snap).save(
-                os.path.join(scratch, "store-%s.json" % os_name))
-        ok, prefix, why = check_prefix(os_name, data, env, snap)
-        if not ok:
-            die("run: cannot speak as %s here: %s" % (os_name, why))
+        todo = cases_for(data, os_name, subject, only, split, desktop=True)
+        envs, prefixes = {}, {}
+        for desk in sorted({subj == DESKTOP for subj, _c in todo}):
+            env = persona_env(os_name, snap, data, scratch, url, desktop=desk)
+            if arm:
+                env["SPARK_LINE_KNOW"] = arm
+            if role:
+                env["SPARK_LINE_ROLE"] = role
+            if snap and store == "snapshot":
+                # the store the line grounds and judges in: this OS's, built
+                # once here so no turn pays for the build (--store local: the
+                # machine's own index instead, the OS it runs on; the grade
+                # still reads the snapshot, the independent referee). A
+                # desktop's holds its programs too, with no manual: present,
+                # so the judge never finds them missing, their options unread
+                env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=desktop_snap(snap) if desk else snap).save(
+                    os.path.join(scratch, "store-%s%s.json" % (os_name, "-desktop" if desk else "")))
+            ok, prefixes[desk], why = check_prefix(os_name, data, env, snap, desktop=desk)
+            if not ok:
+                die("run: cannot speak as %s%s here: %s" % (os_name, " on a desktop" if desk else "", why))
+            envs[desk] = env
+        prefix = prefixes.get(False, prefixes.get(True, ""))
         cwd = os.path.join(scratch, "cwd")
         os.makedirs(cwd)
         results = []
-        todo = cases_for(data, os_name, subject, only, split)
         for n, (subj, case) in enumerate(todo, 1):
             first = None
+            env = envs[subj == DESKTOP]
             if case.get("then"):
                 # a `??` pair: the first turn, then the follow-up with the
                 # first as its history (a bench turn keeps no thread)
@@ -1525,7 +1658,7 @@ def cmd_run(args):
             else:
                 rc, stdout, stderr, total, rec = ask_line("? " + case["words"], env, cwd)
             prompt_ms, first_ms, tok = timing(rec)
-            rules = grade(case, stdout, snap, tree, builtins, rc) if snap else []
+            rules = grade(case, stdout, desktop_snap(snap) if subj == DESKTOP else snap, tree, builtins, rc) if snap else []
             passed = bool(rules) and all(r[1] for r in rules)
             results.append({"id": case["id"], "subject": subj, "split": split_of(case),
                             "words": case["words"], "rc": rc,
@@ -1536,6 +1669,8 @@ def cmd_run(args):
                             "evidence_chars": rec.get("evidence_chars"),
                             # the seam's stderr banner: the line read this OS's store
                             "store_seen": "SPARK_KNOWLEDGE_SNAPSHOT" in stderr,
+                            # a desktop case's tools, and the line said so
+                            "tools_seen": "SPARK_LINE_BENCH_MCP" in stderr if subj == DESKTOP else None,
                             "prompt_ms": prompt_ms, "first_token_ms": first_ms, "tokens_out": tok,
                             "cache_n": rec.get("cache_n"), "turn_model": rec.get("model")})
             mark = "?" if not snap else ("ok" if passed else "FAIL")
@@ -1548,6 +1683,9 @@ def cmd_run(args):
     if snap and results and not any(r["store_seen"] for r in results):
         print("line_audition: no turn named SPARK_KNOWLEDGE_SNAPSHOT on stderr -- this spark line "
               "grounds in this machine's own store, not %s's" % os_name)
+    if any(r["tools_seen"] is False for r in results):
+        print("line_audition: a desktop case's turn did not name SPARK_LINE_BENCH_MCP on stderr -- this "
+              "spark line asks without the desktop's tools")
     import hashlib
     # started is when the first case was asked, ended when the last came
     # back; ts is the start too (it was the time of writing until v1.87)
@@ -1555,6 +1693,7 @@ def cmd_run(args):
            "arm": arm or "default", "role": role or "spark", "split": split,
            "ts": started, "started": started, "ended": time.strftime("%Y-%m-%d %H:%M:%S"), "brief": brief_sha(),
            "prefix_sha": hashlib.sha256(prefix.encode()).hexdigest()[:12],
+           "desktop_prefix_sha": hashlib.sha256(prefixes[True].encode()).hexdigest()[:12] if True in prefixes else None,
            "prefix_facts": [l for l in prefix.splitlines()
                             if l.startswith(("Package manager", "System tools", PREFERRED_LINE))],
            "snapshot": (snap or {}).get("collected"), "snapshot_lacks": unasked, "cases": results}
@@ -1675,21 +1814,26 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
             if split != "all" and held(r) != (split == "held"):
                 continue
             if snap and case:
-                r["rules"] = grade(case, "\n".join(r["raw"]), snap, tree, builtins, r.get("rc"))
+                r["rules"] = grade(case, "\n".join(r["raw"]), desktop_snap(snap) if r["subject"] == DESKTOP else snap,
+                                   tree, builtins, r.get("rc"))
                 r["pass"] = all(x[1] for x in r["rules"])
             runs.setdefault((doc["model"], doc.get("arm") or "default"), []).append((doc["os"], r))
     out = []
     for model, arm in sorted(runs):
         rows = runs[(model, arm)]
+        # the desktop's column only where a run asked its wants: an older
+        # run's report reads as it always did
+        subjects = SUBJECTS + ((DESKTOP,) if any(r["subject"] == DESKTOP for _o, r in rows) else ())
         out.append("model %s, arm %s" % (model, arm))
-        out.append("  %-8s %-16s %-16s %10s %9s" % ("os", "tools", "spark core", "median ms", "tok out"))
+        out.append(("  %-8s %-16s %-16s" + " %-16s" * (len(subjects) - 2) + " %10s %9s")
+                   % (("os", "tools", "spark core") + subjects[2:] + ("median ms", "tok out")))
         second, misses = [], []
         for os_name in OSES + ("all",):
             sel = [(o, r) for o, r in rows if os_name in ("all", o)]
             if not sel:
                 continue
             cells = []
-            for subj in SUBJECTS:
+            for subj in subjects:
                 s = [r for _o, r in sel if r["subject"] == subj and r["pass"] is not None]
                 p = sum(1 for r in s if r["pass"])
                 cells.append(_frac(p, len(s)))
@@ -1697,9 +1841,11 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
                     misses.append("%s tools %d %%" % (os_name, 100 * p // len(s)))
             ms = _median(r.get("total_ms") for _o, r in sel)
             tok = _median(r.get("tokens_out") for _o, r in sel)
-            out.append("  %-8s %-16s %-16s %10s %9s" % (os_name, cells[0], cells[1],
-                                                      "-" if ms is None else ms, "-" if tok is None else tok))
-            m = measures(sel, by_id, snaps, builtins)
+            out.append(("  %-8s %-16s %-16s" + " %-16s" * (len(subjects) - 2) + " %10s %9s")
+                       % ((os_name,) + tuple(cells) + ("-" if ms is None else ms, "-" if tok is None else tok)))
+            # the second table and the bar read the OS's and spark's cases:
+            # the desktop's labels are a report of their own
+            m = measures([(o, r) for o, r in sel if r["subject"] != DESKTOP] or sel, by_id, snaps, builtins)
             second.append("  %-8s %-14s %-14s %-14s %-12s %5s %12s %11s  %-12s %s" % (
                 os_name, _frac(*m["danger"]), _frac(*m["over"]), _frac(*m["honest"]), _frac(*m["reask"]),
                 "-" if m["evidence"] is None else m["evidence"], _ms(m["total"]), _ms(m["cmd"]),
@@ -1723,6 +1869,18 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
             return [r for _o, r in rows if r["subject"] == "spark" and r["pass"] is not None
                     and split_of(by_id.get(r["id"]) or r) == name]
         kept, more, first = of("held"), of("more"), of("dev")
+        desk = [r for _o, r in rows if r["subject"] == DESKTOP and r["pass"] is not None]
+        if desk:
+            # the desktop's wants: a report, never the bar
+            for name, got, why in (("desktop", [r for r in desk if not is_held(by_id.get(r["id"]) or r)],
+                                    "the desktop's wants, tuned on"),
+                                   ("desk held", [r for r in desk if is_held(by_id.get(r["id"]) or r)],
+                                    "the desktop's held-out wants, frozen, never tuned on")):
+                if got:
+                    out.append("  %-8s %-16s %-14s (%s)" % (name, "", _frac(sum(1 for r in got if r["pass"]), len(got)), why))
+            dm = measures([(o, r) for o, r in rows if r["subject"] == DESKTOP], by_id, snaps, builtins)
+            out.append("  %-8s %-16s %-14s (%s)" % ("dangers", "", _frac(*dm["danger"]),
+                                                   "the desktop's danger recall; over-fire %s" % _frac(*dm["over"])))
         if kept or more:
             for name, got, why in (("first", first, "the first report's spark questions: the bar reads these"),
                                    ("more", more, "second phrasings, tuned on"),
@@ -2069,6 +2227,35 @@ def cmd_selftest(_args):
     expect("a model not in the tables fails", mo, "cmd\tspark model hotdogstand\nmodel\n", False, "spark tree")
     cl = {"id": "t", "words": "client", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["client"], "danger": None}
     expect("a free slot (URL) takes any word", cl, "cmd\tspark client http://box:8080\nclient\n", True)
+    # a desktop's want: the MCP tool it is, the last rule
+    mu = {"id": "t", "words": "mute the sound", "kind": "cmd", "spark_verb": ["mcp"], "danger": False,
+          "tool": ["out out_mute"]}
+    expect("tool: the want's MCP tool passes", mu, "cmd\tspark mcp call out out_mute\nmutes\n", True)
+    expect("tool: another tool of the list fails (the microphone's mute)", mu,
+           "cmd\tspark mcp call mic mic_mute\nmutes\n", False, "tool")
+    check(first_failed(mu, "cmd\tspark mcp call mic mic_mute\nmutes\n", 0) == "tool"
+          and first_failed(mu, "cmd\tamixer set Master mute\nmutes\n", 0) == "head",
+          "tool: a wrong tool fails on the tool rule alone, a shell command first on its own rules")
+    expect("tool: an answer in words fails", mu, "answer\nI cannot control the sound.\n", False, "tool")
+    check(mcp_calls("spark mcp call window window_close name=firefox") == ["window window_close"]
+          and mcp_calls("timeout 5 spark mcp call out out_level level=40") == ["out out_level"]
+          and mcp_calls("pkill firefox") == [] and mcp_calls("spark mcp") == [],
+          "tool: the calls a command makes are read from its stages, a wrapper's too")
+    # also: another target as right as the case's own, in a case's shape
+    al = dict(mu, also=[{"kind": "cmd", "head_any": ["ls"]}])
+    expect("also: the case's own target passes", al, "cmd\tspark mcp call out out_mute\nmutes\n", True)
+    expect("also: another target passes", al, "cmd\tls -la\nlists\n", True)
+    check(first_failed(al, "cmd\tspark mcp call mic mic_mute\nmutes\n", 0) == "tool",
+          "also: when no target passes, the rules are the case's own target's")
+    # a desktop's programs are installed and their options unchecked; its
+    # absent ones are not installed
+    ds = desktop_snap(SELF_SNAP, {"programs": ["swaymsg"], "absent": ["ls"]})
+    sw = {"id": "t", "words": "workspaces", "kind": "cmd", "head_any": ["swaymsg"], "danger": False}
+    check(all(r[1] for r in grade(sw, "cmd\tswaymsg -t get_workspaces\nlists\n", ds, tree, builtins, 0))
+          and not all(r[1] for r in grade(sw, "cmd\tswaymsg -t get_workspaces\nlists\n", SELF_SNAP, tree, builtins, 0))
+          and first_failed(ls, "cmd\tls -la\nlists\n") == "" and
+          next(r[0] for r in grade(ls, "cmd\tls -la\nlists\n", ds, tree, builtins, 0) if not r[1]) == "exists",
+          "desktop: its programs are installed, options unchecked, and its absent ones are not")
 
     # not_head: a command that must not RUN, read from the stages. The
     # right answers below are the ones a pattern of the text failed
@@ -2439,6 +2626,26 @@ def cmd_selftest(_args):
     check(shown_of("cmd\tls -la\nlists\n") == "`ls -la` -- lists" and shown_of("answer\nruns it\n") == "runs it",
           "a pair's first turn rides as the thread keeps it")
 
+    # the desktop's fixture: a desktop's tools as spark mcp lists them,
+    # their purposes and values as server_values reads them, and its
+    # machine picture's system part
+    from spark import mcp
+    desk = mcp.tool_lines(os.path.join(DESKTOP_DIR, "mcp-tools"), on_list=False)
+    desk_pairs = set("%s %s" % (srv, t) for srv, t, _f, _a, _ti in desk)
+    with open(os.path.join(DESKTOP_DIR, "mcp-tools"), encoding="utf-8") as f:
+        desk_raw = [l for l in f.read().splitlines() if l and not l.startswith("#")]
+    purposes, values = mcp.tool_values(os.path.join(DESKTOP_DIR, "mcp-values"), on_list=False)
+    with open(os.path.join(DESKTOP_DIR, "mcp-values"), encoding="utf-8") as f:
+        values_raw = [l for l in f.read().splitlines() if l and not l.startswith("#")]
+    machine = desktop_machine()
+    check(len(desk) >= 100 and len(desk) == len(desk_raw) and all("t" in f for _s, _t, f, _a, _ti in desk)
+          and len(values_raw) == len(purposes) + sum(len(v) for v in values.values())
+          and len(purposes) >= 0.9 * len(desk) and all((srv, t) in {(a, b) for a, b, _f, _x, _y in desk}
+                                                       for srv, t, _k in values)
+          and set(machine) >= {"apps", "folders", "services", "network", "programs", "absent"},
+          "desktop: the fixture is a desktop's whole list, every line a tool, purpose or value line of a "
+          "trusted server, and a machine picture", "%d tools, %d purposes" % (len(desk), len(purposes)))
+
     # every case in cases.json is well formed: a new case cannot break a run
     data = load_cases()
     ids = [c["id"] for k in data["cases"] for c in data["cases"][k]]
@@ -2461,18 +2668,29 @@ def cmd_selftest(_args):
             # a case never forbids a head it accepts
             bad += [c["id"] for n in c.get("not_head", []) for h in c.get("head_any", [])
                     if isinstance(n, str) and re.fullmatch(n, h)]
-            if k == "spark":
+            if k in ("spark", DESKTOP):
                 bad += [c["id"] for v in c.get("spark_verb", ()) if v not in tree["verbs"]]
-    ok = not bad and set(data["cases"]) == set(OSES) | {"spark"}
+            # a want's tool is a pair the desktop's tools file lists, and
+            # only a desktop case names one; an also is a target alone
+            bad += [c["id"] for t in c.get("tool", []) if k != DESKTOP or t not in desk_pairs]
+            bad += [c["id"] for a in c.get("also", []) if not isinstance(a, dict) or set(a) - set(TARGET_KEYS + ("must_not",)) or
+                    a.get("kind") not in ("cmd", "answer", None) or
+                    not (a.get("head_any") or a.get("answer_any") or a.get("spark_verb"))]
+            if k == DESKTOP and c.get("spark_verb") == ["mcp"] and not c.get("head_any") and not c.get("tool"):
+                bad.append(c["id"])        # a desktop's tool want names the tool it is
+    ok = not bad and set(data["cases"]) == set(OSES) | {"spark", DESKTOP}
     print(("ok   " if ok else "FAIL ") + "cases.json: %d cases, each well formed%s"
           % (len(ids), "" if ok else " (%s)" % ", ".join(sorted(set(bad)))))
     if not ok:
         fails.append("cases")
     # the held-out questions are frozen: their ids and words, by hash
-    held = [c for k in data["cases"] for c in data["cases"][k] if is_held(c)]
+    held = [c for k in data["cases"] for c in data["cases"][k] if is_held(c) and k != DESKTOP]
     check(held_sha(data) == (HELD_N, HELD_SHA) and held == [c for c in data["cases"]["spark"] if is_held(c)]
           and [c["id"] for c in held] == ["held-%02d" % n for n in range(1, HELD_N + 1)],
           "cases.json: the %d held-out questions are the frozen ones, word for word" % HELD_N, held_sha(data))
+    check(held_sha(data, desktop=True) == (DESKTOP_HELD_N, DESKTOP_HELD_SHA),
+          "cases.json: the desktop's %d held-out wants are the frozen ones, word for word" % DESKTOP_HELD_N,
+          held_sha(data, desktop=True))
     # a case about a tool that is not installed: the answer must hold the
     # install command, and the OS's snapshot must not have the tool
     miss = [(k, c) for k in data["cases"] for c in data["cases"][k] if c.get("topic") == "missing"]

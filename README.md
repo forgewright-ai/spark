@@ -209,8 +209,14 @@ it on a new install. What each command sends:
 
 - `line`: the line you typed, your shell, your OS and the folder's
   path. With a question, the matching lines of your manuals, 600
-  characters at most. With MCP servers on the list, the names and
-  titles of their tools, 1.5 kB at most.
+  characters at most. A picture of this machine: how the prompt runs,
+  in a terminal on a desktop, a console or an ssh login. It names the
+  apps and how each was installed, and which common programs are not
+  installed. It names your home folders, the services that
+  start at boot and the network interfaces. With MCP servers on the
+  list, every tool and its arguments. From a trusted server, the first
+  words of each tool's description and the values its arguments take.
+  Never a file's text or a password.
 - `mcp call` and a tool step of `do`: the arguments you typed or
   confirmed go to that server. It is a program on this machine, and
   may be a network client of its own: `spark stats --sends` does not
@@ -221,7 +227,8 @@ it on a new install. What each command sends:
 - `do`: each step's output (the last 4 kB) and the folder's path, and
   the names of the files the step changed: in `--sandbox`, every file
   that changed in the copy. After a refused option, a few lines of that
-  command's man page. A tool's result, the last 4 kB.
+  command's man page. A tool's result, the last 4 kB. With MCP servers
+  on the list, the names and titles of their tools, 1.5 kB at most.
 - `explain`: the piped text, the last 6 kB.
 - `steps`: your words and the tools you pipe in, their names,
   arguments and titles, up to 32 kB. Never a tool's description or a
