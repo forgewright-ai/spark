@@ -8084,7 +8084,7 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "answer" and "too big to check" in out
              and STATE["hits"] == _n0,
              "line --paste: over 8 kB is one line and NO model call", repr(out))
-        # a paste that looks like a secret never leaves: one line naming
+        # a paste that looks like a secret is never sent: one line naming
         # the shape, no model call; the plain two-line paste above was sent
         _key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXkt\n-----END OPENSSH PRIVATE KEY-----\n"
         rc, out, _ = spark("line", "--paste", stdin=_key)

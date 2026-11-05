@@ -1276,7 +1276,7 @@ def stdin_text(source=False):
 
 
 # ------------------------------------------------------------ held back
-# a paste that looks like a secret never leaves this machine: a local
+# a paste that looks like a secret is never sent: a local
 # look before anything is sent (a pasted private key or .env would
 # otherwise ride to the brain -- over the LAN, on a client). A named
 # line each, with what the verdict calls it; a false positive only

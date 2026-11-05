@@ -399,10 +399,11 @@ spark mcp call notes add_note text=milk
 
 A server runs with no shell, in your home, with a short list of
 environment variables. It talks to spark over its stdin and stdout
-alone, never the network. A tool's description never goes to the
-model, but for its first words from a trusted server: the tool's
-purpose on the prompt line. Each call is a record in the audit trail,
-its names and a digest of its arguments: `spark serve --audit`.
+alone. The server is a program of its own, and it may use the network
+itself. A tool's description never goes to the model, but for its first
+words from a trusted server: the tool's purpose on the prompt line. Each
+call is a record in the audit trail, its names and a digest of its
+arguments: `spark serve --audit`.
 
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`
@@ -568,9 +569,11 @@ Your own llama-server:
 
 spark uses the one model the server has loaded. A server that loads
 more than one model is not supported. spark downloads no model for it,
-and never starts or stops it. Your threads and memory stay on this
-machine, encrypted. `spark client off` goes back to a model spark runs
-here. Stop your server first when it holds port 8080, or set
+and never starts or stops it. Your threads and memory are kept on this
+machine, encrypted. Each request carries the conversation, with your
+soul and remembered facts, to your server. `spark client off` goes back
+to a model spark runs here. Stop your server first when it holds port
+8080, or set
 `SPARK_PORT`. A stock `llama-server` started with no `--port` listens
 on 9931 since its build b11960, and `spark setup` looks there too.
 Ollama is not supported yet.

@@ -2630,7 +2630,7 @@ def main():
             ls = out.splitlines()
             ok(rc == 0 and ls[0] == "SITE_PEER_AI_URL=" + url and "spark user add NAME" in out
                and ("spark client " + url) in out and "spark user login NAME" in out
-               and "the admin token stays on this machine" in out,
+               and "keep the admin token here" in out,
                "--print-client: mint here, client and login there, no secret", out)
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")

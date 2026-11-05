@@ -2,10 +2,12 @@
 
 spark is a local AI at the shell prompt, for Linux (the Debian, Arch,
 Void, Fedora and openSUSE families), macOS and Windows through WSL 2.
-Nothing leaves the machine except pinned downloads and your own words
-to a model you run. One line installs it, and spark is live. A tool
-becomes a spark app as a client of `spark edit`, in its own
-`spark-<app>` repository, and no shell code lives in this tree.
+It runs a model on your own machine by default, with no account or
+telemetry. What leaves is the pinned downloads and your own words to the
+model server you chose: README.md, "What leaves this machine", names
+every sender. One line installs it, and spark is live. A tool becomes a
+spark app as a client of `spark edit`, in its own `spark-<app>`
+repository, and no shell code lives in this tree.
 `docs/REFERENCE.md` is the full reference: the principles, the layout,
 the 16 contracts, the grammar and the release steps. This file is the
 short brief, and `CLAUDE.md` is what a Claude session loads: this file,

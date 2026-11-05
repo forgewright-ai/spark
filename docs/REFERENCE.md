@@ -5,17 +5,20 @@ the full reference. `CLAUDE.md` is what a Claude session loads: the
 brief, imported, and this file's sections named by topic. It describes
 how things are, not how they came to be.
 
-spark is a local AI at the shell prompt that never leaves your LAN. It
-runs on a fresh Debian-family, Arch, Void, Fedora or openSUSE Linux, on
-macOS, and on Ubuntu under WSL 2. Its spine is 3 lines. Choose your OS,
-run one line, spark is live. A tool becomes a spark app as a client of
-`spark edit` (contract 10), in its own `spark-<app>` repository. When
-apps ask for it, another contract is defined and apps connect the same
-way. Inside, the `FORGE` is the identity spark builds and keeps on this
-machine: the model, one soul, one memory and the threads, served on the
-LAN by `spark serve`. It is one identity per machine, the same one for
-the prompt line, the page and any program. `FORGE` is the code's name
-for it, and no verb carries the word.
+spark is a local AI at the shell prompt. The model runs on your own
+machine by default, with no account and no telemetry. Your words go to
+the model server you chose: README.md, "What leaves this machine", says
+what each command sends. spark runs on a fresh Debian-family, Arch,
+Void, Fedora or openSUSE Linux, on macOS, and on Ubuntu under WSL 2. Its
+spine is 3 lines. Choose your OS, run one line, spark is live. A tool
+becomes a spark app as a client of `spark edit` (contract 10), in its
+own `spark-<app>` repository. When apps ask for it, another contract is
+defined and apps connect the same way. Inside, the `FORGE` is the
+identity spark builds and keeps on this machine: the model, one soul,
+one memory and the threads, served on the LAN by `spark serve`. It is
+one identity per machine, the same one for the prompt line, the page and
+any program. `FORGE` is the code's name for it, and no verb carries the
+word.
 
 ## Principles
 
@@ -40,14 +43,24 @@ for it, and no verb carries the word.
   side is generic: `~/.config/spark/theme.env` is a palette a look
   layer may write, and no shell code lives in this tree. The bar line
   is core, beside `spark serve boot`: the behaviour of an AI appliance.
-- **Privacy by design.** Nothing leaves the machine except the package
-  managers, pinned sha256-verified downloads, and `spark` talking to a
-  `FORGE` or a llama-server you run. The engine spark starts gets an
+  - **Privacy by design.** spark has no account and no telemetry. What
+  leaves is what the package managers fetch and the downloads README.md
+  names: spark itself, and the engine, the voice and the model, each
+  checked by sha256. Your words go to the model server you chose, a
+  `FORGE` or a llama-server you run, on this machine or another of
+  yours. README.md, "What leaves this machine", names every sender and
+  what each one carries. `persona.SENDS` is that list in code, and
+  `tests/docs_test.py` holds the README to it. A program spark starts,
+  an MCP server or a `spark do` step, may be a network client of its
+  own. spark counts none of what it sends on. No doc makes the blanket
+  claim that spark keeps everything on the machine: that is a promise
+  spark cannot keep. docs_test refuses the words in the user's docs, in
+  this file and in `AGENTS.md`. The engine spark starts gets an
   environment of named lines, `engine.ENV_KEEP` and
-  `engine.ENV_PREFIXES`: its path, its locale and the GPU variables.
-  Its command carries `--offline`. So no `LLAMA_ARG_*` of a shell can
-  point it at another host, and the `serve` row warns on a connection
-  it holds out (`engine.outbound`). Identity lives in
+  `engine.ENV_PREFIXES`: its path, its locale and the GPU variables. Its
+  command carries `--offline`. So no `LLAMA_ARG_*` of a shell can point
+  it at another host, and the `serve` row warns on a connection it holds
+  out (`engine.outbound`). Identity lives in
   `~/.config/spark/site.env`, never in the repository. The soul is
   yours, under `~/.config/spark/`. The memory is yours, sealed in your
   store. Secrets are 0600 files, never config values. The words in
@@ -2329,7 +2342,7 @@ and may change freely.
     line is `[part N of M]`, written by the code before the first kept
     line. An answer from part 2 that does not say so cannot be told
     from an answer about the whole. Each part read is its own turn.
-    `--name NAME` (a basename) never leaves the machine. It names the
+    `--name NAME` (a basename) is never sent. It names the
     ledger record (kind `read`, `ledger.RULES`) written after a kept
     answer: the questions asked of this source, so a second reader sees
     what has been asked. Nothing invalidates them but age and `--ledger
@@ -2476,9 +2489,9 @@ and may change freely.
     more, and past that one stderr line names the lines never looked at,
     exit 1. Otherwise stdin closing ends it (exit 0), `SIGINT` 130. No
     ledger: a live
-    stream has nothing stable to name. It is local in the strongest
-    sense: the stream never leaves the machine, and the same model the
-    prompt line uses answers. The turn record is numbers.
+    stream has nothing stable to name. The stream goes to the same
+    model server the prompt line uses, a window at a time. The turn
+    record is numbers.
 15. `spark do --porcelain [--sandbox] [--] <words>` is the task verb for
     a program: contract 4's `spark do`, driven over a pipe. No tty is
     needed. One stderr line (`do.PORCELAIN_BANNER`) says a program

@@ -39,9 +39,8 @@
 #                     stable to name, and the next line is the only state
 #                     that matters.
 #   what leaves       the window's lines and the instruction, to the model
-#                     this machine answers from. A production log is never
-#                     streamed to a vendor -- this is local in the strongest
-#                     sense, the same brain the prompt uses.
+#                     server the prompt line uses: this machine's own, or
+#                     the one `spark client URL` named.
 
 import io
 import os

@@ -912,6 +912,15 @@ def main():
         check("nothing leaves" not in body and
               ("no telemetry" in body.lower() or "no account or telemetry" in body.lower()),
               "%s has qualified privacy wording without a blanket claim" % name)
+    # the maintainer's docs keep the same discipline (docs/REFERENCE.md,
+    # "Privacy by design"): no blanket claim, and each points at README's
+    # disclosure, the one place that says what every command sends
+    for name in ("docs/REFERENCE.md", "AGENTS.md"):
+        body = read(name).lower()
+        check("nothing leaves" not in body
+              and re.search(r"never leaves? (the|this|your) (machine|lan|box)", body) is None
+              and '"what leaves this machine"' in body,
+              "%s names README's disclosure and makes no blanket privacy claim" % name)
     check("### HTTPS for the page" in inst and
           "docs/INSTALL.md#https-for-the-page" in readme and
           "only shows certificate status" in inst,

@@ -190,7 +190,7 @@ def _install_line(binary):
 
 
 PASTE_MAX = 8000        # what a paste inspection reads, or it says so and sends nothing
-# a paste that looks like a secret never leaves this machine: the list
+# a paste that looks like a secret is never sent: the list
 # and the look live in spark.text (SECRET_SHAPES, secret_shape), beside
 # the source's own (SOURCE_SHAPES, hold_secrets); the names stay here too
 SECRET_SHAPES = textmod.SECRET_SHAPES

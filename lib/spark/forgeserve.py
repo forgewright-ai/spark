@@ -2551,12 +2551,12 @@ def client_steps(url):
 
 def cmd_print_client(args):
     """What a peer machine needs: the URL and a personal user. No secret
-    ever leaves this box -- the token is shown once at the mint."""
+    is printed here -- a user's token is shown once, at the mint."""
     cfg = config.load()
     url = link_url(cfg)
     say("SITE_PEER_AI_URL=%s" % url)
     say("\n".join(client_steps(url)))
-    say("the admin token stays on this machine (spark serve --login)")
+    say("keep the admin token here: a client logs in as a user (spark serve --login shows the admin's)")
     return 0
 
 

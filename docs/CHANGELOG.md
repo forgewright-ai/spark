@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.113.2
+
+- S4: the reference and the brief promised that nothing leaves the
+  machine, and that spark never leaves your LAN, though your words go to
+  the model server you chose and a program spark starts may use the
+  network itself. They say what is sent and to where now, as README's
+  "What leaves this machine" does, and docs_test refuses the blanket claim
+  in docs/REFERENCE.md and AGENTS.md too. spark serve --print-client tells
+  you to keep the admin token here, where it promised that it stays (#170)
+
 ## v1.113.1
 
 - S3: the prompt line knew nothing only the desktop knows, its
