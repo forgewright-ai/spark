@@ -856,7 +856,8 @@ _spark_ask_line() {
     if [[ -n $_spark_fail && $_spark_fail_rc == 127 ]]; then
         # command not found: Esc s asks for the install line (known tools
         # answer offline in `spark line`, the rest through the model)
-        export SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=127
+        local SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=127
+        export SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
         _spark_fail=''
         _spark_ask "install it"
     elif [[ -n $_spark_fail ]]; then
@@ -1036,7 +1037,7 @@ unset _spark_ro _spark_rec _spark_binds
 _spark_paste() {
     local before=$READLINE_LINE buf='' ch
     _spark_reap
-    while IFS= read -r -s -N1 -t 2 ch; do
+    while IFS= read -r -s -N1 ch; do
         buf+=$ch
         [[ $buf == *$'\e[201~' ]] && { buf=${buf%$'\e[201~'}; break; }
     done

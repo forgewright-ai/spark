@@ -47,7 +47,7 @@ import threading
 import time
 
 from . import CONFIG_DIR, HOME, MARK, STATE_DIR, config, log_exc, page, say
-from . import vault
+from . import mcp_schema, vault
 from . import text as textmod
 
 PROTOCOL = "2025-06-18"           # the spec spark speaks, pinned: a server that answers another is closed
@@ -139,8 +139,8 @@ PAGES_MAX = 8               # tools/list pages read, at most
 ELICIT_PER_CALL = 3         # questions a server may ask in one call
 ELICIT_PER_MINUTE = 6       # and in a minute, over every call
 ELICIT_MESSAGE_MAX = 300    # characters of its question shown
-STRING_MAX = 4096           # a string argument with no maxLength of its own
-ARRAY_MAX = 32              # an array argument's items, with no maxItems of its own
+STRING_MAX = mcp_schema.STRING_MAX       # default when the schema names no maximum
+ARRAY_MAX = mcp_schema.ARRAY_MAX
 BRIEF_MAX = 1500            # characters of tool lines a brief carries (do's; the line's is line_block, budgeted)
 PURPOSE_WORDS = 10          # words of a description's first sentence a purpose keeps
 VALUE_MAX = 80              # characters of one value, or of its label, the values file keeps
@@ -887,6 +887,12 @@ def validate(schema, args, later=()):
     string. A shape spark does not check is refused."""
     if not isinstance(args, dict):
         return "the arguments are no object"
+    why = mcp_schema.problem(schema, root=True)
+    if why:
+        return short(why, 120)
+    why = mcp_schema.constraints(schema, args)
+    if why:
+        return why
     props = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     for k in args:
         if k not in props:
@@ -913,20 +919,25 @@ def _int(v, default):
 def _value_ok(p, v, depth=0):
     if not isinstance(p, dict):
         return "is not a shape spark checks"
-    if isinstance(p.get("enum"), list) and v not in p["enum"]:
-        return "is not one of %s" % ", ".join(short(e, 30) for e in p["enum"][:12])
+    if isinstance(v, str) and len(v) > mcp_schema.STRING_LIMIT:
+        return "is %d characters at most" % mcp_schema.STRING_LIMIT
+    if isinstance(v, list) and len(v) > ARRAY_MAX:
+        return "is a list of %d at most" % ARRAY_MAX
+    why = mcp_schema.constraints(p, v)
+    if why:
+        return why
     t = p.get("type")
     if t == "string":
         if not isinstance(v, str):
             return "is text"
         if _PLAIN_BAD.search(v):
             return "holds a control character"
-        lo, hi = _int(p.get("minLength"), 0), _int(p.get("maxLength"), STRING_MAX)
+        lo, hi = _int(p.get("minLength"), 0), min(mcp_schema.STRING_LIMIT, _int(p.get("maxLength"), STRING_MAX))
         if not lo <= len(v) <= hi:
             return "is %d to %d characters" % (lo, hi)
         return ""
     if t in ("integer", "number"):
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or (t == "integer" and v != int(v)):
+        if not mcp_schema.finite(v) or (t == "integer" and v != int(v)):
             return "is a whole number" if t == "integer" else "is a number"
         lo, hi = p.get("minimum"), p.get("maximum")
         if (isinstance(lo, (int, float)) and v < lo) or (isinstance(hi, (int, float)) and v > hi):
@@ -935,7 +946,7 @@ def _value_ok(p, v, depth=0):
     if t == "boolean":
         return "" if isinstance(v, bool) else "is yes or no"
     if t == "array" and depth == 0:
-        cap = _int(p.get("maxItems"), ARRAY_MAX)
+        cap = min(ARRAY_MAX, _int(p.get("maxItems"), ARRAY_MAX))
         if not isinstance(v, list) or len(v) > cap:
             return "is a list of %d at most" % cap
         for x in v:
@@ -960,31 +971,48 @@ def digest(schema, args):
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
-def rows_of(srv):
-    """The calls a server's rows resource names ([(name, arguments, ask)]),
-    or None when it lists no rows resource (the desktop providers' rows
-    schema: {"rows": [{"tool": {"name", "arguments", "ask"}, "more":
-    [...]}]}). A rows resource listed that does not read, or is not that
-    shape, is Refused: the rule is never skipped in silence."""
-    res = [r for r in srv.resources() if r[1] == "rows"]
-    if not res:
-        return None
-    try:
-        d = json.loads(srv.read(res[0][0]))
-    except (ValueError, RecursionError):
-        d = None
-    if not isinstance(d, dict) or not isinstance(d.get("rows"), list):
-        raise Refused("%s: its rows do not read, so no step of it is checked -- not run" % srv.name)
-    out = []
-    for row in d["rows"]:
-        if not isinstance(row, dict):
+def row_documents(srv):
+    """Fresh root rows and their bounded children, shared by discovery
+    and dispatch. Only one level below each root URI is read, once.
+    A listed resource that cannot be checked refuses dispatch; discovery
+    may keep the earlier documents by catching Refused itself."""
+    bases = [uri for uri, name, _title in srv.resources() if name == "rows"]
+    todo, seen, kids = [(uri, 0) for uri in bases], set(), 0
+    while todo:
+        uri, depth = todo.pop(0)
+        if uri in seen or (depth and kids >= CHILDREN_MAX):
             continue
-        more = row.get("more") if isinstance(row.get("more"), list) else []
-        for c in [row.get("tool")] + more:
-            if isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("arguments"), dict):
-                ask = [a for a in c.get("ask") if isinstance(a, str)] if isinstance(c.get("ask"), list) else []
-                out.append((c["name"], c["arguments"], ask))
-    return out
+        seen.add(uri)
+        kids += depth
+        try:
+            doc = json.loads(srv.read(uri))
+        except (ValueError, RecursionError):
+            doc = None
+        if not isinstance(doc, dict) or not isinstance(doc.get("rows"), list):
+            raise Refused("%s: its rows do not read, so no step of it is checked -- not run" % srv.name)
+        yield doc
+        if not depth:
+            for row in doc["rows"]:
+                child = row.get("children") if isinstance(row, dict) else None
+                if isinstance(child, str) and child.startswith(uri + "/"):
+                    todo.append((child, 1))
+
+
+def rows_of(srv):
+    """The calls from fresh roots and children, with their credential asks.
+    No resource means no row restriction. An unreadable one refuses."""
+    out, listed = [], False
+    for doc in row_documents(srv):
+        listed = True
+        for row in doc["rows"]:
+            if not isinstance(row, dict):
+                continue
+            more = row.get("more") if isinstance(row.get("more"), list) else []
+            for c in [row.get("tool")] + more:
+                if isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("arguments"), dict):
+                    ask = [a for a in c.get("ask") if isinstance(a, str)] if isinstance(c.get("ask"), list) else []
+                    out.append((c["name"], c["arguments"], ask))
+    return out if listed else None
 
 
 def rows_gate(tool, args, rows):
@@ -1071,12 +1099,9 @@ def server_values(srv, tools):
 
     def take(d):
         rows = d.get("rows") if isinstance(d, dict) and isinstance(d.get("rows"), list) else []
-        kids = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            if isinstance(row.get("children"), str):
-                kids.append(row["children"])
             more = row.get("more") if isinstance(row.get("more"), list) else []
             for c in [row.get("tool")] + more:
                 if not (isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("arguments"), dict)):
@@ -1099,24 +1124,10 @@ def server_values(srv, tools):
                     lab = _label(row) if len(c["arguments"]) == 1 else ""
                     if not got.get(v):
                         got[v] = lab
-        return kids
     if want:
         try:
-            base = [uri for uri, name, _title in srv.resources() if name == "rows"]
-            todo, seen, kids = [(u, 0) for u in base], set(), 0
-            while todo:
-                uri, depth = todo.pop(0)
-                if uri in seen or (depth and kids >= CHILDREN_MAX):
-                    continue
-                seen.add(uri)
-                kids += depth
-                try:
-                    d = json.loads(srv.read(uri))
-                except (ValueError, RecursionError):
-                    continue
-                for k in take(d):
-                    if not depth and any(k.startswith(b + "/") for b in base):
-                        todo.append((k, 1))
+            for doc in row_documents(srv):
+                take(doc)
         except Refused:
             pass
     return {key: list(got.items()) for key, got in want.items() if 0 < len(got) <= VALUES_MAX}

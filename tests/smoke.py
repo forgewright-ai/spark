@@ -769,6 +769,15 @@ def answer_json(messages):
         got = know_answer(asked, KNOW_AGAIN in user or OWN_AGAIN in user or TOLD_AGAIN in user)
         if got:
             return got
+    if STATE.get("exact_line") is not None:
+        command, proof = STATE["exact_line"]
+        if "exact-retry" in asked and "not installed on this machine" not in user:
+            command = "missing-exact-tool"
+        reply = {"kind": "cmd", "danger": False, "command": command, "hint": "shows the file", "proof": proof}
+        # A missing danger field prevents early delivery and exercises fallback.
+        if "exact-fallback" in asked:
+            reply.pop("danger")
+        return reply
     # the streamed line (v1.52): the schema's own order -- kind, danger,
     # command, hint, proof -- so line 1 can go the moment the command closes
     if "midcut" in user or "slowhint" in user or "capcut" in user:
@@ -7982,6 +7991,10 @@ def main():
         t.ok(rc == 0 and lines[0].startswith("cmd\t") and "ripgrep" in lines[0]
              and STATE["hits"] == n0,
              "line: a known missing tool (rg) gets its install line with no model call", out)
+        rc, out, _ = spark("line", stdin="disk space?",
+                           extra={"SPARK_EXPLAIN_CMD": "rg foo", "SPARK_EXPLAIN_RC": "127"})
+        t.ok(rc == 0 and "ripgrep" not in out and STATE["hits"] > n0,
+             "line: stale exit 127 context cannot replace an unrelated question", out)
 
         # localize: the prefix names THIS OS's side of the pairs, not the other
         import platform as _plat
@@ -8143,6 +8156,28 @@ def main():
             rc, out, _ = spark("line", stdin="%s?" % _w)
             t.ok(rc == 1 and out.splitlines() == ["error", "the model's command carried control characters -- refused"],
                  "line: a control character in the command (%s) refuses the reply before line 1" % _w, repr(out))
+        for path in ("exact-stream", "exact-fallback", "exact-retry"):
+            command = "ls 'Q4  report.txt'"
+            proof = "test -f 'Q4  report.txt'"
+            STATE["exact_line"] = (command, proof)
+            rc, out, _ = spark("line", stdin=path + "?", extra={"SPARK_KNOWLEDGE": "off"})
+            t.ok(rc == 0 and out.splitlines()[0] == "cmd\t" + command and "proof\t" + proof in out.splitlines(),
+                 "line: command and proof keep literal spaces through %s" % path, repr(out))
+        for command in ("echo " + "x" * 1100, "echo 'a\nb'", "echo 'a\tb'", "echo 'a\rb'", 42, ["ls"]):
+            STATE["exact_line"] = (command, "")
+            rc, out, _ = spark("line", stdin="exact-stream?", extra={"SPARK_KNOWLEDGE": "off"})
+            t.ok(rc == 1 and out.startswith("error\n"),
+                 "line: an unrepresentable command is refused whole", repr(out[:100]))
+        STATE["exact_line"] = ("ls", "test -f 'a\nb'")
+        rc, out, _ = spark("line", stdin="exact-stream?", extra={"SPARK_KNOWLEDGE": "off"})
+        t.ok(rc == 0 and "proof\t" not in out, "line: an unrepresentable proof is omitted whole", repr(out))
+        STATE["exact_line"] = ("out_mute\n", "")
+        rc, out, _ = spark("line", stdin="exact-stream?", extra={
+            "SPARK_KNOWLEDGE": "off", "SPARK_LINE_BENCH": "1",
+            "SPARK_LINE_BENCH_MCP": os.path.join(REPO, "tests", "line_audition", "desktop")})
+        t.ok(rc == 1 and out.startswith("error\n"),
+             "line: a tool alias cannot hide an unrepresentable command", repr(out))
+        STATE.pop("exact_line")
         rc, out, _ = spark("line", stdin="escquote?")
         t.ok(rc == 0 and out.splitlines()[:2] == ['cmd\tprintf "%s\\n" "a\\"b" café', 'Prints "a\\"b" -- é.'],
              "line: the streamed JSON's escapes and a non-ASCII letter come out whole", repr(out))
@@ -9536,6 +9571,40 @@ def main():
              "edit ? --sel: a 20 kB selection is clipped inside the marks, the window stays under 16 kB", str(len(umsg)))
         rc, out, _ = spark("edit", "?", "--sel", "5", "2", stdin="short\n")
         t.ok(rc == 2 and "--sel A B are byte offsets" in out, "edit ? --sel out of order is refused", out)
+        rc, out, _ = spark("edit", "--at", "2", stdin="\u00e9x")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "Before the cursor:\n\u00e9\n\nAfter the cursor:\nx" in umsg,
+             "edit --at: a UTF-8 byte offset lands between characters", repr(umsg))
+        rc, out, _ = spark("edit", "?", "--sel", "2", "3", stdin="\u00e9x")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "[selection starts]\nx\n[selection ends]" in umsg,
+             "edit --sel: UTF-8 byte offsets select the intended character", repr(umsg))
+        for flags in (("--at", "1"), ("--at", "-1"), ("--at", "4"),
+                      ("?", "--sel", "1", "3"), ("?", "--sel", "0", "1")):
+            before = len(STATE["bodies"])
+            rc, out, _ = spark("edit", *flags, stdin="\u00e9x")
+            t.ok(rc == 2 and len(STATE["bodies"]) == before,
+                 "edit: an invalid byte boundary is refused before the model (%s)" % (flags,), out)
+        source = "\u00e9: code 123456; x"
+        a = len(source[:source.index("123456")].encode("utf-8"))
+        rc, out, _ = spark("edit", "?", "--source", "--sel", str(a), str(a + 6), stdin=source)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "[selection starts]\n[held]\n[selection ends]" in umsg and "123456" not in umsg,
+             "edit --source: byte offsets convert before secret masking", repr(umsg))
+        for a, b, selected in ((0, 5, "Alpha"), (6, 10, "Beta"), (6, 10, "Beta")):
+            rc, out, _ = spark("edit", "?", "what about this", "--thread", "edit-selection",
+                               "--sel", str(a), str(b), stdin="Alpha Beta")
+            umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+            t.ok(rc == 0 and "[selection starts]\n%s\n[selection ends]" % selected in umsg,
+                 "edit --thread: the current selection rides every follow-up", repr(umsg))
+        rc, out, _ = spark("edit", "?", "the whole file", "--thread", "edit-selection", stdin="Alpha Beta")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "Alpha Beta" in umsg and "[selection starts]" not in umsg,
+             "edit --thread: removing the selection restores whole-file context", repr(umsg))
+        rc, out, _ = spark("edit", "?", "another question", "--thread", "edit-selection", stdin="Alpha Beta")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "Alpha Beta" not in umsg,
+             "edit --thread: after removing the selection, unchanged full-file turns stay small", repr(umsg))
         # --thread: the same id continues the exchange; the text again only when it changed
         n1 = len(STATE["bodies"])
         rc, out, _ = spark("edit", "--name", "t.md", "?", "first", "--thread", "edit-t1", stdin="Some prose.\n")

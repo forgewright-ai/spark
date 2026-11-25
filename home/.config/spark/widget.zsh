@@ -82,7 +82,7 @@ zmodload zsh/datetime 2>/dev/null
 typeset -g _spark_born=${EPOCHSECONDS:-0}
 mkdir -p "$SPARK_DIR/widgets" 2>/dev/null && chmod 700 "$SPARK_DIR" 2>/dev/null
 print -r -- "zsh $$ $_spark_born hook" > "$SPARK_DIR/widgets/$$" 2>/dev/null
-_spark_gone() { rm -f "$SPARK_DIR/widgets/$$"; }
+_spark_gone() { _spark_reap; rm -f "$SPARK_DIR/widgets/$$"; }
 autoload -Uz add-zsh-hook
 add-zsh-hook zshexit _spark_gone
 
@@ -414,12 +414,65 @@ _spark_say() {
 # pulse, the facts, the hint, an answer); the prompt line holds only the
 # command to run, empty for an answer. The mark is painted BEFORE the
 # command lands, so a danger line is never in the buffer without its !.
-# While spark thinks, the question stays in the line as typed, and line 1
-# replaces it. Until the hint comes the cursor waits at the line's start
-# (one row below the hint row, however far the line wraps), and keys
-# typed meanwhile queue for when the widget returns.
+# While spark thinks, the question stays as typed. After line 1, ZLE
+# owns the buffer again. Its descriptor callback reads only ready bytes;
+# a partial hint never holds up a key. Editing or leaving the line
+# cancels the old reader and its model request before another can paint.
+zmodload zsh/system 2>/dev/null
+typeset -g _spark_rd='' _spark_lp='' _spark_reply_buf='' _spark_reply_for=''
+typeset -g _spark_reply_mark='' _spark_reply_tail='' _spark_reply_mood=''
+typeset -gi _spark_reply_phase=0
+_spark_reap() {
+    local fd=$_spark_rd pid=$_spark_lp
+    _spark_rd='' _spark_lp='' _spark_reply_buf=''
+    if [[ -n $fd ]]; then
+        zle -F $fd 2>/dev/null
+        exec {fd}<&-
+    fi
+    [[ -n $pid ]] && kill $pid 2>/dev/null
+    return 0
+}
+_spark_reply() {
+    local chunk='' rc line c=$CURSOR
+    [[ $1 == $_spark_rd ]] || return 0
+    if [[ $BUFFER != $_spark_reply_for || -e $SPARK_DIR/off ]]; then
+        _spark_reap
+        return 0
+    fi
+    sysread -i $1 -s 4096 -t 0 chunk
+    rc=$?
+    (( rc == 4 )) && return 0
+    _spark_reply_buf+=$chunk
+    if (( ${#_spark_reply_buf} > 8192 )); then _spark_reap; return 0; fi
+    # EOF can end a partial hint. It cannot turn a partial proof into a call.
+    if (( rc != 0 && _spark_reply_phase == 2 )) && [[ $_spark_reply_buf != *$'\n'* ]]; then
+        _spark_reply_buf+=$'\n'
+    fi
+    while [[ $_spark_reply_buf == *$'\n'* ]]; do
+        line=${_spark_reply_buf%%$'\n'*}
+        _spark_reply_buf=${_spark_reply_buf#*$'\n'}
+        if (( _spark_reply_phase == 2 )); then
+            _spark_reply_phase=3
+            _spark_mood=$_spark_reply_mood
+            [[ -n $line || $_spark_mood == alarmed ]] || _spark_mood=puzzled
+            CURSOR=0; zle -R
+            _spark_say "$_spark_reply_mark ${line:-no hint came}$_spark_reply_tail"
+            CURSOR=$c; zle -R
+        else
+            case $line in
+                proof$'\t'*) _spark_proof=${line#*$'\t'} _spark_proof_for=$_spark_reply_for ;;
+            esac
+            _spark_reap
+            return 0
+        fi
+    done
+    (( rc != 0 )) && _spark_reap
+    return 0
+}
+zle -N _spark_reply
 _spark_ask() {
-    local line=$1 fd kind cmd hint line3 mark=$_spark_h tail='' mood=''
+    local line=$1 fd kind cmd hint mark=$_spark_h tail='' mood=''
+    _spark_reap
     # the cursor to the line's start: back on the prompt's row, so the
     # hint lands in the blank row above it however far a question wraps
     CURSOR=0; zle -R
@@ -428,7 +481,8 @@ _spark_ask() {
     _spark_proof='' _spark_proof_for=''
     # SPARK_HINT_ROW=N: spark line may pulse in that row, N up (text.Busy),
     # while the model answers -- then in the reply's own mark until the hint
-    exec {fd}< <(print -r -- "$line" | SPARK_HINT_ROW=$_spark_height "$SPARK_BIN" line --cwd "$PWD" --shell zsh 2>/dev/null)
+    exec {fd}< <(SPARK_HINT_ROW=$_spark_height exec "$SPARK_BIN" line --cwd "$PWD" --shell zsh <<< "$line" 2>/dev/null)
+    _spark_lp=$!
     IFS= read -r -u $fd kind
     case $kind in
         cmd$'\t'*|danger$'\t'*)
@@ -436,14 +490,11 @@ _spark_ask() {
             [[ $kind == danger$'\t'* ]] && mark=$_spark_w tail=' -- read it before Enter' mood=alarmed
             _spark_mood=${mood:-thinking}
             _spark_say "$mark $_spark_d$tail"
-            BUFFER=$cmd; CURSOR=0; zle -R
-            IFS= read -r -u $fd hint
-            [[ -n $hint ]] || mood=${mood:-puzzled}
-            _spark_mood=$mood
-            _spark_say "$mark ${hint:-no hint came}$tail"
-            IFS= read -r -u $fd line3
-            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
-            CURSOR=$#BUFFER ;;
+            BUFFER=$cmd; CURSOR=$#BUFFER; zle -R
+            _spark_rd=$fd _spark_reply_for=$cmd _spark_reply_phase=2
+            _spark_reply_mark=$mark _spark_reply_tail=$tail _spark_reply_mood=$mood
+            zle -F -w $fd _spark_reply
+            return ;;
         answer)
             BUFFER=''; CURSOR=0; zle -R           # an answer leaves the line empty
             IFS= read -r -u $fd hint
@@ -458,6 +509,7 @@ _spark_ask() {
             BUFFER=$line; CURSOR=$#BUFFER ;;      # the question stays yours
     esac
     exec {fd}<&-
+    _spark_lp=''
     zle -R
 }
 
@@ -657,6 +709,7 @@ zle -N spark-tick
 # keeps how many rows the line takes (_spark_bl), for a prompt that ends
 # with no Enter.
 _spark_keyed_hook() {
+    [[ -n $_spark_rd && $BUFFER != $_spark_reply_for ]] && _spark_reap
     _spark_keyed=${EPOCHSECONDS:-${SECONDS%.*}} _spark_bl=$BUFFERLINES
     [[ -n $_spark_asleep ]] || return 0
     _spark_asleep='' _spark_zz=''
@@ -680,6 +733,7 @@ add-zle-hook-widget line-pre-redraw _spark_keyed_hook
 # height and one row up. A line of more rows keeps its face.
 typeset -gi _spark_bl=1
 _spark_line_finish() {
+    _spark_reap
     [[ -n $_spark_faced ]] || return 0
     (( BUFFERLINES == 1 )) && _spark_unface
     _spark_faced=''
@@ -690,6 +744,7 @@ add-zle-hook-widget line-finish _spark_line_finish
 _spark_orig_clear=${_spark_was[Ctrl-l]:-}
 [[ -z $_spark_orig_clear || $_spark_orig_clear == (undefined-key|spark-clear-screen|\"*) ]] && _spark_orig_clear=clear-screen
 spark-clear-screen() {
+    _spark_reap
     (( ++_spark_gen ))
     _spark_faced='' _spark_asleep='' _spark_waking=''
     zle "$_spark_orig_clear"
@@ -713,6 +768,7 @@ typeset -g _SPARK_LONG=30 _spark_t0=''
 # the failure moment, and the alert in a row no note took.
 _spark_failed() {
     local rc=$? took='' d
+    _spark_reap
     if [[ -n $_spark_faced ]]; then       # no Enter ended the last prompt: its face still stands
         _spark_faced=''
         (( _spark_bl == 1 && _spark_height + 1 < ${LINES:-0} )) \
@@ -809,6 +865,7 @@ add-zsh-hook precmd _spark_failed         # add-zsh-hook refuses a duplicate
 _spark_orig_accept=${widgets[accept-line]#user:}
 [[ $_spark_orig_accept == builtin ]] && _spark_orig_accept=.accept-line
 spark-accept-line() {
+    _spark_reap
     (( ++_spark_gen ))                    # no tick while the command runs
     if [[ -n $_spark_faced ]]; then
         # the resting face goes before the line does: scrollback keeps
@@ -844,6 +901,7 @@ bindkey '^J' spark-accept-line
 _spark_orig_kill=${_spark_was[Ctrl-u]:-}
 [[ -z $_spark_orig_kill || $_spark_orig_kill == (undefined-key|spark-kill-line|\"*) ]] && _spark_orig_kill=kill-whole-line
 spark-kill-line() {
+    _spark_reap
     zle "$_spark_orig_kill"
     [[ -z $BUFFER && -n $_spark_hinted ]] || return 0
     _spark_say ''
@@ -863,7 +921,8 @@ spark-ask() {
     if [[ -n $_spark_fail && $_spark_fail_rc == 127 ]]; then
         # command not found: Esc s asks for the install line (known tools
         # answer offline in `spark line`, the rest through the model)
-        export SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=127
+        local SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=127
+        export SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
         _spark_fail=''
         _spark_ask "install it"
     elif [[ -n $_spark_fail ]]; then
@@ -1037,13 +1096,18 @@ fi
 } 2>/dev/null
 
 # --- paste inspection: a multi-line paste into an EMPTY prompt --------------
-# The builtin widget inserts the paste (newlines literal -- nothing
-# runs); for two or more lines into an empty prompt, one answer/danger
+# Read through the closing marker, including across a pause (newlines
+# stay literal). For two or more lines into an empty prompt, one answer/danger
 # line from `spark line --paste` lands in the hint row. spark off (and
 # SPARK_OFF at load) disable the inspection; the paste always lands.
 spark-bracketed-paste() {
-    local before=$BUFFER
-    zle .bracketed-paste
+    local before=$BUFFER buf='' ch
+    _spark_reap
+    while IFS= read -r -k 1 ch; do
+        buf+=$ch
+        [[ $buf == *$'\e[201~' ]] && { buf=${buf%$'\e[201~'}; break; }
+    done
+    LBUFFER+=$buf
     [[ -e $SPARK_DIR/off ]] && return
     if [[ -z $before && $BUFFER == *$'\n'?* ]]; then
         local out kind text

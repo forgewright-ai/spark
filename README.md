@@ -100,7 +100,8 @@ spark chat                      talk with the model
 - `spark mcp`: the tools of the MCP servers you put on its list, such
   as the parts of a desktop. A tool that can destroy asks you first.
 - `spark steps`: give the local model a list of tools and a request.
-  It returns proposed calls as JSON. The caller decides what to run.
+  It returns proposed calls as JSON and checks each tool's constraints.
+  The caller decides what to run.
 - `spark serve on`: use this machine's model from a browser or another
   machine. [Read about network access](#on-this-machine) before sharing.
 - `spark voice on`: spark reads aloud.
@@ -110,6 +111,10 @@ spark chat                      talk with the model
 - `spark uninstall` removes spark from this machine.
 
 Every command is in `docs/CHEATSHEET.txt`.
+
+A proposed command keeps its spaces. A paste waits for your own Enter,
+even across a pause. In an editor, byte offsets mark UTF-8 boundaries;
+moving a selection sends the new part with your next question.
 
 ## A first hour
 
@@ -235,8 +240,8 @@ it on a new install. What each command sends:
   on the list, the names and titles of their tools, 1.5 kB at most.
 - `explain`: the piped text, the last 6 kB.
 - `steps`: your words and the tools you pipe in, their names,
-  arguments and titles, up to 32 kB. Never a tool's description or a
-  password.
+  arguments, titles and up to 160 characters of each description,
+  up to 32 kB in all. Never a password.
 - `@FILE`: the file's first 4 kB and last 12 kB.
 - `edit`: the file's name and up to 16 kB of its text.
 - `ask`: the text, up to 12 kB.

@@ -4,7 +4,7 @@
 #
 # The tools are an MCP tools/list result ({"tools": [...]}) or its list.
 # What rides to the model is each tool's name, its arguments with their
-# kinds and its title -- never a description, never a credential -- and
+# kinds, title and bounded description -- never a credential -- and
 # the words, with the caller's --about text. The reply is held by a
 # grammar made from the tools (wire.tools_gbnf: a step's name is one of
 # theirs, its arguments typed by its schema), and every step is checked
@@ -30,6 +30,7 @@ STEPS_BRIEF_MAX = 32768     # characters of tool lines a request carries, or it 
 STEPS_WORDS_MAX = 2000      # characters of words and --about together
 STEPS_TOKENS = 400          # the reply's cap
 STEPS_TIMEOUT = 60
+STEPS_DESCRIPTION_MAX = 160  # sanitized characters of public tool metadata
 
 USAGE = """spark steps -- the tool calls that do what you say (tools on stdin)
 
@@ -40,11 +41,13 @@ USAGE = """spark steps -- the tool calls that do what you say (tools on stdin)
   --                           the rest are words, not options
 
   The list may offer up to 256 tools. A larger list is refused.
+  Each description sends up to 160 characters to explain its tool.
 
   Prints one JSON object: "answer" (a question's answer, else empty),
   "steps" (each {"name", "arguments"}) and "refused" (a step that did
-  not fit its tool, and why). Nothing runs. Exit 1 when no model
-  answers. From a pipe: spark steps mute the sound < tools.json
+  not fit its tool, and why). A malformed reply is a refusal too.
+  Nothing runs. Exit 1 when no model answers.
+  From a pipe: spark steps mute the sound < tools.json
 """
 
 
@@ -68,6 +71,8 @@ def _args(args):
 def _kind(prop):
     """The model sees JSON values. MCP's command-line forms (a comma
     list, yes/no, the first twelve enum words) are for a shell call."""
+    if "const" in prop:
+        return json.dumps(prop["const"], ensure_ascii=True)
     choices = prop.get("enum")
     if choices and all(isinstance(v, str) and mcp.ENUM_WORD.fullmatch(v) for v in choices):
         # Encode a complete decimal interval compactly. Gaps and leading
@@ -89,8 +94,9 @@ class PlanningTool:
     Only arguments this planner can propose enter its schema. The prompt,
     grammar and reply check all use that same projection."""
 
-    def __init__(self, tool, properties, required):
+    def __init__(self, tool, properties, required, description=""):
         self.name, self.title = tool.name, tool.title
+        self.description = mcp.short(description, STEPS_DESCRIPTION_MAX) if isinstance(description, str) else ""
         self.schema = dict(tool.schema, properties=properties)
         self.arguments = [(k, p, k in required) for k, p in properties.items()]
 
@@ -104,7 +110,7 @@ class PlanningTool:
                       if not mcp.secret(k, p) and wire.tool_value_supported(p)}
         if not required.issubset(properties):
             return None
-        return cls(tool, properties, required)
+        return cls(tool, properties, required, data.get("description", ""))
 
     def brief(self):
         """One tool line, with square brackets around optional arguments."""
@@ -114,8 +120,11 @@ class PlanningTool:
             lo, hi = prop.get("minimum"), prop.get("maximum")
             if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
                 word += " (%s-%s)" % (lo, hi)
+            if "pattern" in prop and not mcp.mcp_schema.problem(prop):
+                word += " matching " + json.dumps(prop["pattern"], ensure_ascii=True)
             parts.append(word if required else "[%s]" % word)
-        return " ".join(parts) + (" -- " + self.title if self.title else "")
+        return (" ".join(parts) + (" -- " + self.title if self.title else "")
+                + (" -- " + self.description if self.description else ""))
 
 
 def offered(data):
@@ -142,8 +151,12 @@ def check(tools, reply):
     rest."""
     by = {t.name: t for t in tools}
     kept, refused = [], []
-    for s in (reply.get("steps") if isinstance(reply, dict) else None) or []:
-        if not isinstance(s, dict) or not isinstance(s.get("name"), str):
+    if (not isinstance(reply, dict) or set(reply) != {"answer", "steps"}
+            or not isinstance(reply.get("answer"), str) or not isinstance(reply.get("steps"), list)
+            or len(reply["steps"]) > STEPS_MAX):
+        return [], ["the model's reply is not an answer with up to %d steps" % STEPS_MAX]
+    for s in reply["steps"]:
+        if not isinstance(s, dict) or set(s) != {"name", "arguments"} or not isinstance(s.get("name"), str):
             refused.append("a step that is no tool call")
             continue
         t = by.get(s["name"])
@@ -225,7 +238,7 @@ def cmd_steps(args):
         sys.stderr.write("! %s\n" % e.hint)
         return 1
     kept, refused = check(tools, reply)
-    answer = mcp.short(reply.get("answer") or "", 500) if isinstance(reply, dict) else ""
+    answer = mcp.short(reply["answer"], 500) if isinstance(reply, dict) and isinstance(reply.get("answer"), str) else ""
     s.record(kind="steps", tools=len(tools), steps=len(kept), refused=len(refused), chars=len(text),
              ms=int((time.time() - t0) * 1000))
     sys.stdout.write(json.dumps({"answer": answer, "steps": kept, "refused": refused}) + "\n")

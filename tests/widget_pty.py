@@ -142,6 +142,8 @@ case $line in
   # seen what it checks and made $STUB_GATE, so no stall can reorder them
   *stream-early*) printf 'cmd\techo STREAMED-CMD\n'; held; printf 'streamed hint text\n' ;;
   *stream-cmd*) printf 'cmd\techo STREAMED-CMD\n'; held; printf 'streamed hint text\nproof\ttest -d .\n' ;;
+  *stream-partial*) printf 'cmd\techo STREAMED-CMD\nstreamed '; held; printf 'hint text\nproof\ttest -d .\n' ;;
+  *stream-proof*) printf 'cmd\techo STREAMED-CMD\nstreamed hint text\n'; held; printf 'proof\ttest -d .\n' ;;
   *stream-danger*) printf 'danger\techo DANGER-CMD\n'; held; printf 'removes things\n' ;;
   *stream-answer*) printf 'answer\n'; held; printf 'The answer in words\n' ;;
   *stream-fail*) printf 'cmd\techo FAILED-CMD\n'; held; printf 'the server stopped mid-reply\n'; exit 1 ;;
@@ -1986,6 +1988,31 @@ def session_main(shell, widget):
 
         # Enter on a landed command while its hint is still on the way: the
         # hint is never drawn over what the command printed
+        if shell == "zsh":
+            for query, cancel in (("stream-cmd", "edit"), ("stream-partial", "edit"),
+                                  ("stream-proof", "edit"), ("stream-cmd", "interrupt"), ("stream-cmd", "replace")):
+                shut()
+                sh.send(query + "?\r")
+                sh.expect("STREAMED-CMD")
+                if query == "stream-proof":
+                    sh.expect("streamed hint text")
+                since = sh.mark()
+                if cancel == "edit":
+                    sh.send("-EDITED")
+                    ok(sh.expect("-EDITED", 2), "streamed: zsh edits while " + query + " waits", since())
+                elif cancel == "interrupt":
+                    sh.send("\x03")
+                    ok(sh.expect(prompt, 2), "streamed: Ctrl-C cancels while the hint waits", since())
+                else:
+                    sh.send("\x15answer-me?\r")
+                    ok(sh.expect("Forty-two", 2), "streamed: a new question need not wait for the old hint", since())
+                since = sh.mark()
+                release()
+                sh.read(0.4)
+                ok("streamed hint text" not in since(), "streamed: a stale hint cannot repaint after " + cancel, since())
+                sh.send("\x03")
+                sh.expect(prompt)
+                sh.settle()
         shut()
         since = sh.mark()
         sh.send("stream-early?\r")
@@ -2131,6 +2158,12 @@ def session_main(shell, widget):
         ok(sh.expect("brew install the-tool") or sh.expect("install"), "Esc s after 127 offers an install line", since())
         sh.send("\x15")
         time.sleep(0.2)
+        since = sh.mark()
+        sh.send("? disk space\r")
+        ok(sh.expect("echo EXECUTED-MARK") and "brew install" not in since(),
+           "127: discarding the install suggestion leaves the next question independent", since())
+        sh.send("\x15")
+        sh.settle()
 
         # 10f3. a second Esc s right after an explain proposes the fix
         since = sh.mark()
@@ -2234,6 +2267,23 @@ def session_main(shell, widget):
         sh.send("\r")
         ok(sh.expect("P-ONE") and sh.expect("P-TWO"),
            "the paste stayed in the buffer and ran only on Enter", since())
+        sh.expect(prompt)
+        sh.settle()
+
+        since = sh.mark()
+        sh.send("\x1b[200~printf one > paused-paste")
+        sh.read(2.5)
+        sh.send("\nprintf two >> paused-paste\x1b[201~")
+        sh.settle()
+        ok(not os.path.exists(os.path.join(tmp, "work", "paused-paste")),
+           "paste: a pause beyond two seconds never executes the remaining lines", since())
+        sh.mark()
+        sh.send("\x03")
+        sh.expect(prompt)
+        sh.settle()
+        since = sh.mark()
+        sh.send("echo AFTER-PASTE\r")
+        ok(sh.expect("AFTER-PASTE\r\n"), "paste: Ctrl-C cancels the delayed paste and leaves a working prompt", since())
         sh.expect(prompt)
 
         # 7h. colour: three exports, the widget paints after the width cut

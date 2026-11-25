@@ -271,6 +271,13 @@ The prompt line:
 - Type `? words` or `words?` and press `Enter`. A command lands in your
   line, with a hint above it. Press `Enter` again to run it.
 - A command that deletes is marked `!`.
+- Commands keep their spaces. A command too long for one line is
+  refused.
+  In Zsh, you can edit it while its hint is still on the way.
+- A paste waits for its closing marker, even across a pause. Nothing
+  runs until your own Enter. `Ctrl-C` cancels it.
+- After a missing command, `Esc s` offers its install line once.
+  Discarding it leaves your next question independent.
 - `?? words` follows up on the last answer.
 - `spark off` turns the prompt line off. `spark on` turns it back on.
 - `cmd 2>&1 | explain` says what went wrong, and the fix. With nothing
@@ -397,14 +404,21 @@ spark mcp call notes add_note text=milk
   from an MCP tools list on stdin. One list can combine providers.
   It takes up to 256 tools it can plan. A larger list asks you to
   send fewer. The caller receives the proposed calls as JSON.
+  Each call must fit its tool's constraints. A constraint spark cannot
+  check is refused. A malformed reply comes back as a JSON refusal.
+  The model also sees up to 160 characters of each tool's description.
+
+For `spark edit`, `--at N` and `--sel A B` use UTF-8 byte boundaries.
+An offset inside a character is refused. With `--thread`, each question
+with a selection sends that part again, even when the file is unchanged.
 
 A server runs with no shell, in your home, with a short list of
 environment variables. It talks to spark over its stdin and stdout
 alone. The server is a program of its own, and it may use the network
-itself. A tool's description never goes to the model, but for its first
-words from a trusted server: the tool's purpose on the prompt line. Each
-call is a record in the audit trail, its names and a digest of its
-arguments: `spark serve --audit`.
+itself. On the prompt line, a trusted tool's purpose comes from its
+description's first words. In `spark steps`, up to 160 characters
+explain each tool. Each call is a record in the audit trail,
+its names and a digest of its arguments: `spark serve --audit`.
 
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`

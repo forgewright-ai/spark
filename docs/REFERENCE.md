@@ -401,6 +401,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 list, the server on its wire, the gate, the audit record, the
                 tools file the prompt line reads; every list that decides a
                 named line)
+                mcp_schema (the bounded schema constraints shared by calls
+                and planning; patterns match without backtracking)
                 steps (spark steps: contract 16's planner, the tools on stdin,
                 the steps out under a grammar made from them)
                 version (the version, from git, cached: spark ver, check's
@@ -963,7 +965,10 @@ and may change freely.
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
    `answer` or `error`. Line 2 is the hint, the answer or the reason:
    one line, cut at a word to a character budget. A hint or a reason is
-   80 at most, an answer `cli.ANSWER_MAX`. Line 1 is written the moment
+   80 at most, an answer `cli.ANSWER_MAX`. Accepted command and proof
+   text is kept exactly. Controls, line separators, lone surrogates and
+   text past `cli.LINE_COMMAND_MAX` (1000 characters) are refused whole,
+   never folded or shortened. Line 1 is written the moment
    the command is complete, and lines 2 and 3 follow; after line 1, a
    failure makes line 2 its reason and exits 1. The verdict
    (`judge.verdict`) runs before line 1 is written. A command it finds
@@ -1500,7 +1505,9 @@ and may change freely.
    `token:` line, and a 64+ run of base64 that mixes letters and
    digits. The widgets hook the
    bracketed paste: bash rebinds the paste-begin sequence, zsh wraps
-   `bracketed-paste`. Two or more lines into an empty prompt get the
+   `bracketed-paste`. Both read until the closing marker, with no pause
+   ending a paste. `Ctrl-C` cancels it. Two or more lines into an empty
+   prompt get the
    answer in the hint row. The paste itself always lands in the buffer
    untouched, and nothing runs until the user's own Enter. `spark off`
    and `SPARK_OFF` disable it. Exit 0 for the first 3 kinds, 1 for
@@ -1527,6 +1534,13 @@ and may change freely.
    command failed. It never lands the command that failed as its own
    fix: asked once more, then line 1 is an answer, `no other command
    fixes this`.
+   Zsh returns the command to ZLE after line 1. A descriptor widget
+   reads the hint and proof without waiting for another byte. Editing,
+   cancelling or leaving the line stops the old request. Its callback
+   checks the descriptor and buffer before painting; no stale reply
+   can change a newer line.
+   Its pulse stops before line 1: once editing resumes, the cursor can
+   move to another row. The widget keeps the mark until its hint comes.
    `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5, lets `spark
    line`, `spark line --paste` and `spark recall` draw the pulse
    (`text.Busy.hint_row`) N rows above the cursor on `/dev/tty` while
@@ -1568,7 +1582,10 @@ and may change freely.
    why`, or `HEAD not found; Esc s gets the install line` for exit 127,
    or `last time this fixed it: FIX` from the failure memory.
    A key `spark keys` moved is named in these lines in place of `Esc
-   s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none`, or the
+   s`, `Esc r`, `Esc k` and `Esc v`. The install request's failure
+   context is local to that invocation. The CLI uses it only for
+   `install it`; discarding the line cannot change a later question.
+   With `ask` set to `none`, or the
    keys off, the failure line ends `? words asks about it` and the
    proof line is `* done -- check it: PROOF`. No line names a key that
    is not bound. The
@@ -2129,7 +2146,12 @@ and may change freely.
    `X-Content-Type-Options: nosniff`, and depend on nothing else.
    Errors are `{error: {kind, hint}}`.
 10. `spark edit` is the editor's protocol: the text on stdin. `--at N`
-    prints what goes at byte offset N, a completion: 4 kB before the
+    prints what goes at byte offset N, a completion. Both it and
+    `--sel A B` require UTF-8 byte boundaries within the input, in
+    order.
+    They convert to character indexes before slicing or masking source
+    secrets. Invalid boundaries return exit 2 before any model request.
+    A completion sends 4 kB before the
     cursor and 2 kB after it are sent. `<words>` prints the whole text
     rewritten, at most 12 kB, else refused: the output replaces the
     input, so head plus tail makes no sense. The rewrite is held until
@@ -2224,7 +2246,9 @@ and may change freely.
     lists it). The same id again rides the earlier pairs. It sends the
     words alone when the text on stdin is the one the first turn carried
     (`text_sha` on that message), else `File NAME, as it is now:` and
-    the text. The reading runs on the first turn only. Anchors always
+    the text. A selection's marked window rides every turn. Removing
+    the selection sends the whole-file context again. The reading runs
+    on the first turn only. Anchors always
     check the text on stdin now. Without `--thread`, or with history
     off, no thread is kept. `--source` (a `?`) picks the
     reading-discussion brief (`persona.MODE_EDIT_DISCUSS`, mode
@@ -2613,10 +2637,11 @@ and may change freely.
     and its input schema is an object whose property names match
     `mcp.ARG_WORD`. Every string a server hands on passes `mcp.scrub`:
     `text.printable`, then `mcp.ZERO_WIDTH`, a named line each. A tool's
-    description never rides a request, a brief or a record, but for its
-    first sentence. That is a trusted server's tool's purpose on the
+    description never rides a record. The prompt line takes its first
+    sentence. That is a trusted server's tool's purpose on the
     prompt line (`mcp.purpose`): `mcp.PURPOSE_WORDS` (10) words at most,
-    its parentheses out, in `mcp.PURPOSE`'s shape. Trust. A
+    its parentheses out, in `mcp.PURPOSE`'s shape. The planner takes
+    up to 160 characters, as described below. Trust. A
     tool's annotations are believed only from a trusted server. That is
     `mcp.TRUSTED_CHAIN`, spark's own programs, a named line each. A
     program counts when its name, the link resolved, is one of them. It
@@ -2641,12 +2666,26 @@ and may change freely.
     is in the server's tools/list now. The arguments validate against
     its input schema (`mcp.validate`): an object, no argument it does
     not name, every required one, each its type, enum, range and length.
-    A string carries no control, bidi or zero-width character, and with
-    no `maxLength` it is 4096 characters at most. An array is 32 items
+    `mcp_schema` also checks constants, exclusive bounds, multiples,
+    item counts, uniqueness and object counts. A string pattern accepts
+    literals, character classes, anchors, repetitions and optional
+    groups. It has at most 256 characters and 64 atoms; matching never
+    backtracks.
+    Repeated groups, alternatives, lookarounds and backreferences are
+    unsupported. Format and content metadata are annotations; the
+    password format still marks a credential.
+    An unknown constraint or a malformed schema is an explicit
+    refusal.
+    A string carries no control, bidi or zero-width character. Without
+    `maxLength` it is 4096 characters at most. An explicit limit can
+    allow more, up to 65536. An array is 32 items
     at most. A server may list a resource named `rows`, in the rows
     schema of the desktop's providers. Where it names the tool with its
     required arguments, the call names one of those rows exactly,
-    credentials aside (`mcp.rows_gate`). A rows resource that does not
+    credentials aside (`mcp.rows_gate`). Discovery and dispatch share
+    `mcp.row_documents`: fresh roots and at most eight children, one
+    level below their root URI. A child that cannot be read refuses
+    dispatch too. A rows resource that does not
     read refuses the call. And a person saw the step: the command line
     they entered, then the typed `yes` where `needs_yes` asks it. With
     nobody at a terminal, a tool that asks the yes is refused. A
@@ -2738,7 +2777,9 @@ and may change freely.
     256 kB at most, and one JSON object out, `{"answer", "steps",
     "refused"}`. A step is `{"name", "arguments"}`, and nothing runs.
     The request carries each tool as one line (`steps.PlanningTool`).
-    It gives the name, arguments and title. Optional arguments are in
+    It gives the name, arguments, title and up to 160 characters of the
+    description (`STEPS_DESCRIPTION_MAX`), scrubbed by `mcp.short`.
+    Tool lines are data, never instructions. Optional arguments are in
     brackets. The kinds name JSON types and each simple string choice.
     A complete range of decimal strings can be written `"1".."100"`.
     Sparse lists and values with leading zeros keep their own spellings.
@@ -2759,7 +2800,9 @@ and may change freely.
     credential is a line in `refused`, never a step. The brief is
     `persona.MODE_STEPS`, the spark role, with the machine line for its
     prefix. No path, no `[cwd]` line, no thread. Exit 0 with the object,
-    1 when no model answers, 2 the usage. The turn record is numbers:
+    1 when no model answers, 2 the usage. A malformed response envelope,
+    including a non-list or more than eight steps, returns no steps and
+    an explicit JSON refusal, exit 0. The turn record is numbers:
     kind `steps`, `tools`, `steps`, `refused`, `chars` and `ms`.
     `persona.SENDS` names what leaves: the steps row, the line's tool
     block and machine picture, do's tool lines and a tool's result in

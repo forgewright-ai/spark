@@ -65,8 +65,8 @@ SENDS = (
     ("do", "after a step refused for an option, the lines of that command's man page "
            "about it, 1.5 kB at most"),
     ("explain", "the piped text, last 6 kB"),
-    ("steps", "the words and --about, and the tools on stdin: each tool's name, arguments and title, "
-              "32 kB of tool lines at most -- never a description or a credential"),
+    ("steps", "the words and --about, and the tools on stdin: each tool's name, arguments, title "
+              "and up to 160 characters of its description, 32 kB of tool lines at most -- never a credential"),
     ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question -- "
              "in a question about a source (--source), a span that looks like a secret is held back"),
     ("ask", "the text, 12 kB, with the --name/--about hints"),

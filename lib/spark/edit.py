@@ -44,6 +44,7 @@ EDIT_USAGE = """spark edit -- write and review text with spark (text on stdin)
   --ledger [clear] --name NAME  the declined notes; clear forgets them
   --                          the rest are words, not options
 
+  Offsets must fall between UTF-8 characters. A selection rides each turn.
   Prints plain text. Exit 1 when there is no text or no model answers.
   Editors: github.com/forgewright-ai/spark-<app> (micro, neovim, vim,
   helix, nano). From a pipe: spark edit fix grammar < draft.md
@@ -90,6 +91,15 @@ def _edit_label(name, ftype, part=False):
     if part:
         what = "Selected part of %s" % name if name else "Selected text"
     return what + (" (%s):" % ftype if ftype else ":")
+
+
+def _byte_offset(data, offset):
+    """A UTF-8 byte boundary as a character index, never rounded or clamped."""
+    raw = data.encode("utf-8")
+    offset = int(offset)
+    if not 0 <= offset <= len(raw):
+        raise ValueError("outside the text")
+    return len(raw[:offset].decode("utf-8"))
 
 
 def _edit_window(data, a, b):
@@ -515,7 +525,7 @@ def cmd_edit(args):
     at = opts["at"]
     if at is not None:
         try:
-            at = max(0, int(at))
+            at = int(at)
         except ValueError:
             say("%s edit -- --at N is a byte offset" % MARK)
             return 2
@@ -559,13 +569,20 @@ def cmd_edit(args):
             die("the ledger could not be written: %s" % e)
         return 0
     sel = None
+    if at is not None:
+        try:
+            at = _byte_offset(data, at)
+        except ValueError:
+            say("%s edit -- --at N must be a UTF-8 byte boundary in the text" % MARK)
+            return 2
     if opts["sel"] is not None:
         try:
-            sel = (int(opts["sel"][0]), int(opts["sel"][1]))
+            sel = tuple(_byte_offset(data, x) for x in opts["sel"])
         except ValueError:
             sel = (-1, -1)
         if not 0 <= sel[0] <= sel[1] <= len(data):
-            say("%s edit -- --sel A B are byte offsets, 0 <= A <= B <= %d" % (MARK, len(data)))
+            say("%s edit -- --sel A B are byte offsets at UTF-8 boundaries, 0 <= A <= B <= %d"
+                % (MARK, len(data.encode("utf-8"))))
             return 2
     # a source (`? --source`: a page, a mail) is someone else's text: what
     # looks like a secret in it is held back here, before the reading, the
@@ -617,13 +634,19 @@ def cmd_edit(args):
         tid = forge.open_thread(cfg, tid) if tid else None
         history = forge.history(tid) if tid else []
         sha = forge.text_sha(data)
-        if history:
-            context = "" if forge.same_text(tid, sha) else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
-        elif sel:
-            read, tail = session.reading(cfg, data, shell, start=max(0, sel[0] - 200), answer=ans)
+        if sel:
+            # A selection is the current focus, even when the file did not
+            # change. Send its marked window on every follow-up.
+            read, tail = ("", "") if history else session.reading(
+                cfg, data, shell, start=max(0, sel[0] - 200), answer=ans)
             context = (head + read + ledger.block(cfg, opts["name"], data) + label[:-1]
                        + " -- the question is about the part between the marks:\n"
                        + _edit_window(data, sel[0], sel[1]) + tail)
+        elif history:
+            previous = next((m.get("content", "") for m in reversed(history) if m.get("role") == "user"), "")
+            selected = "[selection starts]" in previous
+            context = "" if forge.same_text(tid, sha) and not selected else (
+                head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data))
         else:
             context = _review_context(cfg, shell, data, opts["name"], head, label, answer=ans)
     else:

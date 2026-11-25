@@ -2,6 +2,23 @@
 
 ## v1.114
 
+- The prompt line keeps executable text whole, including repeated spaces
+  in names. Controls and overlong commands are refused, never shortened.
+  Proof commands follow the same rule.
+- A paused paste stays editable in Bash and Zsh until its closing marker
+  and the user's own Enter. An install offer after a missing command
+  belongs to that request alone. In Zsh, a streamed command can be edited
+  before its hint or proof arrives; a stale reply cannot repaint it.
+- Editor cursor and selection offsets follow UTF-8 bytes. An offset
+  inside a character is refused. A thread carries its current selection
+  on each question, even when the file has not changed.
+- Tool calls check provider constraints, including bounded patterns,
+  before dispatch. Unsupported constraints are refused explicitly. Live
+  row checks read the same children as discovery, freshly for each call.
+  A malformed planner reply returns a JSON refusal instead of a traceback.
+- The planner sends up to 160 characters of each tool's description to
+  explain its purpose, within the same 32 kB total. It uses the provider's
+  words; no desktop rules live in spark.
 - `spark steps` can plan from up to 256 tools across providers. A larger
   catalog asks the caller to send fewer. Previously the model saw only
   the first 128. The prompt gives each simple string choice, including

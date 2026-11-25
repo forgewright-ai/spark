@@ -30,6 +30,8 @@ LINE_USAGE = """spark line -- the prompt line, for the shell widgets
                                  a check that it worked, when there is one
   spark line --paste             a pasted block on stdin: one line on what
                                  it does; nothing runs
+
+  Commands keep their spaces. A command too long for one line is refused.
 """
 EXPLAIN_USAGE = """spark explain -- what went wrong, and the fix
 
@@ -244,12 +246,21 @@ def _paste_verdict(shell):
     return 0
 
 
-# A model's command reaches line 1 only without these: C0 but the three
-# whitespaces (a newline folds to a space, as it always has), DEL, C1 and
-# the bidi controls -- do.CONTROL's set. Escapes a terminal would act on,
-# and text that reads one way and runs another, refuse the reply whole.
-LINE_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
+# Executable text is never display text. The line protocol cannot carry
+# controls, line separators or invisible direction changes. Refuse them
+# whole, along with overlong commands; never fold, scrub or truncate one.
+LINE_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff\ud800-\udfff]")
+LINE_COMMAND_MAX = 1000
 LINE_REFUSED = "the model's command carried control characters -- refused"
+LINE_UNSAFE = "the model's command is not one safe line -- refused"
+
+
+def _command(value):
+    """The accepted command unchanged, or empty when it cannot be carried."""
+    return value if (isinstance(value, str) and value.strip()
+                     and len(value) <= LINE_COMMAND_MAX and not LINE_CONTROL.search(value)) else ""
+
+
 LINE_TOKENS = 200          # what a line reply may write: five short fields
 
 # An empty answer is asked again at once (v1.87). A model may open a
@@ -278,7 +289,7 @@ def _called(command):
     or `spark out_mute` where the word is no verb of spark's tree.
     Done where the command is read, before the judge and the danger
     checks, so persona.tool_danger reads the call (#166)."""
-    if not isinstance(command, str) or not command.strip():
+    if not _command(command):
         return command
     from . import grounding, mcp
     return mcp.as_call(command, grounding.spark_tree().verbs)
@@ -453,6 +464,7 @@ class _Pulse(textmod.Busy):
 
     warn = False
     keep = False
+    stop_on_command = False
     words = ""          # what the row says while a re-ask runs (tell)
     _was = None         # (warn, words, keep) of the frame before: a mood's score starts at its change
     _from = 0
@@ -912,7 +924,7 @@ def _sentence(build, width=HINT_COLS):
 class _Early:
     """Contract 4's lines, written the moment the stream makes each one
     certain. Line 1 goes out only when nothing after it can change it: the
-    kind known; for a cmd, the command closed and cut to one line, free of
+    kind known; for a cmd, the command closed and representable whole, free of
     LINE_CONTROL, earning no guard (a `??` that repeats the failed command;
     in the judge arms a verdict with a finding, which stops the stream --
     in arm off a head word nothing here answers to) and its danger known
@@ -969,10 +981,10 @@ class _Early:
         if f["kind"] == "cmd":
             if raw is None:
                 return False
-            if not isinstance(raw, str) or LINE_CONTROL.search(raw):
+            if not isinstance(raw, str) or raw and not _command(raw):
                 self.off = True
                 return False
-        command = _one_line(raw, 1000) if f["kind"] == "cmd" else ""
+        command = _command(raw) if f["kind"] == "cmd" else ""
         if not command:
             if self.retry:
                 self.off = True             # a re-ask lands a command early, or waits for the end
@@ -1056,6 +1068,10 @@ class _Early:
         self.busy.mark = "!" if head == "danger" else "*"
         self.busy.warn = head == "danger"
         self.busy.keep = True
+        if self.busy.stop_on_command:
+            # ZLE can move the cursor as soon as this command lands.
+            # A background frame can no longer know where its row is.
+            self.busy.stop()
         self.line1(head, command)
         return True
 
@@ -1074,7 +1090,7 @@ def _guards(s, reply, command, hint, text, cwd, tried, ms, now=""):
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
             retry, ms2 = _line_ask(s, "%s is not installed on this machine; use only commands that exist here." % missing)
             ms += ms2
-            c2 = _one_line(retry.get("command", ""), 1000)
+            c2 = _command(retry.get("command"))
             if retry.get("kind") == "cmd" and c2 and not persona.missing_word(c2):
                 reply, command, missing = retry, c2, ""
                 hint = _one_line(retry.get("hint", ""))
@@ -1091,7 +1107,7 @@ def _guards(s, reply, command, hint, text, cwd, tried, ms, now=""):
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
             retry, ms2 = _line_ask(s, "that exact command was already tried and failed; propose a different one.")
             ms += ms2
-            c3 = _one_line(retry.get("command", ""), 1000)
+            c3 = _command(retry.get("command"))
             if retry.get("kind") == "cmd" and c3 and c3 != command:
                 reply, command = retry, c3
                 hint = _one_line(retry.get("hint", ""))
@@ -1176,7 +1192,7 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
             return retry or dict(again.parse.fields), again.command, again.hint or "", again.head, ms, again, err
         early.busy.tell("")
         raw = (retry or {}).get("command")
-        c2 = _one_line(raw, 1000) if isinstance(raw, str) and not LINE_CONTROL.search(raw) else ""
+        c2 = _command(raw)
         if retry and retry.get("kind") == "cmd" and c2:
             left = know.verdict(c2)
             rep2 = bool(early.tried) and c2 == early.tried
@@ -1218,7 +1234,7 @@ def _as_command(s, reply, hint, asked, ms, know, early):
         return retry or dict(again.parse.fields), again.command, again.hint or "", again.head, ms, again, err
     early.busy.tell("")
     raw = (retry or {}).get("command")
-    c2 = _one_line(raw, 1000) if isinstance(raw, str) and not LINE_CONTROL.search(raw) else ""
+    c2 = _command(raw)
     if err is None and retry and retry.get("kind") == "cmd" and c2 and fits(c2) and not _asked(know.verdict(c2)):
         kind = "danger" if know.flagged(c2, retry.get("danger"), False) else "cmd"
         return retry, c2, _one_line(retry.get("hint", "")), kind, ms, early, None
@@ -1302,7 +1318,7 @@ def _cmd_line(args):
     fcmd, frc = _failed_cmd()
     install_ctx = ""
     fix = False
-    if frc == 127 and fcmd:
+    if frc == 127 and fcmd and text.lower() == "install it":
         head = fcmd.split()[0] if fcmd.split() else ""
         while head in ("sudo", "env", "nohup"):
             rest = fcmd.split()[1:]
@@ -1370,6 +1386,7 @@ def _cmd_line(args):
     # the ask to line 1 -- through the guards' re-asks when a reply earns
     # one -- then in the reply's own mark until line 2
     busy = _Pulse.hint_row().start()
+    busy.stop_on_command = shell == "zsh"
     early = _Early(cwd, more, history, busy, know, rode=bool(context), tried=tried)
     early.says = know.says
     land.early = early
@@ -1390,10 +1407,11 @@ def _cmd_line(args):
     if err is None and early.head is None:
         # nothing went early: the whole reply, the guards, then the lines
         kind = reply.get("kind")
-        command = _one_line(reply.get("command", ""), 1000)
+        command = _command(reply.get("command"))
         hint = _one_line(reply.get("hint", ""))
         is_cmd = kind == "cmd" and bool(command)
-        refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))
+        raw = reply.get("command")
+        refused = kind == "cmd" and (not isinstance(raw, str) or bool(raw) and not command)
         if is_cmd and not refused:
             if know.arm == "off":
                 n = len(s.history)
@@ -1403,14 +1421,14 @@ def _cmd_line(args):
                 asked = persona.user_message(ask_text, cwd, context, now)
                 reply, command, hint, kind, ms, early, err = _judged(s, reply, command, hint, text, asked,
                                                                      ms, know, early)
-            refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
-        elif not is_cmd and know.arm != "off" and _names_command(reply.get("hint")):
+            refused = not _command(reply.get("command"))      # a re-ask's command too
+        elif not refused and not is_cmd and know.arm != "off" and _names_command(reply.get("hint")):
             # the answer whole: the hint's one-line cut can drop the
             # command a long answer names at its end
             asked = persona.user_message(ask_text, cwd, context, now)
             reply, command, hint, kind, ms, early, err = _as_command(s, reply, hint, asked, ms, know, early)
             is_cmd = kind != "answer"
-            refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))
+            refused = is_cmd and not _command(reply.get("command"))
     extra = dict(extra, **know.numbers())
     if s is not None and s.empties:
         # replies of this turn that were a thought and no answer: 1 on a
@@ -1450,7 +1468,8 @@ def _cmd_line(args):
             reply = dict(reply, kind="answer", hint=NO_FIX)
         if refused:
             say("error")
-            say(LINE_REFUSED)
+            say(LINE_REFUSED if isinstance(reply.get("command"), str)
+                and LINE_CONTROL.search(reply["command"]) else LINE_UNSAFE)
             s.record(kind="refused", ms=ms, thread=thread, **extra)
             return 1
         if is_cmd:
@@ -1469,7 +1488,7 @@ def _cmd_line(args):
         # contract 4's optional third line: one read-only command that
         # shows the change happened. A proof that is not read-only
         # (persona.proof_ok's allowlist) is refused here, never printed.
-        proof = _one_line(reply.get("proof", ""), 1000)
+        proof = _command(reply.get("proof"))
         if proof and persona.proof_ok(proof):
             say("proof\t" + proof)
         else:
