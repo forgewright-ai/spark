@@ -1303,6 +1303,12 @@ def _after_selftest():
     srv.settimeout(0.2)
     port, bad = srv.getsockname()[1], 0
     home = os.path.realpath(os.path.expanduser("~"))
+    # A hidden HOME can remain as an empty mount point, especially when
+    # HOME itself lives under /tmp. Prove that a real file in it cannot
+    # be read; directory existence alone says nothing about isolation.
+    fd, private = tempfile.mkstemp(prefix=".spark-after-", dir=home)
+    os.write(fd, b"private fixture\n")
+    os.close(fd)
     try:
         trials = [
             ("echo in > inside.txt", lambda rc: rc == 0 and os.path.exists(os.path.join(work, "inside.txt")),
@@ -1311,7 +1317,7 @@ def _after_selftest():
              "a write outside the case dir never reaches the machine"),
             ("python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", %d), 2)'" % port,
              lambda rc: rc != 0, "a check reaches no socket, loopback included"),
-            ("ls %s" % shlex.quote(home), lambda rc: rc != 0, "a check cannot read the real home"),
+            ("cat %s" % shlex.quote(private), lambda rc: rc != 0, "a check cannot read a file in the real home"),
         ]
         for cmd, holds, what in trials:
             try:
@@ -1330,6 +1336,7 @@ def _after_selftest():
             pass
     finally:
         srv.close()
+        os.unlink(private)
         shutil.rmtree(root, ignore_errors=True)
     return bad
 

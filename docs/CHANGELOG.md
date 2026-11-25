@@ -26,6 +26,20 @@
   numbers. A tool requiring a credential is left out of the plan.
 - The prompt line keeps each tool's choices with that tool. Two tools
   that use the same argument name can offer different sets of devices.
+- A `??` reads the previous command with shell quoting intact. A quoted
+  `|`, `;` or `&` stays in its argument, and wrappers such as `sudo`
+  and `env` lead to the command they run.
+- The engine check reads spark's own process on its configured port.
+  Another running model server no longer supplies its settings.
+- Tool inputs are checked for type, size and valid text before comparing
+  choices. Malformed schemas and argument names are refused. Numeric
+  multiples keep their precision, and huge bounds cannot crash a refusal.
+- The line audition reports missing cases and OSes as incomplete
+  evidence. Duplicate answers cannot fill a missing case. Its snapshots
+  now send synopsis and option text in the same form as the live store.
+  Development checks distinguish editing the personality from showing
+  it, and forgetting a numbered fact from searching for text.
+  These measurement fixes do not establish a prompt accuracy gain.
 
 ## v1.113.2
 

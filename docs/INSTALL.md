@@ -278,7 +278,8 @@ The prompt line:
   runs until your own Enter. `Ctrl-C` cancels it.
 - After a missing command, `Esc s` offers its install line once.
   Discarding it leaves your next question independent.
-- `?? words` follows up on the last answer.
+- `?? words` follows up on the last answer. When it reads that command,
+  a quoted `|` or `;` stays part of its argument.
 - `spark off` turns the prompt line off. `spark on` turns it back on.
 - `cmd 2>&1 | explain` says what went wrong, and the fix. With nothing
   piped in, `spark explain words` answers the words, as `spark words`
@@ -382,6 +383,8 @@ spark mcp call notes add_note text=milk
 - `spark mcp call NAME TOOL KEY=VALUE` runs one tool. A value is typed
   as the tool takes it: a number, `yes` or `no`, or text. A password is
   asked for, never typed on the line.
+  Invalid text or a value outside the tool's limits is refused before
+  the tool runs.
 - A tool that changes something asks you to type `yes`, unless its
   server is trusted and the tool says it destroys nothing. spark's own
   programs are trusted, and `spark mcp` says which server is. `spark
@@ -879,6 +882,8 @@ The check. `spark check` has 42 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 a bug report, with no names or paths.
+The engine check reads spark's own engine on its configured port.
+Another running model server does not supply those settings.
 
 When a row turns worse, your next prompt says so on the line spark
 writes, with the fix: `! serve: nothing answers at 127.0.0.1:8080 --

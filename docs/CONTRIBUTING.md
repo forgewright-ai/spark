@@ -116,6 +116,18 @@ on request against the pinned artifacts, fetched by their hashes and
 kept in the actions cache. Its record is an artifact, on failure too.
 A pull request never runs them.
 
+The line audition reports score thresholds and case coverage separately.
+Each model and arm need every OS's development tool cases, the first
+core set and the held-out core cases for complete coverage. Repeated
+answers cannot replace a missing case. Partial reports remain useful,
+but cannot establish the production bar.
+
+Snapshot evidence must match the live store's text. The harness joins
+synopsis lines and keeps option text whole before saving its store.
+Its selftest compares offline evidence, the saved measuring store and
+the live store reader. Apply a harness correction to both sides of a
+comparison; do not claim an accuracy gain from a fixture repair alone.
+
 The use-case audition keeps its two halves apart too. Its replay in the
 gate is a fixture: real replies, recorded once, judge spark's code with
 no model. Its live run is held-out quality, like the line audition's,

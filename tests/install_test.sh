@@ -14,6 +14,9 @@ case $(uname -s) in
     *) export SPARK_ETC_RUNIT="$T/no-runit" ;;
 esac
 export SPARK_VAR_SERVICE="$T/no-service"
+# Package cases start without a GPU; the Vulkan cases supply their own
+# DRM tree explicitly. A host GPU must not change a dry-run's packages.
+export SPARK_SYSFS_DRM="$T/nodrm"
 trap 'rm -rf "$T"' EXIT
 # the hand-back's files, pinned: the machine underneath is never read (a
 # runner's own /etc, a developer's Terminal.app preferences). 9c pins its

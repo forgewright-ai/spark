@@ -892,7 +892,7 @@ def tls_cases(ok, spark, env, home, state, exe):
                 os.makedirs(os.path.join(chome, sub))
             os.chmod(os.path.join(chome, ".local/state/spark"), 0o700)
             cenv = {"HOME": chome, "XDG_CONFIG_HOME": chome + "/.config", "XDG_STATE_HOME": chome + "/.local/state",
-                    "XDG_DATA_HOME": chome + "/.local/share"}
+                    "XDG_DATA_HOME": chome + "/.local/share", "SPARK_PORT": str(free_port())}
             trust = os.path.join(chome, ".config", "spark", "trust")
             rc, out, _ = spark("client", url2, extra=cenv)
             ok(rc == 2 and "is not trusted here" in out and leaf_fp in out and "--pin FINGERPRINT" in out and "--ca FILE" in out,

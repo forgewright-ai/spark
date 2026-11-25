@@ -1198,12 +1198,24 @@ _IN = _intake()
 _Base = _IN.Store if _IN else object
 
 
+def store_fields(d):
+    """Snapshot text in the persisted intake store's shape: synopsis and
+    option lines are strings. Collected snapshots keep their lines apart;
+    spark's parsed help already has strings."""
+    synopsis = d.get("synopsis") or ""
+    if isinstance(synopsis, (list, tuple)):
+        synopsis = "\n".join(str(line) for line in synopsis)
+    lines = ["  ".join(str(part) for part in line) if isinstance(line, (list, tuple)) else line
+             for line in d.get("lines") or ()]
+    return dict(d, synopsis=synopsis, lines=lines)
+
+
 def make_entry(d):
     """A JSON entry dict -> intake.Entry (a dict when intake is absent)."""
     o = d.get("options") or {}
     opts = (o.get("long", ()), o.get("short", ""), o.get("words", ()))
     fields = dict(d, options=_IN.OptionSet(*opts) if _IN else opts,
-                  synopsis=tuple(d.get("synopsis", ())), lines=tuple(tuple(x) for x in d.get("lines", ())))
+                  lines=tuple(d.get("lines", ())))
     if not _IN:
         return fields
     return _IN.Entry(*(fields.get(k) for k in _IN.Entry._fields))
@@ -1301,7 +1313,8 @@ class SnapshotStore(_Base):
                 doc = json.load(f)
         self.os = doc.get("os", "?")
         if "line_audition_store" in doc:
-            self._entries, self._index, self.tokenizer = doc["entries"], doc["index"], doc.get("tokenizer", "?")
+            self._entries = {n: store_fields(d) for n, d in doc["entries"].items()}
+            self._index, self.tokenizer = doc["index"], doc.get("tokenizer", "?")
             self.absent = sorted(doc.get("absent") or ())
             return
         _words, self.tokenizer = tokenizer()
@@ -1310,6 +1323,7 @@ class SnapshotStore(_Base):
                              if t.get("exists"))
         if spark:
             self._entries.update(spark_entries())
+        self._entries = {n: store_fields(d) for n, d in self._entries.items()}
         # the store's own index, built by the same code a machine's is
         self._index = _IN.index_of((n, _IN.entry_terms(e)) for n, e in self._entries.items()) if _IN else None
 
@@ -1797,6 +1811,28 @@ def measures(sel, by_id, snaps, builtins):
             "total": [r.get("total_ms") for _o, r in sel], "cmd": [r.get("cmd_ms") for _o, r in sel]}
 
 
+def coverage_missing(rows, data, snaps):
+    """The corpus cases this model/arm has not measured against a snapshot.
+    A duplicate answer cannot stand for a missing case. Development tool
+    cases cover every OS; first-report core and frozen core cases may be
+    measured on any of those OSes. Extra phrasings have their own score."""
+    measured = [(o, r) for o, r in rows if snaps.get(o) and r.get("pass") is not None]
+    missing = []
+    for os_name, cases in data["cases"].items():
+        if os_name in ("spark", DESKTOP):
+            continue
+        want = {c["id"] for c in cases if not is_held(c)}
+        got = {r["id"] for o, r in measured if o == os_name and r["subject"] == "tools"}
+        if want - got:
+            missing.append("%s tools %d/%d cases" % (os_name, len(want & got), len(want)))
+    for split, name in (("dev", "spark core"), ("held", "spark held")):
+        want = {c["id"] for c in data["cases"].get("spark", ()) if split_of(c) == split}
+        got = {r["id"] for _o, r in measured if r["subject"] == "spark"}
+        if want - got:
+            missing.append("%s %d/%d cases" % (name, len(want & got), len(want)))
+    return missing
+
+
 def report_lines(docs, tree, builtins, data, snaps, split="all"):
     """The report as lines: one block per (model, arm). Each answer is
     re-graded against today's snapshot, tree and cases when the snapshot
@@ -1811,6 +1847,7 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
     runs = {}
     for doc in docs:
         snap = snaps.get(doc["os"])
+        run = runs.setdefault((doc["model"], doc.get("arm") or "default"), [])
         for r in doc["cases"]:
             case = by_id.get(r["id"])
             if split != "all" and held(r) != (split == "held"):
@@ -1819,7 +1856,7 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
                 r["rules"] = grade(case, "\n".join(r["raw"]), desktop_snap(snap) if r["subject"] == DESKTOP else snap,
                                    tree, builtins, r.get("rc"))
                 r["pass"] = all(x[1] for x in r["rules"])
-            runs.setdefault((doc["model"], doc.get("arm") or "default"), []).append((doc["os"], r))
+            run.append((doc["os"], r))
     out = []
     for model, arm in sorted(runs):
         rows = runs[(model, arm)]
@@ -1893,7 +1930,9 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
             "os", "danger recall", "over-fire", "flag honesty", "re-asks", "evid.", "total p50/90", "cmd p50/90",
             "empty", "leak"))
         out.extend(second)
-        out.append("  bar: " + ("met" if not misses else "not met -- " + ", ".join(misses)))
+        missing = coverage_missing(rows, data, snaps)
+        out.append("  bar: " + ("not met -- " + ", ".join(misses) if misses else "incomplete" if missing else "met"))
+        out.append("  coverage: " + ("incomplete -- " + ", ".join(missing) if missing else "complete"))
         failed = [(o, r) for o, r in rows if r["pass"] is False]
         if failed:
             out.append("  failed:")
@@ -2220,6 +2259,27 @@ def cmd_selftest(_args):
     expect("a third word outside on|off fails", sp, "cmd\tspark serve boot enable\nboots\n", False, "spark tree")
     expect("an answer naming the verb in words passes", sp, "answer\nRun `spark serve boot on` and log in again.\n", True)
     expect("an answer naming a retired verb fails", sp, "answer\nRun spark shell on, then reboot.\n", False, "spark tree")
+    # Development cases distinguish an action from merely naming its verb.
+    dev_core = {c["id"]: c for c in load_cases()["cases"]["spark"] if not is_held(c)}
+    soul_case = dev_core["spark-23"]
+    for command in ("spark soul edit", "spark soul edit --core", "spark 'soul' 'edit'", "spark soul reset", "spark awaken"):
+        expect("soul change: %s performs a change" % command, soul_case,
+               "cmd\t%s\nchanges the personality\n" % command, True)
+    for command in ("spark soul", "spark soul show"):
+        expect("soul change: %s only displays it" % command, soul_case,
+               "cmd\t%s\nshows the personality\n" % command, False, "must")
+    forget_case = dev_core["spark-34"]
+    for command in ("spark memory forget 3", "spark memory forget '3'", 'spark memory forget "03"',
+                    "spark 'memory' 'forget' '3'"):
+        expect("numbered fact: %s selects the third fact" % command, forget_case,
+               "danger\t%s\nforgets the third fact\n" % command, True)
+    for command in ("spark memory", "spark memory clear", "spark memory forget 2", "spark memory forget 30",
+                    "spark memory forget 3.1", "spark memory forget fact 3",
+                    "spark memory forget 3 other words"):
+        expect("numbered fact: %s does not select the third fact" % command, forget_case,
+               "danger\t%s\nforgets the third fact\n" % command, False, "must")
+    expect("numbered fact: a written instruction with the exact number still passes", forget_case,
+           "answer\nRun `spark memory forget 3`.\n", True)
     lk = {"id": "t", "words": "the look", "kind": None, "head_any": ["spark"], "spark_verb": ["look"], "danger": None}
     expect("the look's one switch passes", lk, "cmd\tspark look off\nlook\n", True)
     expect("a part of the look fails (v1.69: one switch)", lk, "cmd\tspark look motion on\nlook\n", False, "spark tree")
@@ -2419,7 +2479,8 @@ def cmd_selftest(_args):
     # SnapshotStore: a snapshot as intake.Store, saved and loaded back the same
     fake = {"os": "fake", "tools": {
         "du": dict(SELF_SNAP["tools"]["du"], man=True, what="estimate file space usage",
-                   synopsis=["du [OPTION]... [FILE]..."], lines=[["-s, --summarize", "display only a total"]]),
+                   synopsis=["du [OPTION]... [FILE]...", "du --help"],
+                   lines=[["-s, --summarize", "display only a total"]]),
         "xbps-query": dict(SELF_SNAP["tools"]["xbps-install"], help="Usage: xbps-query [OPTIONS] MODE\n"
                            " -f, --files PKG   Show package files for PKG\n"),
         "apt": {"exists": False}}}
@@ -2428,10 +2489,18 @@ def cmd_selftest(_args):
     ix = st.index()
     check(st.names() == ["du", "xbps-query"] and st.entry("apt") is None, "SnapshotStore: an entry per tool that exists")
     check(e is not None and e.what == "estimate file space usage" and "--summarize" in e.options.long
-          and e.lines[0][0] == "-s, --summarize" if _IN else e is not None,
+          and e.lines[0] == "-s, --summarize  display only a total" if _IN else e is not None,
           "SnapshotStore: an entry carries what, options and lines")
-    check(st.entry("xbps-query").lines[0][0] == "-f, --files PKG" if _IN else True,
+    check(e.synopsis == "du [OPTION]... [FILE]...\ndu --help" if _IN else True,
+          "SnapshotStore: synopsis lines use the persisted store's string shape")
+    check(st.entry("xbps-query").lines[0].startswith("-f, --files PKG  ") if _IN else True,
           "SnapshotStore: an older snapshot's entry reads its help text")
+    mixed = store_fields(dict(st._entries["du"], synopsis=("du [FILE]", "du --help"),
+                              lines=[["-s", "display a total"], "--help  display help"]))
+    native = _IN._entry_from(dict(mixed, stamp=[])) if _IN else None
+    check((make_entry(mixed).synopsis == native.synopsis and make_entry(mixed).lines == native.lines
+           and native.lines == ("-s  display a total", "--help  display help")) if _IN else True,
+          "SnapshotStore: collected pairs and spark's string lines match the persisted entry reader")
     check(set(ix) == {"v", "names", "post"} and ix["v"] == _IN.INDEX_V and ix["names"] == st.names()
           and all(re.match(r"^\d+:\d+(\.\d+)?( \d+:\d+(\.\d+)?)*$", p) for p in ix["post"].values()),
           "SnapshotStore: intake.index_of's shape, names sorted, postings i:tf")
@@ -2481,6 +2550,24 @@ def cmd_selftest(_args):
             grounding = judge = None
         if grounding and hasattr(grounding, "_SnapshotFile"):
             gs = grounding._SnapshotFile(saved)
+            expected = "| du [OPTION]... [FILE]... du --help\n"
+            offline = grounding.evidence("du summarize", store=st)
+            live = grounding.evidence("du summarize", store=gs)
+            local_root = os.path.join(tmp, "persisted")
+            os.makedirs(os.path.join(local_root, _IN.ENTRIES_DIR))
+            with open(os.path.join(local_root, _IN.INDEX_FILE), "w", encoding="utf-8") as f:
+                json.dump(ix, f)
+            for name, fields in st._entries.items():
+                with open(os.path.join(local_root, _IN.ENTRIES_DIR, _IN.entry_file(name)), "w", encoding="utf-8") as f:
+                    json.dump(dict(fields, stamp=[]), f)
+            local = grounding.evidence("du summarize", store=_IN.LocalStore(local_root))
+            check(offline == live == local and expected in live.text
+                  and "|   -s, --summarize display only a total\n" in live.text,
+                  "SnapshotStore: offline, saved live and LocalStore evidence have identical plain text",
+                  (offline.text, live.text, local.text))
+            check(doc["entries"]["du"]["synopsis"] == e.synopsis
+                  and doc["entries"]["du"]["lines"] == list(e.lines),
+                  "SnapshotStore: saved text has the persisted intake store's shapes")
             check(gs.has_program("du") is True and gs.has_program("apt") is False
                   and gs.has_program("pandoc") is False,
                   "a closed store: a tool it holds is there, one it marks absent or lacks is not",
@@ -2621,6 +2708,31 @@ def cmd_selftest(_args):
     check("\n  held " not in dev_text and "h2 " not in dev_text and "1/1 100 %" in dev_text
           and "h2 " in held_text and "d1 " not in held_text,
           "report --split: dev leaves the held-out cases out, held keeps them alone", dev_text)
+    check("bar: incomplete" in held_text and "spark core 0/1 cases" in held_text
+          and "fake tools 0/1 cases" in held_text and "bar: met" not in held_text,
+          "report: held-only answers do not establish the production bar", held_text)
+    check("bar: incomplete" in dev_text and "spark held 0/2 cases" in dev_text,
+          "report: development scores alone leave held-out evidence unmeasured", dev_text)
+    duplicate = hdocs()
+    duplicate[0]["cases"][1] = dict(duplicate[0]["cases"][0])
+    duplicate_text = "\n".join(report_lines(duplicate, tree, builtins, hdata, snaps))
+    check("bar: incomplete" in duplicate_text and "spark held 1/2 cases" in duplicate_text,
+          "report: a repeated case cannot replace a missing case", duplicate_text)
+    expanded = dict(hdata, cases=dict(hdata["cases"], other=[dict(by["n2"], id="other1", words="w")]))
+    expanded_text = "\n".join(report_lines(hdocs(), tree, builtins, expanded, snaps))
+    check("bar: incomplete" in expanded_text and "other tools 0/1 cases" in expanded_text,
+          "report: an unmeasured OS cannot pass by omission", expanded_text)
+    empty = hdocs()
+    empty[0]["cases"] = []
+    empty_text = "\n".join(report_lines(empty, tree, builtins, hdata, snaps))
+    check("model m, arm judge" in empty_text and "bar: incomplete" in empty_text,
+          "report: an empty run is explicitly incomplete", empty_text)
+    stale = hdocs()
+    for r in stale[0]["cases"]:
+        r["pass"] = True
+    stale_text = "\n".join(report_lines(stale, tree, builtins, hdata, {}))
+    check("bar: incomplete" in stale_text and "spark core 0/1 cases" in stale_text,
+          "report: saved pass flags without a snapshot do not establish coverage", stale_text)
     todo = [c["id"] for _s, c in cases_for(hdata, "fake")]
     check(todo == ["n2", "h1", "h2", "d1"] and [c["id"] for _s, c in cases_for(hdata, "fake", split="dev")] == ["n2", "d1"]
           and [c["id"] for _s, c in cases_for(hdata, "fake", split="held")] == ["h1", "h2"],

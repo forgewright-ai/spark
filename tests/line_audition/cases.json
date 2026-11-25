@@ -7091,8 +7091,11 @@
     "not_head": [
      "sudo"
     ],
+    "must": [
+     "\\b(?:soul['\"]?\\s+['\"]?(?:edit|reset)(?=['\"\\s]|$)|awaken\\b)"
+    ],
     "danger": null,
-    "why_review": "v1.87: spark soul edit changes who spark is and spark awaken makes it again: either answers the words"
+    "why_review": "Changing who spark is needs soul edit, soul reset or awaken; bare soul and soul show only display it."
    },
    {
     "id": "spark-24",
@@ -7295,8 +7298,11 @@
     "not_head": [
      "sudo"
     ],
+    "must": [
+     "\\bmemory['\"]?\\s+['\"]?forget['\"]?\\s+['\"]?0*3['\"]?(?:\\s*$|\\s*[;&|#]|`)"
+    ],
     "danger": true,
-    "why_review": "forgetting a fact deletes it: danger"
+    "why_review": "Forgetting the third fact needs numeric id 3, not a text search or clearing every fact; deleting it is danger."
    },
    {
     "id": "spark-35",

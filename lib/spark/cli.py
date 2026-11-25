@@ -703,12 +703,20 @@ def _head(command):
 
 def _heads(command):
     """Every program of a command line: the head of each stage between
-    |, ||, &&, ; and &, in order, once each -- what a ?? goes on with."""
+    unquoted operators, past wrappers, in order, once each -- what a ??
+    goes on with. An unreadable line supplies no program names."""
+    from . import judge
+    try:
+        stages = judge._stages(command or "")
+    except ValueError:
+        return []
     out = []
-    for stage in re.split(r"\|\|?|&&|;|&", command or ""):
-        h = _head(stage)
-        if h and h not in out:
-            out.append(h)
+    for stage in stages:
+        programs = judge._unwrap(stage)
+        # The last entry is the command, or a wrapper running alone
+        # (for example, timeout --help). Its own name still belongs.
+        if programs and programs[-1][0] not in out:
+            out.append(programs[-1][0])
     return out
 
 

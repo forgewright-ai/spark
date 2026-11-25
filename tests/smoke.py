@@ -1482,8 +1482,20 @@ def knowledge_cases(t):
     t.ok(cli._heads("du -sh */ | sort -rh && echo ok") == ["du", "sort", "echo"]
          and cli._heads("sudo du -sh * ; ls -la || ls") == ["du", "ls"] and cli._heads("") == [],
          "knowledge: a ?? takes every program of the command it follows, once each", repr(cli._heads("du | sort")))
+    t.ok(cli._heads("grep 'a|b' file | head") == ["grep", "head"]
+         and cli._heads('printf "%s" "a;b&c" && wc -l file') == ["printf", "wc"]
+         and cli._heads("sudo -u alice du -sh *") == ["du"]
+         and cli._heads("env LC_ALL=C timeout 3 grep -n term file") == ["grep"]
+         and cli._heads("grep 'open") == [],
+         "knowledge: a ?? reads quoted operators and wrapper arguments as data, never as program names")
+    t.ok(cli._heads("timeout --help") == ["timeout"]
+         and cli._heads("watch --help") == ["watch"]
+         and cli._heads("env") == ["env"]
+         and cli._heads("sudo -u fixture timeout --version") == ["timeout"],
+         "knowledge: a ?? keeps a wrapper's own name when it runs no child command")
     t.ok(grounding.new_tools("biggest first, only the top 3", ["du"], small) == []
          and grounding.new_tools("pipe it to wc", ["ls"], small) == ["wc"]
+         and grounding.new_tools("pipe it to wc", cli._heads("grep 'a|'wc file"), small) == ["wc"]
          and grounding.new_tools("use du instead", ["du"], small) == [],
          "knowledge: a ?? brings in only a program its words name as a tool, never one by chance (the top 3)")
     t.ok("top" not in grounding.evidence("the top 3 by size", ("du",), small, follow=True).names

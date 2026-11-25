@@ -978,9 +978,12 @@ and may change freely.
    `SPARK_KNOWLEDGE=off` is the line without it. A `??` names the
    command it changes beside its words (`cli.MORE_ASK`). Its Reference
    block holds only a program its words bring in as a tool
-   (`grounding.new_tools`), never its own command's manuals. A finding
-   has a kind
-   (`judge.Finding`). `missing` is a program that is not on this
+   (`grounding.new_tools`), never its own command's manuals.
+   The judge's shell reader finds the previous command's programs.
+   Quoted operators stay in their arguments; wrappers lead to the
+   command they run. An unreadable command supplies no program names.
+   A finding has a kind (`judge.Finding`). `missing` is a program
+   that is not on this
    machine, and `flag` an option its manual does not name. A
    `--no-FOO` counts as named where a program's manual names `--FOO`, as
    systemctl's `--legend=BOOL` takes `--no-legend`. After a
@@ -2675,9 +2678,13 @@ and may change freely.
     unsupported. Format and content metadata are annotations; the
     password format still marks a credential.
     An unknown constraint or a malformed schema is an explicit
-    refusal.
-    A string carries no control, bidi or zero-width character. Without
-    `maxLength` it is 4096 characters at most. An explicit limit can
+    refusal. Schema and argument names must be text. Types, depths and
+    sizes are checked before choices are compared. Numeric multiples
+    use exact decimal values. A refusal describes a very large bound
+    without printing every digit.
+    A string must encode as UTF-8 and carry no control, bidi or
+    zero-width character. Without `maxLength` it is 4096 characters
+    at most. An explicit limit can
     allow more, up to 65536. An array is 32 items
     at most. A server may list a resource named `rows`, in the rows
     schema of the desktop's providers. Where it names the tool with its
@@ -3139,7 +3146,10 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   only the token spark mints counts, never a key file the user named.
   `spark client URL`, `spark uninstall` and `spark serve off` stop
   those alone. `spark serve off --force` is the one way to stop
-  another. Shutdown waits use a monotonic deadline and reap only named
+  another. The engine check reads arguments from those same owned
+  processes on the configured port (`engine.live_args`). It checks the
+  command again after finding its process, since that process may exit.
+  Shutdown waits use a monotonic deadline and reap only named
   children. Linux reads zombie state from `/proc/PID/stat`; macOS uses
   `ps` within the remaining budget. An unreadable state stays pending.
   Other parents must reap their own zombies. Scheduling and OS calls
@@ -3278,6 +3288,18 @@ sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI 
 sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
 sh tests/land.sh --landed-at SHA   # when it reached main, by GitHub's clock: the rest a patch counts
 ```
+
+The line audition keeps score thresholds and coverage apart. Each model
+and arm need every OS's development tool cases, the first core set and
+the held-out core cases for complete coverage. It counts case IDs, so
+duplicates cannot replace missing cases. Held core scores remain
+separate. A partial report names what is missing and cannot claim the
+production bar.
+
+The snapshot store joins synopsis lines and keeps option text whole,
+using the same text shapes as the persisted store. Its selftest compares
+offline, saved measuring and live store evidence. Both sides of an
+accuracy comparison must use the same harness correction.
 
 ### Host-dependent test fixtures
 

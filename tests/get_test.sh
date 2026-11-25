@@ -219,7 +219,7 @@ printf '%s\n' "$out" | grep -q 'missing: git' && ok "no git: the refusal names g
 #     transactional-update on PATH) refuses in one line, nothing cloned
 tools() {   # tools DIR -- what get runs after the probe, and a uname that says Linux x86_64
     mkdir -p "$1"
-    for t in sh ls python3 git ssh-keygen head rm find cut sed tr mktemp cat; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
+    for t in sh ls python3 git git-upload-pack ssh-keygen head rm find cut sed tr mktemp cat; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
     printf '#!/bin/sh\ncase ${1:-} in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' > "$1/uname"; chmod +x "$1/uname"
 }
 tools "$T/nopm"

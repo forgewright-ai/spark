@@ -30,6 +30,18 @@ def finite(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool) and (isinstance(v, int) or math.isfinite(v))
 
 
+def bound_text(v):
+    # A refusal must not render an arbitrarily large provider integer,
+    # including one beyond Python's decimal conversion limit.
+    return "the declared bound" if isinstance(v, int) and v.bit_length() > 256 else str(v)
+
+
+def ratio(v):
+    # JSON numbers have decimal semantics. Integer arithmetic avoids
+    # Decimal's working precision rounding or refusing a valid multiple.
+    return (v, 1) if isinstance(v, int) else decimal.Decimal(str(v)).as_integer_ratio()
+
+
 def equal(a, b):
     if isinstance(a, bool) or isinstance(b, bool):
         return type(a) is type(b) and a == b
@@ -152,8 +164,11 @@ def pattern_matches(pattern, value):
 def problem(p, root=False, depth=0):
     if not isinstance(p, dict) or depth > 2:
         return "unsupported schema shape"
+    if not all(isinstance(k, str) for k in p):
+        return "invalid schema keys"
     kind = p.get("type", "object" if root else "")
-    if not isinstance(kind, str) or kind not in KEYS or (kind == "object" and not root):
+    if (not isinstance(kind, str) or kind not in KEYS
+            or (kind == "object" and not root) or (root and kind != "object")):
         return "unsupported schema type"
     for key in p:
         if key not in META | KEYS[kind] | {"type", "enum", "const"}:
@@ -176,7 +191,8 @@ def problem(p, root=False, depth=0):
                 return str(e)
     if kind == "object":
         props, req = p.get("properties", {}), p.get("required", [])
-        if not isinstance(props, dict) or not isinstance(req, list) or not all(isinstance(k, str) and k in props for k in req):
+        if (not isinstance(props, dict) or not all(isinstance(k, str) for k in props)
+                or not isinstance(req, list) or not all(isinstance(k, str) and k in props for k in req)):
             return "invalid object properties or required arguments"
         if "additionalProperties" in p and not isinstance(p["additionalProperties"], bool):
             return "unsupported constraint additionalProperties"
@@ -200,16 +216,14 @@ def constraints(p, v):
         return "does not match its pattern"
     if finite(v):
         if "exclusiveMinimum" in p and v <= p["exclusiveMinimum"]:
-            return "must be above %s" % p["exclusiveMinimum"]
+            return "must be above %s" % bound_text(p["exclusiveMinimum"])
         if "exclusiveMaximum" in p and v >= p["exclusiveMaximum"]:
-            return "must be below %s" % p["exclusiveMaximum"]
+            return "must be below %s" % bound_text(p["exclusiveMaximum"])
         if "multipleOf" in p:
-            try:
-                remainder = decimal.Decimal(str(v)) % decimal.Decimal(str(p["multipleOf"]))
-            except decimal.InvalidOperation:
-                return "cannot be checked as a multiple"
-            if remainder:
-                return "must be a multiple of %s" % p["multipleOf"]
+            n, d = ratio(v)
+            mn, md = ratio(p["multipleOf"])
+            if (n * md) % (d * mn):
+                return "must be a multiple of %s" % bound_text(p["multipleOf"])
     if isinstance(v, list):
         if len(v) < p.get("minItems", 0):
             return "has too few items"

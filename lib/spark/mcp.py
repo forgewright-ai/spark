@@ -890,11 +890,10 @@ def validate(schema, args, later=()):
     why = mcp_schema.problem(schema, root=True)
     if why:
         return short(why, 120)
-    why = mcp_schema.constraints(schema, args)
-    if why:
-        return why
     props = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     for k in args:
+        if not isinstance(k, str):
+            return "an argument name is not text"
         if k not in props:
             return "no argument %s" % short(k, 40)
     for r in required(schema):
@@ -904,7 +903,9 @@ def validate(schema, args, later=()):
         why = _value_ok(props[k], v)
         if why:
             return "%s %s" % (k, why)
-    return ""
+    # Equality may walk objects and lists. Only compare values after their
+    # supported types, depths and sizes have been established.
+    return mcp_schema.constraints(schema, args)
 
 
 _PLAIN_BAD = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff"
@@ -917,35 +918,38 @@ def _int(v, default):
 
 
 def _value_ok(p, v, depth=0):
-    if not isinstance(p, dict):
-        return "is not a shape spark checks"
+    # Elicitation calls this directly too, without validate's schema pass.
+    why = mcp_schema.problem(p, depth=depth + 1)
+    if why:
+        return short(why, 120)
     if isinstance(v, str) and len(v) > mcp_schema.STRING_LIMIT:
         return "is %d characters at most" % mcp_schema.STRING_LIMIT
     if isinstance(v, list) and len(v) > ARRAY_MAX:
         return "is a list of %d at most" % ARRAY_MAX
-    why = mcp_schema.constraints(p, v)
-    if why:
-        return why
     t = p.get("type")
     if t == "string":
         if not isinstance(v, str):
             return "is text"
         if _PLAIN_BAD.search(v):
             return "holds a control character"
+        try:
+            v.encode("utf-8")
+        except UnicodeEncodeError:
+            return "is not utf-8 text"
         lo, hi = _int(p.get("minLength"), 0), min(mcp_schema.STRING_LIMIT, _int(p.get("maxLength"), STRING_MAX))
         if not lo <= len(v) <= hi:
-            return "is %d to %d characters" % (lo, hi)
-        return ""
-    if t in ("integer", "number"):
+            return "is %s to %s characters" % (mcp_schema.bound_text(lo), hi)
+    elif t in ("integer", "number"):
         if not mcp_schema.finite(v) or (t == "integer" and v != int(v)):
             return "is a whole number" if t == "integer" else "is a number"
         lo, hi = p.get("minimum"), p.get("maximum")
         if (isinstance(lo, (int, float)) and v < lo) or (isinstance(hi, (int, float)) and v > hi):
-            return "is %s to %s" % (lo if lo is not None else "any", hi if hi is not None else "any")
-        return ""
-    if t == "boolean":
-        return "" if isinstance(v, bool) else "is yes or no"
-    if t == "array" and depth == 0:
+            return "is %s to %s" % (mcp_schema.bound_text(lo) if lo is not None else "any",
+                                    mcp_schema.bound_text(hi) if hi is not None else "any")
+    elif t == "boolean":
+        if not isinstance(v, bool):
+            return "is yes or no"
+    elif t == "array" and depth == 0:
         cap = min(ARRAY_MAX, _int(p.get("maxItems"), ARRAY_MAX))
         if not isinstance(v, list) or len(v) > cap:
             return "is a list of %d at most" % cap
@@ -953,8 +957,9 @@ def _value_ok(p, v, depth=0):
             why = _value_ok(p.get("items") if isinstance(p.get("items"), dict) else {}, x, 1)
             if why:
                 return "holds an item that " + why
-        return ""
-    return "is not a shape spark checks"
+    else:
+        return "is not a shape spark checks"
+    return mcp_schema.constraints(p, v)
 
 
 def plain(schema, args):
@@ -1152,6 +1157,11 @@ def words_args(tool, words):
 
 
 def _typed(p, v):
+    # CLI words and elicitation arrive here before value validation. Do
+    # not recurse through an unsupported provider shape while converting
+    # them; leave the raw value for the validator's explicit refusal.
+    if mcp_schema.problem(p, depth=1):
+        return v
     t = p.get("type") if isinstance(p, dict) else None
     if t == "integer":
         try:

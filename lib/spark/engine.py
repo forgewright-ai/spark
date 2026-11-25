@@ -383,17 +383,13 @@ def server_cmd(cfg, host):
 
 
 def live_args(cfg):
-    """The argv of the llama-server that runs now (the unit's or spark
-    serve's), from ps on both OSes; None when none runs or ps fails."""
-    want = engine_bin(cfg)
-    try:
-        out = subprocess.run(["ps", "-axww", "-o", "args="], capture_output=True, text=True, errors="replace", timeout=5).stdout
-    except (OSError, subprocess.SubprocessError):
-        return None
-    for line in out.splitlines():
-        argv = line.split()
-        if argv and (argv[0] == want or os.path.basename(argv[0]) == os.path.basename(want)):
-            return argv
+    """The argv of spark's engine on the configured port, or None.
+    Another user's engine, or one on a different port, says nothing
+    about this instance's settings. A process can exit between reads."""
+    for pid in own_pids(cfg):
+        line = pid_cmdline(pid)
+        if line and pids_in_ps("%d %s" % (pid, line), cfg.port):
+            return line.split()
     return None
 
 

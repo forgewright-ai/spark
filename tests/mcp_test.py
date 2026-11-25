@@ -13,6 +13,8 @@ it was sent, so a check can read the grammar and the brief.
 """
 import json
 import os
+import random
+import re
 import shutil
 import stat
 import subprocess
@@ -750,11 +752,90 @@ check("M1: persona.SENDS gains named lines: steps, the line's tool lines, a tool
 def value_check(prop, value):
     try:
         return mcp.validate({"type": "object", "properties": {"value": prop}}, {"value": value})
-    except (TypeError, ValueError, OverflowError) as e:
+    except (TypeError, ValueError, OverflowError, RecursionError) as e:
         return "traceback: " + type(e).__name__
 
 
 color = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
+deep_value = "end"
+for _ in range(700):
+    deep_value = [deep_value]
+for assertion in ("const", "enum"):
+    choice = deep_value if assertion == "const" else [deep_value]
+    why = value_check({"type": "string", assertion: choice}, deep_value)
+    check("schema: a wrong scalar type is refused before nested %s equality" % assertion,
+          bool(why) and not why.startswith("traceback"), why)
+root_shape = {"type": "object", "properties": {"x": {"type": "string"}}, "const": {"x": deep_value}}
+try:
+    why = mcp.validate(root_shape, {"x": deep_value})
+except RecursionError:
+    why = "traceback: RecursionError"
+check("schema: root equality waits until argument types are checked",
+      bool(why) and not why.startswith("traceback"), why)
+why = value_check({"type": "array", "items": {"type": "string"}, "const": deep_value}, deep_value)
+check("schema: array equality waits until item types are checked",
+      bool(why) and not why.startswith("traceback"), why)
+check("schema: exact large multiples do not depend on Decimal's working precision",
+      not value_check({"type": "integer", "multipleOf": 3}, 3 * 10**40)
+      and bool(value_check({"type": "integer", "multipleOf": 3}, 3 * 10**40 + 1)), "")
+for bound in ("minimum", "exclusiveMinimum", "minLength"):
+    why = value_check({"type": "string" if bound == "minLength" else "integer", bound: 10**5000},
+                      "x" if bound == "minLength" else 0)
+    check("schema: a huge %s is refused without rendering thousands of digits" % bound,
+          bool(why) and not why.startswith("traceback") and len(why) < 200, why)
+for bound, limit in (("maximum", -10**5000), ("exclusiveMaximum", -10**5000), ("multipleOf", 10**5000)):
+    why = value_check({"type": "integer", bound: limit}, 1)
+    check("schema: a huge %s retains a bounded refusal" % bound,
+          bool(why) and not why.startswith("traceback") and len(why) < 200, why)
+check("schema: invalid Unicode is refused before wire cleanup can change the value",
+      bool(value_check({"type": "string", "const": "\ud800"}, "\ud800")), "")
+check("schema: valid Unicode and very large integers retain their value",
+      not value_check({"type": "string", "const": "\U0001f30d"}, "\U0001f30d")
+      and not value_check({"type": "integer", "multipleOf": 3}, 3 * 10**5000), "")
+check("schema: finite float extremes use exact decimal multiples",
+      not value_check({"type": "number", "multipleOf": 5e-324}, 1e308)
+      and bool(value_check({"type": "number", "multipleOf": 1e308}, 5e-324)), "")
+check("schema: direct field validation refuses malformed elicitation constraints",
+      bool(mcp._value_ok({"type": "string", "pattern": "(a+)+$"}, "aa")), "")
+deep_schema = {"type": "string"}
+for _ in range(700):
+    deep_schema = {"type": "array", "items": deep_schema}
+deep_tool = mcp.tool_of("stub", {"name": "nested", "inputSchema": {
+    "type": "object", "properties": {"value": deep_schema}}}, False)
+
+
+class MalformedProvider:
+    name = "stub"
+
+    def tools(self):
+        return [deep_tool], []
+
+
+try:
+    mcp.prepare(MalformedProvider(), "nested", words=["value=x"])
+    why = ""
+except mcp.Refused as e:
+    why = str(e)
+except RecursionError:
+    why = "traceback: RecursionError"
+check("schema: CLI conversion refuses nested array schemas before walking them",
+      bool(why) and not why.startswith("traceback"), why)
+try:
+    why = mcp._value_ok(deep_schema, mcp._typed(deep_schema, "x"))
+except RecursionError:
+    why = "traceback: RecursionError"
+check("schema: elicitation conversion also refuses nested array schemas before walking them",
+      bool(why) and not why.startswith("traceback"), why)
+for schema, args in (({"type": "string"}, {}),
+                     ({"type": "object", ("bad", "key"): 0}, {}),
+                     ({"type": "object", "properties": {1: {"type": "integer"}}}, {1: 2}),
+                     ({"type": "object"}, {1: 2})):
+    try:
+        why = mcp.validate(schema, args)
+    except (TypeError, ValueError, RecursionError) as e:
+        why = "traceback: " + type(e).__name__
+    check("schema: malformed root shapes and non-text keys are refused",
+          bool(why) and not why.startswith("traceback"), why)
 check("schema: the provider's hex constraint accepts hex and refuses a color name",
       not value_check(color, "#12aBcF") and bool(value_check(color, "blue")), "")
 check("schema: format and content metadata remain annotations; explicit larger text limits still hold",
@@ -791,6 +872,62 @@ started = time.process_time()
 check("schema: overlapping repetitions have bounded work and still reject a mismatch",
       bool(value_check({"type": "string", "pattern": "^" + "a*" * 60 + "b$"}, "a" * 4000 + "!"))
       and time.process_time() - started < 2, "")
+
+# Provider JSON can put any type in any assertion. Exercise those crossings,
+# including deep values that Python's JSON decoder can still read.
+schema_rng = random.Random(811)
+odd_values = [None, False, True, 0, -1, 1.5, float("nan"), float("inf"), 10**5000,
+              "", "word", "\ud800", [], [1, 2], {}, {"value": 1}, deep_value]
+assertions = ["type", "enum", "const", "minimum", "maximum", "exclusiveMinimum",
+              "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "pattern",
+              "items", "minItems", "maxItems", "uniqueItems", "properties", "required",
+              "additionalProperties", "minProperties", "maxProperties"]
+fuzz_errors = []
+for _ in range(2000):
+    prop = {"type": schema_rng.choice(["string", "number", "integer", "array", "boolean"])}
+    for _ in range(schema_rng.randrange(4)):
+        prop[schema_rng.choice(assertions)] = schema_rng.choice(odd_values)
+    value = schema_rng.choice(odd_values)
+    try:
+        mcp.validate({"type": "object", "properties": {"value": prop}}, {"value": value})
+        mcp._value_ok(prop, value)
+    except Exception as e:
+        fuzz_errors.append(type(e).__name__)
+check("schema: 2000 malformed schema/value crossings return without an exception", not fuzz_errors, fuzz_errors)
+
+# Python re is an independent oracle only where its semantics match the
+# supported ECMAScript subset: no line terminators or shorthand escapes.
+pattern_rng = random.Random(155)
+atoms = ["a", "b", ".", "[ab]", "[^a]", "[a-c]", r"\$", r"[\]]", r"[\[]", "[-ab]", r"\\"]
+repeats = ["", "?", "*", "+", "{0}", "{1,3}", "{2}", "{2,}", "{0,2}"]
+
+
+def pattern_expression(depth=0):
+    parts = []
+    for _ in range(pattern_rng.randrange(5)):
+        if depth < 2 and pattern_rng.randrange(6) == 0:
+            parts.append("(?:" + pattern_expression(depth + 1) + ")" + pattern_rng.choice(["", "?", "{0,1}", "{0}"]))
+        else:
+            parts.append(pattern_rng.choice(atoms) + pattern_rng.choice(repeats))
+    return "".join(parts)
+
+
+pattern_errors = []
+for _ in range(1000):
+    pattern = pattern_rng.choice(["", "^"]) + pattern_expression() + pattern_rng.choice(["", "$"])
+    for _ in range(5):
+        value = "".join(pattern_rng.choices("abc012_$[]-\\", k=pattern_rng.randrange(15)))
+        try:
+            actual = mcp.mcp_schema.pattern_matches(pattern, value)
+            if actual != bool(re.search(pattern, value)):
+                pattern_errors.append((pattern, value))
+        except ValueError as e:
+            pattern_errors.append(str(e))
+check("schema: 5000 generated supported pattern matches agree with an independent regex", not pattern_errors, pattern_errors[:3])
+check("schema: dollar anchors and dot retain ECMAScript line-terminator semantics",
+      not mcp.mcp_schema.pattern_matches("^a$", "a\n")
+      and not mcp.mcp_schema.pattern_matches("^.$", "\r")
+      and mcp.mcp_schema.pattern_matches("^.$", "a"), "")
 
 rowtool = mcp.Tool("fake", "pick", "pick", {"type": "object", "properties": {"name": {"type": "string"}},
                    "required": ["name"]}, False, False, True)

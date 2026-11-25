@@ -8,6 +8,7 @@ AT THE PROMPT
   ? words   or   words?   Enter   the command lands in your line
   Enter again                     runs it. ! means read it first
   ?? words                        follow up on the last answer
+                                  quoted | or ; stays in its argument
   Esc s                           ask about the line you are on
   Esc s on an empty line          explain the failed command. Again: the fix
   Esc r                           describe a past command to find it again
@@ -92,6 +93,7 @@ MCP TOOLS (the servers on the list, ~/.config/spark/mcp.env)
   spark mcp rm NAME               take a server off the list
   spark mcp trust NAME [on|off]   believe what its tools say of themselves
   spark mcp call NAME TOOL K=V    run one tool. One that can destroy asks yes
+                                 invalid inputs are refused before it runs
   spark mcp read NAME [URI]       its resources. --watch shows each change
   spark steps <words> < TOOLS     plan checked calls from up to 256 tools
                                  each description sends at most 160 characters
@@ -138,6 +140,7 @@ THE MACHINE
   spark setup [--yes]             name, user, model and voice
   spark setup --engine URL        set up with your own llama-server
   spark check                     is spark ok: every check, what to fix
+                                  engine settings come from spark's own engine
   spark check --all | NAME...     every row, or those rows. exit 0 = no failure
   spark check --history [NAME]    what changed and when, newest first
   spark check --fresh | --watch N ask again now, or every N seconds

@@ -20,6 +20,7 @@ import tempfile
 import time
 import urllib.request
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,7 +30,24 @@ from spark import engine
 
 
 class ShutdownTests(unittest.TestCase):
-    """Short waits, real children, and no service manager or model."""
+    """Process ownership and shutdown, with no service manager or model."""
+
+    def test_live_args_belong_to_this_engine(self):
+        cfg = SimpleNamespace(port=41723, client=False, token_file="/fixture/key")
+        lines = {
+            410: "/other/llama-server --port 41724 --api-key-file /fixture/key --cache-ram 2048",
+            411: "/other/llama-server --port 41723 --api-key-file /other/key --cache-ram 2048",
+            412: "/fixture/llama-server --port 41723 --api-key-file /fixture/key --cache-ram 0",
+        }
+        with patch.object(engine, "engine_bin", return_value="/fixture/llama-server"), \
+                patch.object(engine, "TOKEN_FILE", "/fixture/key"), \
+                patch.object(engine, "pidfile_pid", return_value=0), \
+                patch.object(engine, "run", return_value=(0, "\n".join("%d %s" % item for item in lines.items()))), \
+                patch.object(engine.subprocess, "run", return_value=SimpleNamespace(stdout="\n".join(lines.values()))), \
+                patch.object(engine, "pid_cmdline", side_effect=lambda pid: lines.get(pid, "")):
+            self.assertEqual(engine.live_args(cfg), lines[412].split())
+            del lines[412]
+            self.assertIsNone(engine.live_args(cfg))
 
     def child(self, code):
         p = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE,
@@ -348,6 +366,7 @@ def main():
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "PATH": bins + ":" + env.get("PATH", ""),
                     "SPARK_ENGINE_DIR": eng, "SPARK_MODELS_DIR": models, "SPARK_PORT": str(port),
+                    "SPARK_MEM_NEEDED_GB": "0.05",  # the Python stub, not a real model's RAM
                     "SPARK_SERVE_HOST": "127.0.0.1", "SPARK_NO_REFRESH": "1", "SPARK_TIMEOUT": "5",
                     "SPARK_NO_APPLY": "1", "SPARK_FORGE_HOST": "127.0.0.1", "SPARK_FORGE_PORT": str(fport),
                     "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
@@ -449,6 +468,13 @@ def main():
         rc, out, err = spark("serve", "off")
         ok(rc == 0 and "stopped pid" in out, "stop it again", out + err)
         time.sleep(0.5)
+
+        # Pin the demand, not the host's free memory. The tiny stub still
+        # starts, and the pressure warning must remain visible.
+        rc, out, err = spark("serve", "on", extra={"SPARK_MEM_NEEDED_GB": "1000000"})
+        ok(rc == 0 and "! stub needs ~1000000.0 GB," in out and "ready (pid" in out,
+           "a demand beyond available memory warns and still starts", out + err)
+        spark("serve", "off")
 
         # a foreign server on the port
         foreign = subprocess.Popen([sys.executable, os.path.join(eng, "llama-server"), "--host", "127.0.0.1", "--port", str(port), "-m", "foreign"],

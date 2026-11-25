@@ -99,6 +99,7 @@ spark chat                      talk with the model
 - `spark model list`: the models and their licenses.
 - `spark mcp`: the tools of the MCP servers you put on its list, such
   as the parts of a desktop. A tool that can destroy asks you first.
+  Invalid inputs are refused before the tool runs.
 - `spark steps`: give the local model a list of tools and a request.
   It returns proposed calls as JSON and checks each tool's constraints.
   The caller decides what to run.
@@ -107,7 +108,8 @@ spark chat                      talk with the model
 - `spark voice on`: spark reads aloud.
 - `spark awaken`: give spark a personality and a look.
 - `spark check`: is spark ok, and what to fix. Your prompt says when
-  something breaks. `spark status` is the full report.
+  something breaks. Its engine check reads spark's own running engine.
+  `spark status` is the full report.
 - `spark uninstall` removes spark from this machine.
 
 Every command is in `docs/CHEATSHEET.txt`.
@@ -115,6 +117,8 @@ Every command is in `docs/CHEATSHEET.txt`.
 A proposed command keeps its spaces. A paste waits for your own Enter,
 even across a pause. In an editor, byte offsets mark UTF-8 boundaries;
 moving a selection sends the new part with your next question.
+When `??` reads the last command, quoted file names stay arguments,
+even when they hold `|` or `;`.
 
 ## A first hour
 
