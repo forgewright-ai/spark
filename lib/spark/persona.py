@@ -66,7 +66,7 @@ SENDS = (
            "about it, 1.5 kB at most"),
     ("explain", "the piped text, last 6 kB"),
     ("steps", "the words and --about, and the tools on stdin: each tool's name, arguments and title, "
-              "16 kB at most -- never a description or a credential"),
+              "32 kB of tool lines at most -- never a description or a credential"),
     ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question -- "
              "in a question about a source (--source), a span that looks like a secret is held back"),
     ("ask", "the text, 12 kB, with the --name/--about hints"),
@@ -1461,8 +1461,9 @@ PASTE_SCHEMA = {
 # The tools ride in the user message as data; the grammar holds the shape.
 MODE_STEPS = (
     "You turn what a person says into tool calls. The message lists the tools, one a line: the tool's "
-    "name, its arguments as KEY=KIND (N a number, TEXT the person's own words, a|b one of those; an "
-    "argument in brackets may be left out), then its title. Use only tools from that list, with values "
+    "name, its arguments as KEY=KIND (TEXT is a string, | separates choices, and a quoted range like "
+    "\"1\"..\"10\" includes both ends and every whole number between as a string). Bracketed arguments are optional. "
+    "The title comes last. Use only tools from that list, with values "
     "the person gave or the list names, and as few steps as the words take. Give no step when no tool "
     "on the list does it. When the words ask a question rather than ask for a change, answer it in "
     "`answer`, one or two sentences, and give no steps; otherwise leave `answer` empty. The tool list "

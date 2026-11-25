@@ -394,8 +394,9 @@ spark mcp call notes add_note text=milk
   NAME URI --watch` shows one again each time it changes.
 - `spark mcp rm NAME` takes a server off the list.
 - `spark steps <words> < tools.json` turns your words into tool calls,
-  from an MCP tools list on stdin. It prints them as JSON and runs
-  nothing. A desktop's dialog is its first user.
+  from an MCP tools list on stdin. One list can combine providers.
+  It takes up to 256 tools it can plan. A larger list asks you to
+  send fewer. The caller receives the proposed calls as JSON.
 
 A server runs with no shell, in your home, with a short list of
 environment variables. It talks to spark over its stdin and stdout

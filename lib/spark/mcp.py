@@ -1619,46 +1619,25 @@ def _arg_form(a):
 
 
 def _said_values(sv):
-    """One server's values as the block says them, from [((tool, arg),
-    [(value, label)])]: the lists of one argument name that share a value
-    are one list (a device the tools connect, disconnect and remove), and
-    lists of two names that hold the same values are one (screen/other).
-    A list keeps its name where it is the name's only one, else `tool
-    arg`. Labels say something only where a list holds two or more
-    (dark and light): else they are left out."""
-    groups = []                              # [[names {arg}, tools [(tool, arg)], {value: label}]]
-    for key, got in sv:
-        tool, k = key
-        new = [{k}, [key], {}]
-        for v, lab in got:
-            new[2].setdefault(v, lab)
-        for g in [g for g in groups if k in g[0] and set(g[2]) & set(new[2])]:
-            groups.remove(g)
-            new[1] = g[1] + new[1]
-            new[2] = dict(g[2], **{v: lab or g[2].get(v, "") for v, lab in new[2].items()})
-        groups.append(new)
-    merged = []
-    for g in sorted(groups, key=lambda g: sv.index(next(x for x in sv if x[0] == g[1][0]))):
-        twin = next((m for m in merged if set(m[2]) == set(g[2])), None)
-        if twin is not None:
-            twin[0] |= g[0]
-            twin[1] += g[1]
-        else:
-            merged.append(g)
-    order = {}                               # each tool and value where it first came
-    for i, (key, got) in enumerate(sv):
-        order.setdefault(key, i)
-        for j, (v, _l) in enumerate(got):
-            order.setdefault(("=", v), (i, j))
+    """Share a list only between arguments with identical values and
+    labels. Qualify an argument with its tools if another tool uses
+    that argument name with different choices or no known choices."""
+    groups, by_arg = {}, {}
+    for (tool, arg), choices in sv:
+        signature = frozenset(choices)
+        by_arg.setdefault(arg, set()).add(signature)
+        if choices:
+            _choices, tools_by_arg = groups.setdefault(signature, (choices, {}))
+            tools_by_arg.setdefault(arg, []).append(tool)
+
     said = []
-    for names, keys, vals in merged:
-        keys = sorted(keys, key=order.get)
-        vals = {v: vals[v] for v in sorted(vals, key=lambda v: order[("=", v)])}
-        alone = all(sum(1 for m in merged if n in m[0]) == 1 for n in names)
-        key = "/".join(sorted(names)) if alone else "%s %s" % ("/".join(dict.fromkeys(t for t, _k in keys)),
-                                                               "/".join(sorted(names)))
-        plain = len(set(vals.values()) - {""}) < 2
-        said.append("%s: %s" % (key, ", ".join(v if plain or not lab else "%s (%s)" % (v, lab) for v, lab in vals.items())))
+    for choices, tools_by_arg in groups.values():
+        names = []
+        for arg, tools in tools_by_arg.items():
+            names.append(arg if len(by_arg[arg]) == 1 else "%s %s" % ("/".join(tools), arg))
+        labels = {label for _value, label in choices if label}
+        values = [("%s (%s)" % (v, label) if label and len(labels) > 1 else v) for v, label in choices]
+        said.append("%s: %s" % (", ".join(names), ", ".join(values)))
     return said
 
 
@@ -1681,18 +1660,18 @@ def line_block(level=0, cap=0):
         call = " ".join([tool] + [_arg_form(a) for a in args.split(" ")]) if args else tool
         why = (purposes.get((server, tool)) or title) if trusted and level < 2 else ""
         groups.setdefault(server, []).append(call + (" (%s)" % why if why else ""))
-        if trusted and level < 1:
-            for a in args.split(" ") if args else []:
+        if level == 0:
+            for a in args.split():
                 k = a.split("=", 1)[0]
-                got = values.get((server, tool, k))
-                if got:
-                    vals.setdefault(server, []).append(((tool, k), got))
+                choices = values.get((server, tool, k), []) if trusted else []
+                vals.setdefault(server, []).append(((tool, k), choices))
     out = [BLOCK_HEADS[level]]
     used = len(out[0])
     for server, calls in groups.items():
         line = "%s: %s." % (server, "; ".join(calls))
-        if vals.get(server):
-            line += " Values -- " + "; ".join(_said_values(vals[server])) + "."
+        choices = _said_values(vals.get(server, ()))
+        if choices:
+            line += " Values -- " + "; ".join(choices) + "."
         if cap and used + 1 + len(line) > cap:
             continue
         out.append(line)

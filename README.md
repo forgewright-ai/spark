@@ -99,6 +99,8 @@ spark chat                      talk with the model
 - `spark model list`: the models and their licenses.
 - `spark mcp`: the tools of the MCP servers you put on its list, such
   as the parts of a desktop. A tool that can destroy asks you first.
+- `spark steps`: give the local model a list of tools and a request.
+  It returns proposed calls as JSON. The caller decides what to run.
 - `spark serve on`: use this machine's model from a browser or another
   machine. [Read about network access](#on-this-machine) before sharing.
 - `spark voice on`: spark reads aloud.

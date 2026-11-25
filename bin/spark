@@ -45,7 +45,7 @@ spark
  spark read <words> < FILE    answers that quote the text (-h)
  spark drill < FILE           practice questions from the text (-h)
  spark watch <words> < STREAM the model speaks up when a line matches (-h)
- spark steps <words> < TOOLS  the tool calls that do what you say (-h)
+ spark steps <words> < TOOLS  plan calls from the tools on stdin (-h)
  spark reveal [N|auto|off]    how fast replies appear (-h)
  try:
  ? words or words? Enter      the command lands in your line

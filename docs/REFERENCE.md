@@ -2711,12 +2711,13 @@ and may change freely.
     One line is a server. Each tool comes with its required arguments:
     `KEY=N`, `KEY=a|b`, and `KEY=KEY` for text or a long choice list.
     From a trusted server comes its purpose (its title when it gave
-    none), then `Values --` and its arguments' values. A name's lists
-    that share a value are one (`mcp._said_values`). Two names that
-    hold the same values are one: `screen/other`. A label rides only
-    where a list holds two. A server not trusted rides its tools'
-    names and arguments alone. Under `SPARK_LINE_BENCH=1` the block is
-    the directory `SPARK_LINE_BENCH_MCP` names, or none. The other
+    none), then `Values --` and its arguments' values. Arguments with
+    identical values and labels share a list (`mcp._said_values`).
+    When tools use one argument name for different choices, each list
+    names its tools. A label rides only where a list holds two. A
+    server not trusted rides its tools' names and arguments alone.
+    Under `SPARK_LINE_BENCH=1` the block comes from the directory
+    `SPARK_LINE_BENCH_MCP` names, or none. The other
     shell modes carry `mcp.brief_tools()` as before. That is the names,
     the required arguments and the titles of trusted servers as `spark
     mcp call` lines. It is `BRIEF_MAX` (1500) characters at most, and
@@ -2736,21 +2737,24 @@ and may change freely.
     planner's protocol: an MCP tools/list result, or its list, on stdin,
     256 kB at most, and one JSON object out, `{"answer", "steps",
     "refused"}`. A step is `{"name", "arguments"}`, and nothing runs.
-    The request carries each tool as one line (`steps.tool_brief`). That
-    is its name, then its arguments as `KEY=KIND`, the optional ones in
-    brackets with a range where the schema has one, then its title. The
-    lines are `STEPS_BRIEF_MAX` (32 kB) at most, else exit 2, and
-    `STEPS_TOOLS_MAX` (128) tools, a desktop's whole tree. The tool
-    lines stand first in the request and the words last. A list that
-    is the same bytes from one call to the next stays in the served
-    prompt's cached prefix, so a request pays its own words. The words
+    The request carries each tool as one line (`steps.PlanningTool`).
+    It gives the name, arguments and title. Optional arguments are in
+    brackets. The kinds name JSON types and each simple string choice.
+    A complete range of decimal strings can be written `"1".."100"`.
+    Sparse lists and values with leading zeros keep their own spellings.
+    The tool lines fit `STEPS_BRIEF_MAX` (32 kB), with at most
+    `STEPS_TOOLS_MAX` (256) plannable tools across providers. A larger
+    list returns exit 2 before asking the model. The tool lines stand
+    first in the request and the words last. Reusing the same list
+    preserves the served prompt's cached prefix. The words
     and `--about` are 2000 characters at most. The reply is held by
     `wire.tools_gbnf`:
     `{"answer": string, "steps": [...]}`, 8 steps at most, each one of
     the tools, its name a literal and its arguments typed by its schema.
-    An optional argument may be left out, and a credential is never in
-    it. A tool a grammar cannot hold is not offered, and stderr says how
-    many were not. The client gates after: a step whose tool was not
+    A required credential or a required argument the grammar cannot
+    hold rules out the tool. Optional arguments of those kinds are
+    omitted from the tool. Stderr gives the count of tools omitted.
+    The client gates after: a step whose tool was not
     offered, whose arguments `mcp.validate` refuses or that writes a
     credential is a line in `refused`, never a step. The brief is
     `persona.MODE_STEPS`, the spark role, with the machine line for its

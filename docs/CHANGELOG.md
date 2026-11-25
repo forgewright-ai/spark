@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.114
+
+- `spark steps` can plan from up to 256 tools across providers. A larger
+  catalog asks the caller to send fewer. Previously the model saw only
+  the first 128. The prompt gives each simple string choice, including
+  choices past the twelfth, and distinguishes numeric strings from
+  numbers. A tool requiring a credential is left out of the plan.
+- The prompt line keeps each tool's choices with that tool. Two tools
+  that use the same argument name can offer different sets of devices.
+
 ## v1.113.2
 
 - S4: the reference and the brief promised that nothing leaves the

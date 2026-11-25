@@ -802,6 +802,48 @@ def gbnf(schema):
 GRAMMAR_STRING_MAX = 256    # a string a tool's schema caps at this or less is capped in its grammar too
 
 
+def _tool_value(p, name, rules, task):
+    """Add rules for one tool argument and return its GBNF rule name."""
+    if not isinstance(p, dict):
+        raise ValueError("schema %s: not an object" % name)
+    if "enum" in p:
+        if not isinstance(p["enum"], list):
+            raise ValueError("schema %s: enum is not a list" % name)
+        if task and p.get("type") == "integer" and p["enum"] and all(type(v) is int for v in p["enum"]):
+            rules[name] = " | ".join(_lit(v) for v in p["enum"])
+            return name
+        if p.get("type") != "string" or not p["enum"] or not all(isinstance(v, str) for v in p["enum"]):
+            raise ValueError("schema %s: an enum of strings" % name)
+        rules[name] = " | ".join(_lit(v) for v in p["enum"])
+        return name
+    t = p.get("type")
+    if t == "string":
+        n = p.get("maxLength")
+        if isinstance(n, int) and not isinstance(n, bool) and 0 < n <= GRAMMAR_STRING_MAX:
+            rules[name] = '"\\"" char{0,%d} "\\""' % n
+            return name
+        return "string"
+    if t in ("integer", "number", "boolean"):
+        return t
+    if t == "array":
+        items = p.get("items") or {}
+        if not isinstance(items, dict) or items.get("type") in ("array", "object"):
+            raise ValueError("schema %s: an array of arrays or objects" % name)
+        item = _tool_value(items, name + "-item", rules, task)
+        rules[name] = '"[" ws (%s (ws "," ws %s)*)? ws "]"' % (item, item)
+        return name
+    raise ValueError("schema %s: type %r" % (name, t))
+
+
+def tool_value_supported(schema):
+    """Whether the steps grammar can express a value of this schema."""
+    try:
+        _tool_value(schema, "value", {}, False)
+    except ValueError:
+        return False
+    return True
+
+
 def tools_gbnf(tools, steps_max, task=False):
     """The grammar (GBNF) of contract 16's reply: {"answer": string,
     "steps": [step, ...]}, `steps_max` steps at most, each step one of the
@@ -818,35 +860,6 @@ def tools_gbnf(tools, steps_max, task=False):
     older callers keep their shape."""
     rules = {}
 
-    def value(p, name):
-        if not isinstance(p, dict):
-            raise ValueError("schema %s: not an object" % name)
-        if isinstance(p.get("enum"), list):
-            if task and p.get("type") == "integer" and p["enum"] and all(type(v) is int for v in p["enum"]):
-                rules[name] = " | ".join(_lit(v) for v in p["enum"])
-                return name
-            if not p["enum"] or not all(isinstance(v, str) for v in p["enum"]):
-                raise ValueError("schema %s: an enum of strings" % name)
-            rules[name] = " | ".join(_lit(v) for v in p["enum"])
-            return name
-        t = p.get("type")
-        if t == "string":
-            n = p.get("maxLength")
-            if isinstance(n, int) and not isinstance(n, bool) and 0 < n <= GRAMMAR_STRING_MAX:
-                rules[name] = '"\\"" char{0,%d} "\\""' % n
-                return name
-            return "string"
-        if t in ("integer", "number", "boolean"):
-            return t
-        if t == "array":
-            items = p.get("items") or {}
-            if not isinstance(items, dict) or items.get("type") in ("array", "object"):
-                raise ValueError("schema %s: an array of arrays or objects" % name)
-            item = value(items, name + "-item")
-            rules[name] = '"[" ws (%s (ws "," ws %s)*)? ws "]"' % (item, item)
-            return name
-        raise ValueError("schema %s: type %r" % (name, t))
-
     def members(props, i, started, name):
         """The arguments from the i-th on, a comma before each but the
         first written: an optional one may be left out."""
@@ -857,7 +870,7 @@ def tools_gbnf(tools, steps_max, task=False):
         if key in rules:
             return key
         sep = 'ws "," ws ' if started else ""
-        this = '%s%s ws ":" ws %s' % (sep, _lit(arg), value(sch, "%s-v%d" % (name, i)))
+        this = '%s%s ws ":" ws %s' % (sep, _lit(arg), _tool_value(sch, "%s-v%d" % (name, i), rules, task))
         rest = members(props, i + 1, True, name)
         with_it = ("%s %s" % (this, rest)).strip()
         without = "" if req else members(props, i + 1, started, name)
