@@ -2799,12 +2799,20 @@ and may change freely.
     `wire.tools_gbnf`:
     `{"answer": string, "steps": [...]}`, 8 steps at most, each one of
     the tools, its name a literal and its arguments typed by its schema.
+    A nonempty answer permits no steps in the grammar. The brief asks
+    for the whole request across tools. An unavailable
+    part or ambiguous target gets an explanation or a question with
+    no steps. The caller supplies current targets as data and rechecks
+    them before execution. This is a planning check, not a transaction
+    or proof that the model understood every part of the request.
     A required credential or a required argument the grammar cannot
     hold rules out the tool. Optional arguments of those kinds are
     omitted from the tool. Stderr gives the count of tools omitted.
     The client gates after: a step whose tool was not
     offered, whose arguments `mcp.validate` refuses or that writes a
-    credential is a line in `refused`, never a step. The brief is
+    credential is a line in `refused`. If any step is refused, the whole
+    steps list is empty. An answer accompanied by steps is refused too.
+    The brief is
     `persona.MODE_STEPS`, the spark role, with the machine line for its
     prefix. No path, no `[cwd]` line, no thread. Exit 0 with the object,
     1 when no model answers, 2 the usage. A malformed response envelope,

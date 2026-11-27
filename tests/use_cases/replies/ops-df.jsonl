@@ -1,1 +1,1 @@
-{"stream": true, "content": "[English, text]\nThe disk \"/dev/sda1\" is nearly at capacity.\nIt shows a \"Use% 96%\" for the mount point \"/srv/media\".", "finish": "stop"}
+{"stream": true, "content": "[English, table]\nThe disk \"/dev/sda1\" is at \"96%\" usage.", "finish": "stop"}

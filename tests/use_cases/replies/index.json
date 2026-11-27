@@ -14,6 +14,9 @@
  "app-w3m-read": {
   "docs": {}
  },
+ "dev-csv": {
+  "docs": {}
+ },
  "dev-docstrings": {
   "docs": {}
  },
@@ -63,17 +66,17 @@
  },
  "new-client": {
   "docs": {
-   "docs/INSTALL.md": "f25a89ac95e95dbfa24ff9b42c22ec3bbaf40b2b3dccc69ea79260a524314a0e"
+   "docs/INSTALL.md": "f9bc35e1e433d0de4aa690df6e058d72fc480c88a4bbfb311762318125f229f3"
   }
  },
  "new-key": {
   "docs": {
-   "docs/CHEATSHEET.txt": "4cd67487834054ee2cbe8e734c25c0cd73a663026ed2a0033fb1323dc9c0eae6"
+   "docs/CHEATSHEET.txt": "c290299ed746fc96599ace2b845648c6796923124751f7d774a5515a467e4476"
   }
  },
  "new-sends": {
   "docs": {
-   "README.md": "a9d80788f75b8e29bd4e48e78f6a42cd68660cebd8b57cffeba68cbe1e9e1d5d"
+   "README.md": "9bad85dbc9bd4137b4e48627d06ef839256990232656e5d97174dc1b404e174d"
   }
  },
  "office-absent": {

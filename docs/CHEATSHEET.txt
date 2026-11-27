@@ -95,7 +95,7 @@ MCP TOOLS (the servers on the list, ~/.config/spark/mcp.env)
   spark mcp call NAME TOOL K=V    run one tool. One that can destroy asks yes
                                  invalid inputs are refused before it runs
   spark mcp read NAME [URI]       its resources. --watch shows each change
-  spark steps <words> < TOOLS     plan checked calls from up to 256 tools
+  spark steps <words> < TOOLS     checked calls or a choice; up to 256 tools
                                  each description sends at most 160 characters
 
 THE MODEL

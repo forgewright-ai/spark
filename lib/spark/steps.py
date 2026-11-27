@@ -43,10 +43,12 @@ USAGE = """spark steps -- the tool calls that do what you say (tools on stdin)
   The list may offer up to 256 tools. A larger list is refused.
   Each description sends up to 160 characters to explain its tool.
 
-  Prints one JSON object: "answer" (a question's answer, else empty),
+  Prints one JSON object: "answer" (an answer or clarification),
   "steps" (each {"name", "arguments"}) and "refused" (a step that did
   not fit its tool, and why). A malformed reply is a refusal too.
-  Nothing runs. Exit 1 when no model answers.
+  A plan has an empty answer. If any step is refused, no steps remain.
+  Ask again with the missing choice or a smaller request. Nothing runs.
+  Exit 1 when no model answers.
   From a pipe: spark steps mute the sound < tools.json
 """
 
@@ -146,15 +148,16 @@ def offered(data):
 
 
 def check(tools, reply):
-    """(steps, refused): the reply's steps that fit a tool offered, its
-    schema whole (mcp.validate) and no credential; a line each for the
-    rest."""
+    """(steps, refused): a whole valid plan or no steps. A rejected part
+    must not leave an executable subset of the person's request."""
     by = {t.name: t for t in tools}
     kept, refused = [], []
     if (not isinstance(reply, dict) or set(reply) != {"answer", "steps"}
             or not isinstance(reply.get("answer"), str) or not isinstance(reply.get("steps"), list)
             or len(reply["steps"]) > STEPS_MAX):
         return [], ["the model's reply is not an answer with up to %d steps" % STEPS_MAX]
+    if reply["answer"].strip() and reply["steps"]:
+        return [], ["the model answered while also proposing steps -- ask for one complete plan"]
     for s in reply["steps"]:
         if not isinstance(s, dict) or set(s) != {"name", "arguments"} or not isinstance(s.get("name"), str):
             refused.append("a step that is no tool call")
@@ -169,7 +172,7 @@ def check(tools, reply):
             refused.append("%s: %s" % (t.name, why))
             continue
         kept.append({"name": t.name, "arguments": args})
-    return kept[:STEPS_MAX], refused
+    return ([] if refused else kept), refused
 
 
 def cmd_steps(args):

@@ -102,7 +102,8 @@ spark chat                      talk with the model
   Invalid inputs are refused before the tool runs.
 - `spark steps`: give the local model a list of tools and a request.
   It returns proposed calls as JSON and checks each tool's constraints.
-  The caller decides what to run.
+  A refused step leaves no partial plan. Missing choices get a question.
+  The caller checks current targets and decides what to run.
 - `spark serve on`: use this machine's model from a browser or another
   machine. [Read about network access](#on-this-machine) before sharing.
 - `spark voice on`: spark reads aloud.

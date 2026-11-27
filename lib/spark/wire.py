@@ -899,7 +899,11 @@ def tools_gbnf(tools, steps_max, task=False):
     if task:
         top = '"{" ws "\\"steps\\"" ws ":" ws steps ws "," ws "\\"complete_after\\"" ws ":" ws boolean'
     else:
-        top = '"{" ws "\\"answer\\"" ws ":" ws string ws "," ws "\\"steps\\"" ws ":" ws steps'
+        # A question, clarification or unavailable action cannot accompany
+        # an executable subset. Keep the task adapter's separate shape.
+        rules["plan"] = '%s ws "," ws "\\"steps\\"" ws ":" ws steps' % _lit("")
+        rules["answer-only"] = 'string ws "," ws "\\"steps\\"" ws ":" ws "[" ws "]"'
+        top = '"{" ws "\\"answer\\"" ws ":" ws (plan | answer-only)'
     top += ' ws "}"'
     return "\n".join(["root ::= %s" % top] + ["%s ::= %s" % kv for kv in rules.items()]) + "\n" + GRAMMAR_BASE
 

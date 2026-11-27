@@ -1,1 +1,1 @@
-{"stream": true, "content": "{\n  \"answer\": \"\"\n  ,\n  \"steps\": [\n    {\n      \"name\": \"out_level\",\n      \"arguments\": {\n        \"level\": 20\n      }\n    },\n    {\n      \"name\": \"desktop_lock\",\n      \"arguments\": {}\n    }\n  ]\n}", "finish": "stop"}
+{"stream": true, "content": "{\n  \"answer\": \"\",\n  \"steps\": [\n    {\n      \"name\": \"out_level\",\n      \"arguments\": {\n        \"level\": 20\n      }\n    },\n    {\n      \"name\": \"desktop_lock\"\n        ,\n    \"arguments\": {}\n    }\n  ]\n}", "finish": "stop"}

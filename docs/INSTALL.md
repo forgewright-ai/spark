@@ -409,6 +409,10 @@ spark mcp call notes add_note text=milk
   send fewer. The caller receives the proposed calls as JSON.
   Each call must fit its tool's constraints. A constraint spark cannot
   check is refused. A malformed reply comes back as a JSON refusal.
+  If any proposed call fails these checks, no calls remain in the plan.
+  The model is asked to plan every requested change, or explain what is
+  missing without proposing the other changes. An ambiguous target gets
+  a question. The caller still checks current targets before running.
   The model also sees up to 160 characters of each tool's description.
 
 For `spark edit`, `--at N` and `--sel A B` use UTF-8 byte boundaries.

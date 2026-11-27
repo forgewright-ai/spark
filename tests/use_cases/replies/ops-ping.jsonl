@@ -1,2 +1,2 @@
-{"stream": true, "content": "[38] The destination is unreachable.", "finish": "stop"}
-{"stream": true, "content": "\u200b", "finish": "stop"}
+{"stream": true, "content": "[38] Host became unreachable.", "finish": "stop"}
+{"stream": true, "content": "empty", "finish": "stop"}

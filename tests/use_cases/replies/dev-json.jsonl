@@ -1,1 +1,1 @@
-{"stream": true, "content": "[English, JSON]\n\"Mira Beck\" has the \"admin\" role.\n\"Li Chen\" is also an \"admin\".\n\"Ola Adeyemi\" holds \"admin\" roles.", "finish": "stop"}
+{"stream": true, "content": "[English, JSON]\nMira Beck has the \"admin\" role.\nLi Chen is an \"admin\".\nOla Adeyemi has \"billing\" and \"admin\" roles.", "finish": "stop"}

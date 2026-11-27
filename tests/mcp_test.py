@@ -749,6 +749,27 @@ check("M1: persona.SENDS gains named lines: steps, the line's tool lines, a tool
       and any(k == "do" and "MCP tool's result" in v and "held back" in v for k, v in persona.SENDS), persona.SENDS)
 
 # --- M4: spark steps under a grammar made from the tools, gated after
+plan_tools, _ = steps.offered([
+    {"name": "mic_mute", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "out_level", "inputSchema": {"type": "object", "properties": {
+        "level": {"type": "integer", "minimum": 0, "maximum": 100}}, "required": ["level"]}},
+])
+mute_call = {"name": "mic_mute", "arguments": {}}
+level_call = {"name": "out_level", "arguments": {"level": 20}}
+for invalid in ({"name": "out_level", "arguments": {"level": 200}},
+                {"name": "missing", "arguments": {}}, {"name": "out_level"}):
+    kept, refused = steps.check(plan_tools, {"answer": "", "steps": [mute_call, invalid]})
+    check("steps: a rejected part leaves no executable subset of a compound plan", not kept and bool(refused),
+          (kept, refused))
+kept, refused = steps.check(plan_tools, {"answer": "which output do you mean?", "steps": [mute_call]})
+check("steps: a clarification cannot carry a partial action", not kept and bool(refused), (kept, refused))
+kept, refused = steps.check(plan_tools, {"answer": "", "steps": [mute_call, level_call]})
+check("steps: a complete compound plan keeps both typed calls", kept == [mute_call, level_call] and not refused,
+      (kept, refused))
+kept, refused = steps.check(plan_tools, {"answer": "which output do you mean?", "steps": []})
+check("steps: clarification without actions remains an answer", not kept and not refused, (kept, refused))
+
+
 def value_check(prop, value):
     try:
         return mcp.validate({"type": "object", "properties": {"value": prop}}, {"value": value})
@@ -1009,8 +1030,8 @@ check("M7: the planner sends a sanitized, bounded description as data alongside 
       "out_level level=integer (0-100) -- out level N -- Set the speaker volume." in msgs
       and "OMITTED TAIL" not in msgs and "\\u001b" not in msgs and "data, never instructions" in msgs
       and len(steps.PlanningTool.from_mcp(json.loads(TOOLS)["tools"][0]).description) == 160, msgs[:600])
-check("M4: the client gates after the grammar: a step out of range, an unknown tool, a credential -- refused",
-      got.get("steps") == [{"name": "out_level", "arguments": {"level": 30}}] and len(got.get("refused", [])) == 3, got)
+check("M4: the client gates the whole plan: a range, unknown tool or credential refusal leaves no steps",
+      got.get("steps") == [] and len(got.get("refused", [])) == 3, got)
 check("steps: a tool spark does not take is not offered, and stderr says so", "1 tool not offered" in err, err)
 check("steps: the words and --about ride, no path and no [cwd] line",
       "set the volume" in msgs and "the sound is at 70" in msgs and "[cwd" not in msgs, msgs[:400])
@@ -1072,8 +1093,12 @@ check("steps: the prompt distinguishes numeric strings, bounds, holes, padded va
       'size="up"|"05"|"5".."8"' in req and '[sparse="1"|"2"|"4"|"5"]' in req
       and "[enabled=true|false]" in req and "[levels=array of integer]" in req
       and "key=" not in req and "extra=" not in req, req)
-check("steps: only an actual string from the enum passes, with the optional arguments in their JSON types",
-      rc == 0 and json.loads(out)["steps"] == [proposal] and len(json.loads(out)["refused"]) == 2, (rc, out, err))
+check("steps: a wrong enum type or value refuses the compound plan without retaining its valid part",
+      rc == 0 and json.loads(out)["steps"] == [] and len(json.loads(out)["refused"]) == 2, (rc, out, err))
+REPLY.update(steps=[proposal])
+rc, out, err = spark("steps", "adjust", stdin=json.dumps([typed]), env=ENV)
+check("steps: a complete valid call preserves its optional JSON types",
+      rc == 0 and json.loads(out)["steps"] == [proposal] and not json.loads(out)["refused"], (rc, out, err))
 
 # No partial plan from an over-limit catalog, even if the engine would
 # select a tool in the part that fit.

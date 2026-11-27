@@ -4,7 +4,7 @@
 {"stream": true, "content": "", "finish": "stop"}
 {"stream": true, "content": "", "finish": "stop"}
 {"stream": true, "content": "", "finish": "stop"}
-{"stream": true, "content": "[24] The checkout request timed out while waiting for the upstream.", "finish": "stop"}
+{"stream": true, "content": "[24] An upstream timeout occurred during a POST request to /api/checkout.", "finish": "stop"}
 {"stream": true, "content": "", "finish": "stop"}
 {"stream": true, "content": "", "finish": "stop"}
 {"stream": true, "content": "", "finish": "stop"}

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.115
+
+- `spark steps` returns no calls when any proposed step fails validation.
+  A clarification cannot accompany executable calls. The planner asks
+  for missing choices and explains an unavailable part of a request,
+  instead of silently planning only the other changes.
+
 ## v1.114
 
 - The prompt line keeps executable text whole, including repeated spaces

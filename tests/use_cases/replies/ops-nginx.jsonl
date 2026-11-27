@@ -1,1 +1,1 @@
-{"stream": true, "content": "[English, configuration file]\nThe server will \"listen 80\" and also \"listen 443 ssl\".\nThe certificate is at \"/etc/letsencrypt/live/shop.example.org/fullchain.pem\".", "finish": "stop"}
+{"stream": true, "content": "[English, configuration file]\nThe server will \"listen 80\" and \"listen 443 ssl\".\nThe certificate is at \"/etc/letsencrypt/live/shop.example.org/fullchain.pem\".", "finish": "stop"}
